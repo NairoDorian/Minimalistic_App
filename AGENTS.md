@@ -1,6 +1,6 @@
 # Development Procedure & Workflow Guidelines (AGENTS.md)
 
-This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **React 19**, **TypeScript 7**, and **Cargo / Rust**.
+This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **React 19**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
 
 ---
 
@@ -34,7 +34,7 @@ Install project dependencies using Bun:
 ```bash
 bun install
 ```
-To run the automated **End-to-End Dependency Upgrade & Build Validation Pipeline**:
+To run the automated **End-to-End Dual-Ecosystem & Sub-Dependency Upgrade Pipeline**:
 ```bash
 bun run update-deps
 ```
@@ -45,17 +45,23 @@ Run the app in live development mode using the ultimate test command:
 bun run tauri dev
 ```
 - **Left-Click Tray Icon**: Toggles GUI window show/hide.
-- **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI** and **Quit**.
+- **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI**, **Check for Updates...**, and **Quit**.
 - **Close Button (X)**: Minimizes to taskbar tray when enabled in preferences.
 
-### Step 4: Architecture Maintenance (Repomix)
+### Step 4: Cleaning Build Target Artifacts (Optional)
+To purge `src-tauri/target/` build directories completely:
+```bash
+bun run clean
+```
+
+### Step 5: Architecture Maintenance (Repomix)
 Whenever files are added, modified, or removed, run the architecture map generator:
 ```bash
 bun run repomix:arch
 ```
 - Ensures [`ARCHITECTURE.md`](ARCHITECTURE.md) contains the up-to-date directory tree and file inventory table without code dumps.
 
-### Step 5: Production Build Validation
+### Step 6: Production Build Validation
 Validate production compilation and native bundle generation:
 ```bash
 bun run build
@@ -80,5 +86,5 @@ bun run build
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
 4. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), and [`AGENTS.md`](AGENTS.md).
+   - Maintain [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), and [`AGENTS.md`](AGENTS.md).
    - Keep inline code comments detailed and informative.

@@ -5,6 +5,25 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-30
+
+### Smart Sub-Dependency Pipeline & Cargo 2024 Edition
+
+#### 🦀 Cargo Rust 2024 Edition Upgrade
+- Upgraded `src-tauri/Cargo.toml` package edition to `2024` (Rust 2024 Edition).
+- Validated Rust 2024 compilation (`cargo check`).
+
+#### 🔄 Dual-Ecosystem & Transitive Sub-Dependency Auditor (`scripts/update-deps.ts`)
+- **Parallel NPM & Crates.io Registry Lookup**: Fetches `@latest` tags in ~500ms via parallel HTTP queries.
+- **Smart Skip Optimization**: Skips calling package managers for packages already up-to-date.
+- **Transitive Sub-Dependency Upgrade**: Executes `bun update --latest` and `cargo update` to force-upgrade all 520+ direct & transitive sub-dependencies across NPM and Crates.io.
+- **Inventory Audit & Diff Reporting**: Parses `src-tauri/Cargo.lock` (232 sub-crates) and `node_modules` (264 sub-packages) before and after lockfile refresh, logging sub-dependency version changes in a dedicated summary table.
+
+#### 🧹 Build Cleanup Script (`bun run clean`)
+- Added `"clean": "cargo clean --manifest-path src-tauri/Cargo.toml"` script to `package.json` to purge release & debug build artifacts from `src-tauri/target/`.
+
+---
+
 ## [0.2.0] - 2026-07-30
 
 ### Handy-Inspired GitHub Auto-Update System
@@ -50,12 +69,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     2. **Minimize to Taskbar on Close** (IPC state persisted, default `ON`).
 - **100% AMOLED Deep Black Visual Design System**:
   - Created custom CSS design system (`src/index.css`) featuring a `#000000` pitch black background, translucent glassmorphic card overlays (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, and smooth toggle switches.
-
-#### 🔄 Automated Update & Verification Pipeline
-- **`scripts/update-deps.ts`**:
-  - Created end-to-end update & build validation script runnable via `bun run update-deps`.
-  - Upgrades npm packages dynamically to `@latest`, updates Cargo crates, builds Vite frontend bundle, verifies Cargo compilation (`cargo check`), and updates `ARCHITECTURE.md`.
-- **`scripts/generate-arch.ts`**:
-  - Repomix script executed via `bun run repomix:arch` to update [`ARCHITECTURE.md`](ARCHITECTURE.md) with full directory tree and 1-line file descriptions without code dumps.
-- **`scripts/create-icons.ts`**:
-  - Built icon generator using `node:zlib` to output 100% valid RGBA PNGs and Windows ICO binary headers for the Rust resource compiler (`RC.EXE`).
