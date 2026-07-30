@@ -181,7 +181,7 @@ async function updateEverything() {
 
   const cargoCratesToQuery: { name: string; ver: string; section: string }[] = [];
 
-  lines.forEach(line => {
+  lines.forEach((line: string) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
       currentSection = trimmed.slice(1, -1).trim();
@@ -298,24 +298,34 @@ async function updateEverything() {
     }
   });
 
-  // --- Step 5: Vite Production Frontend Build Validation ---
-  console.log("⚡ Step 5/6: Validating Vite Production Frontend Build (bun run vite:build)...");
+  // --- Step 5: TypeScript Static Type Checking ---
+  console.log("📐 Step 5/7: Validating TypeScript Static Types (bun x tsc -b)...");
+  const { success: tscSuccess, durationMs: tscMs } = runCmd("bun", ["x", "tsc", "-b"]);
+  if (!tscSuccess) {
+    console.error("❌ Error: TypeScript type checking failed!");
+    process.exit(1);
+  } else {
+    console.log(`✅ Step 5/7 Complete (${tscMs}ms)\n`);
+  }
+
+  // --- Step 6: Vite Production Frontend Build Validation ---
+  console.log("⚡ Step 6/7: Validating Vite Production Frontend Build (bun run vite:build)...");
   const { success: buildSuccess, durationMs: buildMs } = runCmd("bun", ["run", "vite:build"]);
   if (!buildSuccess) {
     console.error("❌ Error: Vite production build failed!");
     process.exit(1);
   } else {
-    console.log(`✅ Step 5/6 Complete (${buildMs}ms)\n`);
+    console.log(`✅ Step 6/7 Complete (${buildMs}ms)\n`);
   }
 
-  // --- Step 6: Native Cargo Backend Compilation Verification ---
-  console.log("🔍 Step 6/6: Checking Cargo Rust Backend Compilation (cargo check)...");
+  // --- Step 7: Native Cargo Backend Compilation Verification ---
+  console.log("🔍 Step 7/7: Checking Cargo Rust Backend Compilation (cargo check)...");
   const { success: checkSuccess, durationMs: checkMs } = runCmd("cargo", ["check"], cargoCwd);
   if (!checkSuccess) {
     console.error("❌ Error: Cargo compilation check failed!");
     process.exit(1);
   } else {
-    console.log(`✅ Step 6/6 Complete (${checkMs}ms)\n`);
+    console.log(`✅ Step 7/7 Complete (${checkMs}ms)\n`);
   }
 
   // --- Synchronize Architecture Map ---

@@ -75,9 +75,11 @@ The updater plugin is configured under `bundle` and `plugins.updater`:
    ```rust
    "check_updates" => {
        if let Some(window) = app.get_webview_window("main") {
-           let _ = window.show();
-           let _ = window.unminimize();
-           let _ = window.set_focus();
+           if !window.is_visible().unwrap_or(false) {
+               let _ = window.show();
+               let _ = window.unminimize();
+               let _ = window.set_focus();
+           }
        }
        let _ = app.emit("check-for-updates", ());
    }

@@ -9,7 +9,7 @@ use tauri::{
 /// Holds runtime user preferences and application lifecycle flags.
 pub struct AppState {
     /// Controls whether closing the main GUI window minimizes the app to the system tray
-    /// instead of terminating the application process. Default is true.
+    /// instead of terminating the application process. Default is false.
     pub minimize_to_tray: Mutex<bool>,
 
     /// Flag set to true when explicit application quit is triggered (e.g. via Tray menu).

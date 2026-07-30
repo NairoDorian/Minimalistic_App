@@ -9,7 +9,7 @@ import { isTauri } from "./lib/tauri";
  * Main Application Preferences GUI Component (React 19).
  * Provides a 1-tab minimalistic preferences interface for managing:
  * 1. OS Launch Autostart (Default: OFF)
- * 2. Minimize to Taskbar System Tray on Close (Default: ON)
+ * 2. Minimize to Taskbar System Tray on Close (Default: OFF)
  * 3. Auto-Updating & GitHub Release Management (Handy-inspired)
  */
 export default function App() {

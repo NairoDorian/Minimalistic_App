@@ -57,6 +57,7 @@ minimalistic-app/
 │   └── tauri.conf.json
 ├── tsconfig.json
 ├── tsconfig.scripts.json
+├── tsconfig.tsbuildinfo
 └── vite.config.ts
 ```
 
@@ -84,9 +85,9 @@ minimalistic-app/
 | `src/lib/tauri.ts` | Shared Tauri v2 runtime detection utility exporting the isTauri constant. |
 | `src/main.tsx` | React 19 application entry point rendering App root (no React import needed with JSX transform). |
 | `src-tauri/build.rs` | Rust build script initializing Tauri build environment. |
-| `src-tauri/capabilities/default.json` | Tauri v2 capability definitions granting autostart, store, updater, process, and tray permissions. |
+| `src-tauri/capabilities/default.json` | Tauri v2 capability definitions granting autostart, updater, process, and tray permissions. |
 | `src-tauri/Cargo.lock` | Cargo dependency lockfile ensuring reproducible Rust crate builds. |
-| `src-tauri/Cargo.toml` | Cargo manifest declaring Rust dependencies: tauri v2, autostart, store, updater, and process. |
+| `src-tauri/Cargo.toml` | Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, and serde_json. |
 | `src-tauri/gen/schemas/acl-manifests.json` | Source or configuration file for the application. |
 | `src-tauri/gen/schemas/capabilities.json` | Source or configuration file for the application. |
 | `src-tauri/gen/schemas/desktop-schema.json` | Source or configuration file for the application. |
@@ -102,6 +103,7 @@ minimalistic-app/
 | `src-tauri/tauri.conf.json` | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
 | `tsconfig.json` | TypeScript root configuration with strict type checking, bundler resolution, and enforced noUnusedLocals. |
 | `tsconfig.scripts.json` | Separate TypeScript config for Node.js scripts — uses ES2022 lib without DOM types to avoid type collisions. |
+| `tsconfig.tsbuildinfo` | Source or configuration file for the application. |
 | `vite.config.ts` | Vite bundler configuration optimized for React 19 and Tauri v2 dev server integration. |
 
 ---

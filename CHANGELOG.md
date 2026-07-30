@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Added `-moz-osx-font-smoothing: grayscale`** alongside `-webkit-font-smoothing: antialiased`.
 
 #### ⚙️ Config & Tooling
-- **`visible: false`** in `tauri.conf.json`: App now starts tray-first — no window flash on launch. Users open the GUI via tray left-click as documented.
+- **`visible: true`** in `tauri.conf.json`: App window opens on launch.
 - **`noUnusedLocals: true` / `noUnusedParameters: true`** in `tsconfig.json`: Were silently `false`, defeating the purpose of `strict: true`.
 - **Added `tsconfig.scripts.json`**: Separate TypeScript compilation context for `scripts/` using `ES2022` lib without DOM types, preventing Node.js/DOM type collisions.
 - **Removed stale `/vite.svg` favicon** from `index.html`.
