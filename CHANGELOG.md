@@ -5,6 +5,21 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-30
+
+### TypeScript Project References & 7-Step Pipeline Upgrade
+
+#### 🛠️ TypeScript & Config
+- **TypeScript Project References**: Configured `"composite": true`, `"types": ["node"]`, and `"outDir": "./node_modules/.tmp/scripts"` in `tsconfig.scripts.json` to enable isolated compilation of Node.js utility scripts without DOM type pollution.
+- **Vite Client Types**: Added `"types": ["vite/client"]` to `tsconfig.json`, enabling TypeScript to resolve CSS side-effect imports (`import "./index.css"`) and Vite env variables cleanly.
+- **`update-deps.ts` Parameter Typing**: Fixed implicit `any` parameter error in `lines.forEach((line: string) => ...)` to pass strict TS checking.
+- **Git Hygiene**: Added `*.tsbuildinfo` build cache pattern to `.gitignore`.
+
+#### 🔄 Automation & Documentation
+- **7-Step Automated Update Pipeline**: Added static TypeScript verification (`bun x tsc -b`) into `scripts/update-deps.ts` as Step 5/7, ensuring type check regressions are caught automatically alongside Vite bundling and Cargo backend checks.
+- **Doc Sync**: Synchronized stale `minimize_to_tray` doc comments in `lib.rs` and `App.tsx`, resolved changelog line 57 contradiction, and updated `AUTO-UPDATE.md` code snippets to match backend window visibility checks.
+- **Architecture Inventory Sync**: Re-generated `ARCHITECTURE.md` via `bun run repomix:arch`.
+
 ---
 
 ## [0.4.0] - 2026-07-30

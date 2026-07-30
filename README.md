@@ -8,7 +8,7 @@ Designed with a sleek **100% AMOLED Deep Black glassmorphic GUI (`#000000`)**, t
 
 ## ⚡ Primary Standard & Bun Rule
 
-> [!IMPORTANT]
+> [!CRITICAL]
 > **1. Package Manager Rule**:
 > NEVER use `npm`, `npx`, `yarn`, or `pnpm`. **ALWAYS use `bun`** for package management, script execution, and tooling.
 >
@@ -39,7 +39,7 @@ To run the automated **End-to-End Dual-Ecosystem & Sub-Dependency Upgrade Pipeli
 ```bash
 bun run update-deps
 ```
-*This command force-upgrades all direct & transitive sub-dependencies across NPM and Crates.io to `@latest`, updates Cargo crates, builds the Vite production bundle, verifies Rust compilation with `cargo check`, and regenerates `ARCHITECTURE.md`.*
+*This 7-step pipeline force-upgrades all direct & transitive sub-dependencies across NPM and Crates.io to `@latest`, updates Cargo crates, validates static TypeScript types (`bun x tsc -b`), builds the Vite production bundle, verifies Rust compilation with `cargo check`, and regenerates `ARCHITECTURE.md`.*
 
 ### 2. Live Development & Primary Testing
 Run the application using the ultimate test command:
@@ -48,7 +48,7 @@ bun run tauri dev
 ```
 - **Left-Click Tray Icon**: Toggles GUI window show/hide.
 - **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI**, **Check for Updates...**, and **Quit**.
-- **Close Button (X)**: Minimizes to taskbar tray when "Minimize to taskbar on close" is enabled (default: OFF).
+- **Close Button (X)**: Minimizes to taskbar tray when "Minimize to taskbar on close" is enabled (default: OFF — closing quits by default).
 
 ### 3. Cleaning Build Folders (`bun run clean`)
 Purge compiled Rust release & debug build artifacts (`src-tauri/target/`):
@@ -74,16 +74,16 @@ bun run build
 ## 🚀 Key Features & Architecture Highlights
 
 ### 🖥️ Native Taskbar & System Tray Integration
-- **Normal Launch**: App opens its window on startup.
+- **Normal Launch**: App opens its window on startup (`visible: true` in `tauri.conf.json`).
 - **Left-Click Action**: Toggles showing/hiding the main GUI window instantly.
 - **Right-Click Action**: Opens a native context menu (**Open / Hide GUI**, **Check for Updates...**, **Quit**).
 - **Window Close Interception**: Closing the main window (X button) hides the app into the system tray when "Minimize to taskbar on close" is enabled (default: OFF — closing quits by default).
 - **Graceful Win32 Teardown**: Quitting sets `is_quitting = true` and invokes `window.close()`, allowing WebView2 to unregister window classes (`Chrome_WidgetWin_0`) cleanly through the Win32 message loop without log errors.
-- **Tray Tooltip**: Hovering the tray icon displays the app name.
+- **Tray Tooltip**: Hovering the tray icon displays the app name on all supported platforms.
 
 ### 🔄 Auto-Update Checker (`UpdateChecker.tsx`)
 - Integrated GitHub Releases auto-updater powered by `tauri-plugin-updater` and `tauri-plugin-process`.
-- Stable event-listener pattern — tray-triggered checks always use live logic via ref-based concurrency guards.
+- Stable event-listener pattern — tray-triggered checks always use live logic via ref-based concurrency guards (`isCheckingRef`, `isInstallingRef`).
 - Streamed download progress percentages, one-click app relaunch, and error handling.
 - Dual-variant component: embedded **card** in the settings panel and compact **footer** indicator.
 
@@ -96,9 +96,11 @@ bun run build
 - Translucent frosted glass cards (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, and responsive custom toggle switches.
 - Inter font with full antialiasing (`-webkit-font-smoothing` + `-moz-osx-font-smoothing`).
 
-### 🔒 Security
+### 🔒 Security & TypeScript Rigor
 - Strict **Content Security Policy** configured in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
-- No wildcard `*` permissions in capabilities.
+- Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
+- Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.
+- Chromium 105 build target (`vite.config.ts`) tailored for WebView2 runtime efficiency on Windows.
 
 ---
 
@@ -143,7 +145,7 @@ Minimalistic_App/
 │   └── tauri.conf.json         # App config, CSP, updater endpoints
 ├── scripts/
 │   ├── generate-arch.ts        # ARCHITECTURE.md generator
-│   └── update-deps.ts          # Dual-ecosystem upgrade pipeline
+│   └── update-deps.ts          # Dual-ecosystem 7-step upgrade pipeline
 ├── tsconfig.json               # Frontend TypeScript config
 ├── tsconfig.scripts.json       # Scripts TypeScript config (isolated Node context)
 └── vite.config.ts              # Vite bundler config (target: chrome105)
