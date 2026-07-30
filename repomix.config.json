@@ -1,0 +1,26 @@
+{
+  "output": {
+    "filePath": "ARCHITECTURE.md",
+    "style": "markdown",
+    "headerText": "Project Architecture Overview & File Summary",
+    "removeComments": true,
+    "removeEmptyLines": true,
+    "topFilesFirst": true,
+    "showLineNumbers": false,
+    "copyToClipboard": false
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "node_modules/**",
+      "target/**",
+      "dist/**",
+      "src-tauri/target/**",
+      "src-tauri/gen/**",
+      "bun.lock",
+      "bun.lockb",
+      "ARCHITECTURE.md"
+    ]
+  }
+}

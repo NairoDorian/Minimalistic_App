@@ -1,0 +1,17 @@
+# Node / Bun dependencies
+node_modules/
+bun.lock
+bun.lockb
+
+# Rust build artifacts
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Vite production output
+dist/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+*.tmp

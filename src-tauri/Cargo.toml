@@ -1,0 +1,20 @@
+[package]
+name = "minimalistic-app"
+version = "0.1.0"
+description = "Minimalistic cross-platform desktop application based on Tauri 2, Bun, React 19, and TypeScript"
+authors = ["Z"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "^2.0", features = [] }
+
+[dependencies]
+tauri = { version = "^2.2", features = ["tray-icon"] }
+tauri-plugin-autostart = "^2.5"
+tauri-plugin-store = "^2.4"
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = "^1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
