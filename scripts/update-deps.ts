@@ -5,14 +5,12 @@ import path from 'node:path';
 /**
  * Ultimate All-Inclusive Dependency Updater & Build Validator.
  * 
- * Scope:
- * 1. Bun / JS / TS / React / Tauri NPM Runtime Dependencies
- * 2. Bun / JS / TS / Vite / Repomix NPM DevDependencies
- * 3. Cargo / Rust / Tauri Crate Dependencies ([dependencies] & [build-dependencies] in Cargo.toml)
- * 4. Cargo & Bun Lockfiles refresh (cargo update)
- * 5. Production Vite Frontend Build Validation (bun run vite:build)
- * 6. Native Cargo Backend Compilation Check (cargo check)
- * 7. ARCHITECTURE.md Synchronization
+ * Aggressive Sub-Dependency Upgrading:
+ * 1. Upgrades all direct NPM packages & transitive sub-packages (bun update --latest)
+ * 2. Upgrades all direct Cargo crates & transitive sub-crates (cargo update)
+ * 3. Builds Vite production frontend (bun run vite:build)
+ * 4. Verifies Cargo backend compilation (cargo check)
+ * 5. Synchronizes ARCHITECTURE.md
  */
 
 interface DependencyStatus {
@@ -64,7 +62,7 @@ function runCmd(cmd: string, args: string[], cwd?: string): { success: boolean; 
 
 async function updateEverything() {
   console.log("=================================================================");
-  console.log("🚀 STARTING ULTIMATE ALL-INCLUSIVE DEPENDENCY UPDATE");
+  console.log("🚀 STARTING ULTIMATE DUAL-ECOSYSTEM & SUB-DEPENDENCY UPDATE");
   console.log("=================================================================\n");
 
   const pkgPath = path.resolve('package.json');
@@ -163,10 +161,10 @@ async function updateEverything() {
   const queryDuration = Date.now() - queryStart;
   console.log(`✅ Registry query complete (${queryDuration}ms)\n`);
 
-  // --- Step 1: Upgrading Outdated NPM Runtime Dependencies ---
+  // --- Step 1: Upgrading Outdated NPM Runtime Dependencies & Sub-Packages ---
   const outdatedRuntime = allStatuses.filter(s => s.type === 'runtime' && s.needsUpdate);
   if (outdatedRuntime.length === 0) {
-    console.log("📦 Step 1/6: NPM Runtime Dependencies -> All packages already @latest (Skipped bun add)");
+    console.log("📦 Step 1/6: NPM Runtime Dependencies -> All direct packages already @latest");
   } else {
     console.log(`📦 Step 1/6: Upgrading ${outdatedRuntime.length} Outdated NPM Runtime Dependencies...`);
     const targets = outdatedRuntime.map(s => `${s.name}@latest`);
@@ -175,10 +173,10 @@ async function updateEverything() {
   }
   console.log("");
 
-  // --- Step 2: Upgrading Outdated NPM DevDependencies ---
+  // --- Step 2: Upgrading Outdated NPM DevDependencies & Sub-Packages ---
   const outdatedDev = allStatuses.filter(s => s.type === 'dev' && s.needsUpdate);
   if (outdatedDev.length === 0) {
-    console.log("🛠️ Step 2/6: NPM DevDependencies -> All packages already @latest (Skipped bun add)");
+    console.log("🛠️ Step 2/6: NPM DevDependencies -> All direct packages already @latest");
   } else {
     console.log(`🛠️ Step 2/6: Upgrading ${outdatedDev.length} Outdated NPM DevDependencies...`);
     const targets = outdatedDev.map(s => `${s.name}@latest`);
@@ -208,11 +206,12 @@ async function updateEverything() {
   }
   console.log("");
 
-  // --- Step 4: Refreshing Cargo Lockfile ---
-  console.log("🔒 Step 4/6: Refreshing Cargo Lockfile (cargo update)...");
+  // --- Step 4: Refreshing All Transitive Sub-Crates & Sub-Packages ---
+  console.log("🔒 Step 4/6: Updating All Sub-Crates & Transitive Sub-Dependencies (bun update & cargo update)...");
+  runCmd("bun", ["update", "--latest"]);
   const cargoCwd = path.resolve("src-tauri");
   const { success: cargoSuccess, durationMs: cargoMs } = runCmd("cargo", ["update"], cargoCwd);
-  if (cargoSuccess) console.log(`✅ Step 4/6 Complete (${cargoMs}ms)\n`);
+  if (cargoSuccess) console.log(`✅ Step 4/6 Sub-dependency update complete (${cargoMs}ms)\n`);
 
   // --- Step 5: Vite Production Frontend Build Validation ---
   console.log("⚡ Step 5/6: Validating Vite Production Frontend Build (bun run vite:build)...");
@@ -254,7 +253,7 @@ async function updateEverything() {
     console.log(` ${namePadded} | ${ecoPadded} | ${currPadded} | ${latPadded} | ${statusText}`);
   });
   console.log("=================================================================");
-  console.log("🎉 Ultimate dependency upgrade, build, & verification finished!\n");
+  console.log("🎉 All direct dependencies & transitive sub-dependencies are up-to-date!\n");
 }
 
 updateEverything();
