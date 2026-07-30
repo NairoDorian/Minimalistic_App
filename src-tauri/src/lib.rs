@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, State, WindowEvent,
+    Emitter, Manager, State, WindowEvent,
 };
 
 /// Shared application state managed by Tauri state container.
@@ -42,6 +42,10 @@ pub fn run() {
         ))
         // Register Tauri v2 Store Plugin for persistent key-value storage
         .plugin(tauri_plugin_store::Builder::new().build())
+        // Register Tauri v2 Process Plugin for app relaunch capability
+        .plugin(tauri_plugin_process::init())
+        // Register Tauri v2 Updater Plugin for GitHub Releases auto-updates
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Register managed state container with default preferences (minimize_to_tray: true)
         .manage(AppState {
             minimize_to_tray: Mutex::new(true),
@@ -55,8 +59,9 @@ pub fn run() {
         .setup(|app| {
             // Create native drop-down menu items for the taskbar system tray icon
             let open_item = MenuItem::with_id(app, "open", "Open / Hide GUI", true, None::<&str>)?;
+            let check_updates_item = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let tray_menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+            let tray_menu = Menu::with_items(app, &[&open_item, &check_updates_item, &quit_item])?;
 
             // Initialize System Tray Icon with custom event routing
             let _tray = TrayIconBuilder::new()
@@ -75,6 +80,15 @@ pub fn run() {
                                 let _ = window.set_focus();
                             }
                         }
+                    }
+                    "check_updates" => {
+                        // Show main window and emit check-for-updates event to React frontend
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                        let _ = app.emit("check-for-updates", ());
                     }
                     "quit" => {
                         // Set quitting flag and close main window cleanly.

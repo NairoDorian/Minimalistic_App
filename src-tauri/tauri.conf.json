@@ -27,6 +27,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -35,5 +36,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IFJXVFMvWVlZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZWUVZ==",
+      "endpoints": [
+        "https://github.com/your-username/minimalistic-app/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

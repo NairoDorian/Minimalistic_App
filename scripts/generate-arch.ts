@@ -3,26 +3,31 @@ import path from 'node:path';
 
 // 1-line description registry for files in the repository
 const fileDescriptions: Record<string, string> = {
+  ".gitignore": "Git ignore configuration excluding build artifacts, node_modules, and OS metadata.",
   "package.json": "Project manifest containing Bun scripts, dependencies (React 19, Tauri v2), and repomix configuration.",
   "tsconfig.json": "TypeScript root configuration with strict type checking and bundler resolution.",
   "vite.config.ts": "Vite bundler configuration optimized for React 19 and Tauri v2 dev server integration.",
   "index.html": "Main HTML entry point featuring Google Fonts Inter and root mount target.",
   "repomix.config.json": "Repomix configuration file for generating architecture and directory metadata.",
-  "README.md": "User manual and documentation specifying feature list and 'bun run tauri dev' command.",
+  "README.md": "User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command.",
   "CHANGELOG.md": "Version history tracking releases and features starting with v0.1.0.",
-  "AGENTS.md": "Guidelines and technical context for AI coding agents operating on this repository.",
+  "AGENTS.md": "Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository.",
+  "AUTO-UPDATE.md": "Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow.",
   "ARCHITECTURE.md": "Generated single file architecture map listing directory structure and file descriptions.",
   "src/main.tsx": "React 19 application entry point rendering App root inside StrictMode.",
-  "src/App.tsx": "Single-tab settings GUI with toggles for OS launch autostart and tray minimize behavior.",
+  "src/App.tsx": "Single-tab settings GUI with toggles for OS launch autostart, tray minimize behavior, and auto-updates.",
+  "src/components/UpdateChecker.tsx": "Auto-update checker component handling release checks, progress, and app relaunch.",
   "src/index.css": "100% AMOLED deep black theme (#000000) with glassmorphism and glowing toggle switches.",
-  "src-tauri/Cargo.toml": "Cargo manifest declaring Rust dependencies: tauri v2, tauri-plugin-autostart, and serde.",
-  "src-tauri/tauri.conf.json": "Tauri v2 configuration defining window dimensions, security capabilities, and tray bundle.",
+  "src-tauri/Cargo.toml": "Cargo manifest declaring Rust dependencies: tauri v2, autostart, store, updater, and process.",
+  "src-tauri/Cargo.lock": "Cargo dependency lockfile ensuring reproducible Rust crate builds.",
+  "src-tauri/tauri.conf.json": "Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle.",
   "src-tauri/build.rs": "Rust build script initializing Tauri build environment.",
-  "src-tauri/capabilities/default.json": "Tauri v2 capability definitions granting autostart, store, and tray permissions.",
-  "src-tauri/src/lib.rs": "Core Rust backend implementing System Tray menu ('Open', 'Quit'), autostart, and window hide event intercept.",
+  "src-tauri/capabilities/default.json": "Tauri v2 capability definitions granting autostart, store, updater, process, and tray permissions.",
+  "src-tauri/src/lib.rs": "Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, and window hide event intercept.",
   "src-tauri/src/main.rs": "Main Rust entry point launching the lib run loop without extra Windows console.",
   "scripts/generate-arch.ts": "Script utilizing Repomix logic to output ARCHITECTURE.md with directory tree and 1-line descriptions.",
-  "scripts/create-icons.ts": "Utility script for generating default application icons for Tauri v2."
+  "scripts/create-icons.ts": "Utility script for generating default application icons for Tauri v2.",
+  "scripts/update-deps.ts": "End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates."
 };
 
 function getDirectoryTree(dir: string, prefix = ''): string {
@@ -105,7 +110,7 @@ ${fileRows.join('\n')}
 
 - **Frontend Layer**: Built with **React 19** and **TypeScript**, styled using a 100% AMOLED deep black theme with glassmorphic cards.
 - **Desktop Container**: Powered by **Tauri v2**, executing cross-platform GUI & native system tray integration.
-- **Backend & Native Integrations**: Written in **Rust (Cargo)**, handling taskbar tray context menus ("Open", "Quit"), window close intercept (\`CloseRequested\`), and OS autostart via \`@tauri-apps/plugin-autostart\`.
+- **Backend & Native Integrations**: Written in **Rust (Cargo)**, handling taskbar tray context menus ("Open", "Check for Updates", "Quit"), window close intercept (\`CloseRequested\`), OS autostart via \`@tauri-apps/plugin-autostart\`, and auto-updater via \`@tauri-apps/plugin-updater\`.
 - **Package Manager & CLI**: Run and tested using **Bun.js** via the single primary command:
   \`\`\`bash
   bun run tauri dev

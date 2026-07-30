@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { invoke } from "@tauri-apps/api/core";
 import { Settings, Power, Minimize2, Shield, AppWindow } from "lucide-react";
+import { UpdateChecker } from "./components/UpdateChecker";
 
 /**
  * Main Application Preferences GUI Component (React 19).
  * Provides a 1-tab minimalistic preferences interface for managing:
  * 1. OS Launch Autostart (Default: OFF)
  * 2. Minimize to Taskbar System Tray on Close (Default: ON)
+ * 3. Auto-Updating & GitHub Release Management (Handy-inspired)
  */
 export default function App() {
   // State tracking OS autostart preference
@@ -112,7 +114,7 @@ export default function App() {
           <div className="settings-card-header">
             <h2 className="settings-card-title">Application Settings</h2>
             <p className="settings-card-desc">
-              Manage background system tray behaviors and startup configuration.
+              Manage background system tray behaviors, software updates, and startup configuration.
             </p>
           </div>
 
@@ -161,6 +163,9 @@ export default function App() {
               <span className="slider"></span>
             </label>
           </div>
+
+          {/* Section 3: Auto-Update Checker (Handy-inspired) */}
+          <UpdateChecker onStatusChange={setStatusMessage} variant="card" />
         </div>
       </main>
 
@@ -170,6 +175,7 @@ export default function App() {
           <Shield size={12} color="var(--accent-cyan)" />
           <span>Status: {statusMessage}</span>
         </div>
+        <UpdateChecker variant="footer" />
       </footer>
     </div>
   );

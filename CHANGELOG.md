@@ -5,6 +5,22 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-30
+
+### Handy-Inspired GitHub Auto-Update System
+
+#### 📦 Tauri 2 Plugin Integration
+- Added `tauri-plugin-updater` (`^2.10`) and `tauri-plugin-process` (`^2.3`) to Rust backend dependencies.
+- Added `@tauri-apps/plugin-updater` (`^2.10.1`) and `@tauri-apps/plugin-process` (`^2.3.1`) to frontend packages.
+
+#### 🖥️ System Tray & Frontend Updates (`UpdateChecker.tsx`)
+- Added `"Check for Updates..."` item to system tray context menu in `lib.rs` that emits `"check-for-updates"` event to webview.
+- Implemented `UpdateChecker` React component supporting `check()`, real-time `downloadAndInstall()` progress percentage streaming, and seamless app `relaunch()`.
+- Added up-to-date indicators, progress bar, error handling, and portable app manual download dialog fallback.
+
+#### 📖 Documentation & CI/CD Pipeline
+- Created [`AUTO-UPDATE.md`](AUTO-UPDATE.md) detailing GitHub Releases `latest.json` feed format, Minisign code signing keys, and GitHub Actions workflow template (`.github/workflows/release.yml`).
+
 ---
 
 ## [0.1.0] - 2026-07-30
