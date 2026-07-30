@@ -9,7 +9,6 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
-    "store:default",
     "updater:default",
     "process:default"
   ]

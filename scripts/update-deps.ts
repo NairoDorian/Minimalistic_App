@@ -320,7 +320,7 @@ async function updateEverything() {
 
   // --- Synchronize Architecture Map ---
   console.log("📐 Synchronizing ARCHITECTURE.md...");
-  const { success: archSuccess } = runCmd("bun", ["run", "scripts/generate-arch.ts"]);
+  const { success: archSuccess } = runCmd("bun", ["run", "repomix:arch"]);
   if (archSuccess) console.log("✅ ARCHITECTURE.md updated!\n");
 
   const totalDirectCount = allStatuses.length;

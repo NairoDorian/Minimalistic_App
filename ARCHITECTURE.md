@@ -29,6 +29,8 @@ minimalistic-app/
 │   ├── components
 │   │   └── UpdateChecker.tsx
 │   ├── index.css
+│   ├── lib
+│   │   └── tauri.ts
 │   └── main.tsx
 ├── src-tauri
 │   ├── build.rs
@@ -54,6 +56,7 @@ minimalistic-app/
 │   │   └── main.rs
 │   └── tauri.conf.json
 ├── tsconfig.json
+├── tsconfig.scripts.json
 └── vite.config.ts
 ```
 
@@ -78,7 +81,8 @@ minimalistic-app/
 | `src/App.tsx` | Single-tab settings GUI with toggles for OS launch autostart, tray minimize behavior, and auto-updates. |
 | `src/components/UpdateChecker.tsx` | Auto-update checker component handling release checks, progress, and app relaunch. |
 | `src/index.css` | 100% AMOLED deep black theme (#000000) with glassmorphism and glowing toggle switches. |
-| `src/main.tsx` | React 19 application entry point rendering App root inside StrictMode. |
+| `src/lib/tauri.ts` | Shared Tauri v2 runtime detection utility exporting the isTauri constant. |
+| `src/main.tsx` | React 19 application entry point rendering App root (no React import needed with JSX transform). |
 | `src-tauri/build.rs` | Rust build script initializing Tauri build environment. |
 | `src-tauri/capabilities/default.json` | Tauri v2 capability definitions granting autostart, store, updater, process, and tray permissions. |
 | `src-tauri/Cargo.lock` | Cargo dependency lockfile ensuring reproducible Rust crate builds. |
@@ -96,7 +100,8 @@ minimalistic-app/
 | `src-tauri/src/lib.rs` | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, and window hide event intercept. |
 | `src-tauri/src/main.rs` | Main Rust entry point launching the lib run loop without extra Windows console. |
 | `src-tauri/tauri.conf.json` | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
-| `tsconfig.json` | TypeScript root configuration with strict type checking and bundler resolution. |
+| `tsconfig.json` | TypeScript root configuration with strict type checking, bundler resolution, and enforced noUnusedLocals. |
+| `tsconfig.scripts.json` | Separate TypeScript config for Node.js scripts — uses ES2022 lib without DOM types to avoid type collisions. |
 | `vite.config.ts` | Vite bundler configuration optimized for React 19 and Tauri v2 dev server integration. |
 
 ---

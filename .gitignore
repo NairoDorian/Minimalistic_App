@@ -1,7 +1,5 @@
 # Node / Bun dependencies
 node_modules/
-bun.lock
-bun.lockb
 
 # Rust build artifacts
 target/
@@ -15,3 +13,8 @@ dist/
 .DS_Store
 Thumbs.db
 *.tmp
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local

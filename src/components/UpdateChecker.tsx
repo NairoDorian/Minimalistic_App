@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
-import { check, Update } from "@tauri-apps/plugin-updater";
+import { useState, useEffect, useRef, useCallback, type FC } from "react";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
-import { RefreshCw, Download, CheckCircle2, AlertCircle, ExternalLink, X } from "lucide-react";
+import { RefreshCw, Download, CheckCircle2, AlertCircle } from "lucide-react";
+import { isTauri } from "../lib/tauri";
 
 interface UpdateCheckerProps {
   autoCheckOnMount?: boolean;
@@ -10,7 +11,7 @@ interface UpdateCheckerProps {
   variant?: "card" | "footer";
 }
 
-export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
+export const UpdateChecker: FC<UpdateCheckerProps> = ({
   autoCheckOnMount = true,
   onStatusChange,
   variant = "card",
@@ -20,18 +21,73 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [showUpToDate, setShowUpToDate] = useState<boolean>(false);
-  const [showPortableDialog, setShowPortableDialog] = useState<boolean>(false);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const pendingUpdateRef = useRef<Update | null>(null);
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isManualCheckRef = useRef<boolean>(false);
-  const downloadedBytesRef = useRef<number>(0);
-  const contentLengthRef = useRef<number>(0);
 
-  // Check if running in Tauri runtime environment
-  const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  // Refs used as guards inside stable callbacks so the event listener
+  // captured at mount never reads stale state values.
+  const isCheckingRef = useRef<boolean>(false);
+  const isInstallingRef = useRef<boolean>(false);
+
+  /**
+   * Checks GitHub Releases for a newer version.
+   * Stable reference (dep array []) achieved by using refs for the
+   * concurrency guard rather than state values — the tray event listener
+   * registered once at mount will always call the current logic.
+   */
+  const checkForUpdates = useCallback(async (isManual = false) => {
+    // Guard against concurrent runs using refs (stable across renders)
+    if (!isTauri || isCheckingRef.current || isInstallingRef.current) return;
+
+    isCheckingRef.current = true;
+    setIsChecking(true);
+    setErrorMessage(null);
+    onStatusChange?.("Checking for updates...");
+
+    try {
+      const update = await check();
+
+      if (update?.available) {
+        pendingUpdateRef.current = update;
+        setLatestVersion(update.version);
+        setUpdateAvailable(true);
+        setShowUpToDate(false);
+        onStatusChange?.(`New version v${update.version} available!`);
+      } else {
+        pendingUpdateRef.current = null;
+        setUpdateAvailable(false);
+
+        if (isManual) {
+          setShowUpToDate(true);
+          onStatusChange?.("Application is up to date");
+          if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
+          upToDateTimeoutRef.current = setTimeout(() => {
+            setShowUpToDate(false);
+          }, 4000);
+        } else {
+          onStatusChange?.("Up to date");
+        }
+      }
+    } catch (error: unknown) {
+      console.error("Failed to check for updates:", error);
+      const errStr = error instanceof Error ? error.message : String(error);
+      if (errStr.includes("404") || errStr.includes("Could not fetch")) {
+        setErrorMessage("Update server endpoint not reached (Release binary pending)");
+      } else {
+        setErrorMessage("Unable to check for updates");
+      }
+      onStatusChange?.("Update check failed");
+    } finally {
+      isCheckingRef.current = false;
+      setIsChecking(false);
+    }
+  // Intentionally stable — guard state is via refs, onStatusChange is an
+  // optional prop that callers should memoize if needed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -40,9 +96,10 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
       checkForUpdates(false);
     }
 
-    // Listen for manual update trigger from System Tray context menu
+    // Listen for manual update trigger from System Tray context menu.
+    // checkForUpdates is stable (dep array []) so no re-subscription needed.
     const unlistenPromise = listen("check-for-updates", () => {
-      handleManualCheck();
+      checkForUpdates(true);
     });
 
     return () => {
@@ -51,124 +108,78 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
       }
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [isTauri]);
+  }, [checkForUpdates]);
 
-  const updateStatus = (msg: string) => {
-    if (onStatusChange) onStatusChange(msg);
-  };
+  /**
+   * Downloads and installs the pending update, then relaunches the app.
+   */
+  const installUpdate = useCallback(async () => {
+    if (!isTauri || isInstallingRef.current) return;
 
-  const checkForUpdates = async (isManual = false) => {
-    if (!isTauri || isChecking || isInstalling) return;
-
-    isManualCheckRef.current = isManual;
-    setErrorMessage(null);
-    setIsChecking(true);
-    updateStatus("Checking for updates...");
-
-    try {
-      const update = await check();
-
-      if (update && update.available) {
-        pendingUpdateRef.current = update;
-        setLatestVersion(update.version);
-        setUpdateAvailable(true);
-        setShowUpToDate(false);
-        updateStatus(`New version v${update.version} available!`);
-      } else {
-        pendingUpdateRef.current = null;
-        setUpdateAvailable(false);
-
-        if (isManualCheckRef.current) {
-          setShowUpToDate(true);
-          updateStatus("Application is up to date");
-          if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
-          upToDateTimeoutRef.current = setTimeout(() => {
-            setShowUpToDate(false);
-          }, 4000);
-        } else {
-          updateStatus("Up to date");
-        }
-      }
-    } catch (error: any) {
-      console.error("Failed to check for updates:", error);
-      const errStr = error?.message || String(error);
-      if (errStr.includes("404") || errStr.includes("Could not fetch")) {
-        setErrorMessage("Update server endpoint not reached (Release binary pending)");
-      } else {
-        setErrorMessage("Unable to check for updates");
-      }
-      updateStatus("Update check failed");
-    } finally {
-      setIsChecking(false);
-      isManualCheckRef.current = false;
-    }
-  };
-
-  const handleManualCheck = () => {
-    checkForUpdates(true);
-  };
-
-  const installUpdate = async () => {
-    if (!isTauri) return;
+    isInstallingRef.current = true;
+    setIsInstalling(true);
+    setDownloadProgress(0);
+    onStatusChange?.("Starting update download...");
 
     try {
-      setIsInstalling(true);
-      setDownloadProgress(0);
-      downloadedBytesRef.current = 0;
-      contentLengthRef.current = 0;
-      updateStatus("Starting update download...");
-
       let update = pendingUpdateRef.current;
       if (!update) {
         update = await check();
       }
 
-      if (!update || !update.available) {
-        updateStatus("No update found to install");
-        setIsInstalling(false);
+      if (!update?.available) {
+        onStatusChange?.("No update found to install");
         return;
       }
 
-      // Download and install release binary with progress updates (Handy workflow)
+      // Track download progress via closure — no redundant refs needed
+      let downloadedBytes = 0;
+      let contentLength = 0;
+
+      // Download and install release binary with progress updates
       await update.downloadAndInstall((event) => {
         switch (event.event) {
           case "Started":
-            downloadedBytesRef.current = 0;
-            contentLengthRef.current = event.data.contentLength ?? 0;
+            downloadedBytes = 0;
+            contentLength = event.data.contentLength ?? 0;
             break;
           case "Progress":
-            downloadedBytesRef.current += event.data.chunkLength;
-            if (contentLengthRef.current > 0) {
-              const pct = Math.round((downloadedBytesRef.current / contentLengthRef.current) * 100);
+            downloadedBytes += event.data.chunkLength;
+            if (contentLength > 0) {
+              const pct = Math.round((downloadedBytes / contentLength) * 100);
               setDownloadProgress(Math.min(pct, 100));
-              updateStatus(`Downloading update... ${pct}%`);
+              onStatusChange?.(`Downloading update... ${pct}%`);
             } else {
-              updateStatus("Downloading update binary...");
+              onStatusChange?.("Downloading update binary...");
             }
             break;
           case "Finished":
-            updateStatus("Download complete. Applying update...");
+            onStatusChange?.("Download complete. Applying update...");
             break;
         }
       });
 
-      updateStatus("Relaunching application...");
+      onStatusChange?.("Relaunching application...");
       await relaunch();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to install update:", error);
-      setErrorMessage("Installation failed: " + (error?.message || String(error)));
-      updateStatus("Update installation failed");
+      const errMsg = error instanceof Error ? error.message : String(error);
+      setErrorMessage("Installation failed: " + errMsg);
+      onStatusChange?.("Update installation failed");
     } finally {
+      isInstallingRef.current = false;
       setIsInstalling(false);
       setDownloadProgress(0);
     }
-  };
+  // onStatusChange intentionally omitted — callers should memoize if needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (variant === "footer") {
     return (
       <div className="update-checker-footer">
         {isChecking && (
-          <span className="update-status-label animate-pulse">
+          <span className="update-status-label">
             <RefreshCw size={12} className="spin-icon" /> Checking updates...
           </span>
         )}
@@ -188,7 +199,7 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
           </span>
         )}
         {!isChecking && !showUpToDate && !updateAvailable && !isInstalling && (
-          <button onClick={handleManualCheck} className="btn-footer-check">
+          <button onClick={() => checkForUpdates(true)} className="btn-footer-check">
             <RefreshCw size={12} /> Check Updates
           </button>
         )}
@@ -236,7 +247,7 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
 
           {!updateAvailable && !isInstalling && (
             <button
-              onClick={handleManualCheck}
+              onClick={() => checkForUpdates(true)}
               disabled={isChecking}
               className="btn-update-secondary"
             >
@@ -270,36 +281,6 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({
         <div className="update-error-banner">
           <AlertCircle size={14} />
           <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {/* Portable Binary Fallback Dialog */}
-      {showPortableDialog && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Portable App Update Notice</h3>
-              <button onClick={() => setShowPortableDialog(false)} className="btn-close-modal">
-                <X size={16} />
-              </button>
-            </div>
-            <p>
-              Portable installations require downloading the binary manually from GitHub Releases.
-            </p>
-            <div className="modal-actions">
-              <button onClick={() => setShowPortableDialog(false)} className="btn-secondary">
-                Cancel
-              </button>
-              <a
-                href="https://github.com/your-username/minimalistic-app/releases/latest"
-                target="_blank"
-                rel="noreferrer"
-                className="btn-primary"
-              >
-                <ExternalLink size={14} /> Go to Releases
-              </a>
-            </div>
-          </div>
         </div>
       )}
     </div>

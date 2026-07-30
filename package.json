@@ -9,7 +9,7 @@
     "vite:build": "vite build",
     "build": "bun run tauri build",
     "tauri": "tauri",
-    "repomix:arch": "bun run scripts/generate-arch.ts",
+    "repomix:arch": "bun scripts/generate-arch.ts",
     "update-deps": "bun run scripts/update-deps.ts",
     "clean": "cargo clean --manifest-path src-tauri/Cargo.toml"
   },
@@ -17,7 +17,6 @@
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-store": "^2.4.4",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",

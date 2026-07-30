@@ -2,12 +2,11 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, State, WindowEvent,
 };
 
 /// Shared application state managed by Tauri state container.
 /// Holds runtime user preferences and application lifecycle flags.
-#[derive(Default)]
 pub struct AppState {
     /// Controls whether closing the main GUI window minimizes the app to the system tray
     /// instead of terminating the application process. Default is true.
@@ -27,28 +26,43 @@ fn get_minimize_to_tray(state: State<'_, AppState>) -> bool {
 /// Tauri IPC command: Updates current minimize-to-tray preference.
 #[tauri::command]
 fn set_minimize_to_tray(enabled: bool, state: State<'_, AppState>) {
-    let mut minimize = state.minimize_to_tray.lock().unwrap();
-    *minimize = enabled;
+    *state.minimize_to_tray.lock().unwrap() = enabled;
+}
+
+/// Toggles main window visibility: hides if visible, shows and focuses if hidden.
+/// Extracted to eliminate copy-paste between the tray icon click and the menu "Open" item.
+fn toggle_window_visibility(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
 }
 
 /// Main entry point for Rust / Tauri backend application runtime.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Register Tauri v2 Autostart Plugin for OS startup management
+        // Register Tauri v2 Autostart Plugin for OS startup management.
+        // MacosLauncher::AppleScript is a macOS-specific enum variant — on Windows and Linux
+        // the launcher type is ignored by the plugin and OS-native startup is used instead.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::AppleScript,
             Some(vec!["--autostart"]),
         ))
-        // Register Tauri v2 Store Plugin for persistent key-value storage
-        .plugin(tauri_plugin_store::Builder::new().build())
-        // Register Tauri v2 Process Plugin for app relaunch capability
+        // Register Tauri v2 Process Plugin for app relaunch capability (used by auto-updater)
         .plugin(tauri_plugin_process::init())
         // Register Tauri v2 Updater Plugin for GitHub Releases auto-updates
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // Register managed state container with default preferences (minimize_to_tray: true)
+        // Register managed state container with explicit defaults:
+        //   minimize_to_tray = false (quit on window close by default)
+        //   is_quitting      = false (not quitting until tray Quit is clicked)
         .manage(AppState {
-            minimize_to_tray: Mutex::new(true),
+            minimize_to_tray: Mutex::new(false),
             is_quitting: Mutex::new(false),
         })
         // Register IPC command handlers callable from React frontend
@@ -63,30 +77,35 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &check_updates_item, &quit_item])?;
 
-            // Initialize System Tray Icon with custom event routing
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            // Resolve app icon. Using expect() here rather than unwrap() so that a missing
+            // icon file at build time produces a clear, descriptive panic message instead of a
+            // cryptic index-out-of-bounds or None unwrap.
+            let icon = app
+                .default_window_icon()
+                .expect("No default window icon found — ensure icons are configured in tauri.conf.json")
+                .clone();
+
+            // Initialize System Tray Icon with custom event routing.
+            // The handle MUST be kept alive for the duration of the process — dropping it removes the tray icon.
+            let tray = TrayIconBuilder::new()
+                .icon(icon)
+                .tooltip("Minimalistic App")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => {
                         // Toggle main window visibility from menu click
+                        toggle_window_visibility(app);
+                    }
+                    "check_updates" => {
+                        // Show main window only if currently hidden, then emit event to React frontend.
+                        // If the window is already visible and focused, leave it undisturbed.
                         if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
+                            if !window.is_visible().unwrap_or(false) {
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
                             }
-                        }
-                    }
-                    "check_updates" => {
-                        // Show main window and emit check-for-updates event to React frontend
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
                         }
                         let _ = app.emit("check-for-updates", ());
                     }
@@ -104,7 +123,7 @@ pub fn run() {
                     }
                     _ => {}
                 })
-                .on_tray_icon_event(|tray, event| {
+                .on_tray_icon_event(|tray_icon, event| {
                     // Left-click directly toggles show/hide for main window. Right-click opens native context menu.
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
@@ -112,19 +131,14 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                            }
-                        }
+                        toggle_window_visibility(tray_icon.app_handle());
                     }
                 })
                 .build(app)?;
+
+            // Keep the tray handle alive for the entire process lifetime.
+            // Without this, the tray icon is dropped and disappears immediately.
+            app.manage(tray);
 
             Ok(())
         })
