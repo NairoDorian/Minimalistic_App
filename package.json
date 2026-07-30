@@ -10,7 +10,8 @@
     "build": "bun run tauri build",
     "tauri": "tauri",
     "repomix:arch": "bun run scripts/generate-arch.ts",
-    "update-deps": "bun run scripts/update-deps.ts"
+    "update-deps": "bun run scripts/update-deps.ts",
+    "clean": "cargo clean --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
