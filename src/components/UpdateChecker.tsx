@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
-import { RefreshCw, Download, CheckCircle2, AlertCircle } from "lucide-react";
+import { RefreshCw, Download, CheckCircle2, AlertCircle, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { isTauri } from "../lib/tauri";
 
 interface UpdateCheckerProps {
@@ -22,24 +22,21 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [showUpToDate, setShowUpToDate] = useState<boolean>(false);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
+  const [showNotes, setShowNotes] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const pendingUpdateRef = useRef<Update | null>(null);
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Refs used as guards inside stable callbacks so the event listener
-  // captured at mount never reads stale state values.
+  // Guard refs to prevent stale closure calls in single-mounted event listeners
   const isCheckingRef = useRef<boolean>(false);
   const isInstallingRef = useRef<boolean>(false);
 
   /**
    * Checks GitHub Releases for a newer version.
-   * Stable reference (dep array []) achieved by using refs for the
-   * concurrency guard rather than state values — the tray event listener
-   * registered once at mount will always call the current logic.
    */
   const checkForUpdates = useCallback(async (isManual = false) => {
-    // Guard against concurrent runs using refs (stable across renders)
     if (!isTauri || isCheckingRef.current || isInstallingRef.current) return;
 
     isCheckingRef.current = true;
@@ -53,12 +50,14 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       if (update?.available) {
         pendingUpdateRef.current = update;
         setLatestVersion(update.version);
+        setReleaseNotes(update.body || null);
         setUpdateAvailable(true);
         setShowUpToDate(false);
         onStatusChange?.(`New version v${update.version} available!`);
       } else {
         pendingUpdateRef.current = null;
         setUpdateAvailable(false);
+        setReleaseNotes(null);
 
         if (isManual) {
           setShowUpToDate(true);
@@ -75,19 +74,16 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       console.error("Failed to check for updates:", error);
       const errStr = error instanceof Error ? error.message : String(error);
       if (errStr.includes("404") || errStr.includes("Could not fetch")) {
-        setErrorMessage("Update server endpoint not reached (Release binary pending)");
+        setErrorMessage("Update endpoint not found (GitHub release pending)");
       } else {
-        setErrorMessage("Unable to check for updates");
+        setErrorMessage("Unable to connect to update server");
       }
       onStatusChange?.("Update check failed");
     } finally {
       isCheckingRef.current = false;
       setIsChecking(false);
     }
-  // Intentionally stable — guard state is via refs, onStatusChange is an
-  // optional prop that callers should memoize if needed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onStatusChange]);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -96,8 +92,6 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       checkForUpdates(false);
     }
 
-    // Listen for manual update trigger from System Tray context menu.
-    // checkForUpdates is stable (dep array []) so no re-subscription needed.
     const unlistenPromise = listen("check-for-updates", () => {
       checkForUpdates(true);
     });
@@ -108,7 +102,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       }
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [checkForUpdates]);
+  }, [autoCheckOnMount, checkForUpdates]);
 
   /**
    * Downloads and installs the pending update, then relaunches the app.
@@ -132,11 +126,9 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         return;
       }
 
-      // Track download progress via closure — no redundant refs needed
       let downloadedBytes = 0;
       let contentLength = 0;
 
-      // Download and install release binary with progress updates
       await update.downloadAndInstall((event) => {
         switch (event.event) {
           case "Started":
@@ -150,7 +142,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
               setDownloadProgress(Math.min(pct, 100));
               onStatusChange?.(`Downloading update... ${pct}%`);
             } else {
-              onStatusChange?.("Downloading update binary...");
+              onStatusChange?.("Downloading binary...");
             }
             break;
           case "Finished":
@@ -171,9 +163,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       setIsInstalling(false);
       setDownloadProgress(0);
     }
-  // onStatusChange intentionally omitted — callers should memoize if needed
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onStatusChange]);
 
   if (variant === "footer") {
     return (
@@ -240,9 +230,21 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
 
         <div className="update-actions">
           {updateAvailable && !isInstalling && (
-            <button onClick={installUpdate} className="btn-update-primary">
-              <Download size={14} /> Install v{latestVersion}
-            </button>
+            <>
+              {releaseNotes && (
+                <button
+                  onClick={() => setShowNotes(!showNotes)}
+                  className="btn-update-secondary"
+                  title="Toggle Release Notes"
+                >
+                  <FileText size={14} />
+                  {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              )}
+              <button onClick={installUpdate} className="btn-update-primary">
+                <Download size={14} /> Install v{latestVersion}
+              </button>
+            </>
           )}
 
           {!updateAvailable && !isInstalling && (
@@ -264,6 +266,14 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         </div>
       </div>
 
+      {/* Release Notes Drawer */}
+      {updateAvailable && releaseNotes && showNotes && (
+        <div className="release-notes-box">
+          <span className="release-notes-heading">Release Notes for v{latestVersion}:</span>
+          <pre className="release-notes-content">{releaseNotes}</pre>
+        </div>
+      )}
+
       {/* Progress Bar during download */}
       {isInstalling && (
         <div className="update-progress-container">
@@ -276,7 +286,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         </div>
       )}
 
-      {/* Error notification if update check fails */}
+      {/* Error notification banner */}
       {errorMessage && (
         <div className="update-error-banner">
           <AlertCircle size={14} />
@@ -286,3 +296,4 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     </div>
   );
 };
+

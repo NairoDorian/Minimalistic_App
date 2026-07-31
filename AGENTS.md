@@ -78,7 +78,7 @@ bun run build
 
 2. **System Tray & Window Lifecycle Patterns**:
    - **Graceful Win32 Teardown**: Set `is_quitting = true` in `AppState` and call `window.close()` on the main window. This allows WebView2 to unregister window classes (`Chrome_WidgetWin_0`) cleanly through the Win32 message loop without throwing log errors.
-   - **IPC State Syncing**: Use `get_minimize_to_tray` and `set_minimize_to_tray` IPC commands for preferences, and `@tauri-apps/plugin-autostart` for OS launch settings.
+   - **IPC State Syncing**: Use `get_minimize_to_tray` and `set_minimize_to_tray` IPC commands for preferences (persisted on disk to `$APP_DATA_DIR/<AppName>/settings.json`), and `@tauri-apps/plugin-autostart` for OS launch settings.
 
 3. **UI Theme & Aesthetic Standards**:
    - **Background**: 100% AMOLED Deep Black (`#000000`).

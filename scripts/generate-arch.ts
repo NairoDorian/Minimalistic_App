@@ -4,6 +4,7 @@ import path from 'node:path';
 // 1-line description registry for files in the repository
 const fileDescriptions: Record<string, string> = {
   ".gitignore": "Git ignore configuration excluding build artifacts, node_modules, and OS metadata.",
+  ".github/workflows/ci.yml": "GitHub Actions CI workflow running automated TypeScript type checking, Vite bundling, and Cargo check.",
   "package.json": "Project manifest containing Bun scripts, dependencies (React 19, Tauri v2), and repomix configuration.",
   "tsconfig.json": "TypeScript root configuration with strict type checking, bundler resolution, and enforced noUnusedLocals.",
   "tsconfig.scripts.json": "Separate TypeScript config for Node.js scripts — uses ES2022 lib without DOM types to avoid type collisions.",

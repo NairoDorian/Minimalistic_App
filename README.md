@@ -87,16 +87,21 @@ bun run build
 - Streamed download progress percentages, one-click app relaunch, and error handling.
 - Dual-variant component: embedded **card** in the settings panel and compact **footer** indicator.
 
-### ⚙️ Preferences GUI
+### ⚙️ Preferences GUI & Modular Multi-Tab Layout
+- **Modular Multi-Tab Navigation**: Built-in tab navigation separating **Preferences** and **System & About** diagnostic views.
+- **Disk-Backed Settings Persistence**: User settings (`minimize_to_tray`) automatically serialize to `$APP_DATA_DIR/<AppName>/settings.json` (explicitly inside an application subfolder in AppData) via native Rust I/O so preferences persist across app restarts.
 - **Start at OS Launch Toggle** (Default: `OFF`): Managed via `@tauri-apps/plugin-autostart`.
-- **Minimize to Taskbar on Close Toggle** (Default: `OFF`): Persisted in-process via Rust IPC commands. When OFF, closing the window quits the app.
+- **Minimize to Taskbar on Close Toggle** (Default: `OFF`): When OFF, closing the window quits the app. When ON, closing hides to taskbar tray.
+- **Accessibility & Keyboard Control**: Controls feature `role="switch"`, `aria-checked`, `tabIndex`, `onKeyDown` handlers (`Space` / `Enter` toggles), and `:focus-visible` focus ring styles.
+- **Native Window Drag Region**: Header bar supports `data-tauri-drag-region` for smooth custom window repositioning.
 
 ### 🎨 100% AMOLED Pitch Black Aesthetic
 - True pitch black (`#000000`) AMOLED base background.
 - Translucent frosted glass cards (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, and responsive custom toggle switches.
 - Inter font with full antialiasing (`-webkit-font-smoothing` + `-moz-osx-font-smoothing`).
 
-### 🔒 Security & TypeScript Rigor
+### 🔒 Security, CI/CD & TypeScript Rigor
+- **GitHub Actions CI Workflow**: Automated CI pipeline (`.github/workflows/ci.yml`) performing type checking (`bun x tsc -b`), Vite bundling, and Cargo compilation on push and PR.
 - Strict **Content Security Policy** configured in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
 - Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
 - Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.

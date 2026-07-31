@@ -11,6 +11,9 @@ This document provides a single-file summary of the **Minimalistic App** archite
 
 ```
 minimalistic-app/
+├── .github
+│   └── workflows
+│       └── ci.yml
 ├── .gitignore
 ├── AGENTS.md
 ├── ARCHITECTURE.md
@@ -67,6 +70,7 @@ minimalistic-app/
 
 | File Path | Description |
 | :--- | :--- |
+| `.github/workflows/ci.yml` | GitHub Actions CI workflow running automated TypeScript type checking, Vite bundling, and Cargo check. |
 | `.gitignore` | Git ignore configuration excluding build artifacts, node_modules, and OS metadata. |
 | `AGENTS.md` | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `ARCHITECTURE.md` | Generated single file architecture map listing directory structure and file descriptions. |

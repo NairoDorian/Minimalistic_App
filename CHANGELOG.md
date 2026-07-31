@@ -5,6 +5,26 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-31
+
+### Persistent Settings, Modular Tab Navigation & Production CI/CD
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Disk-Backed JSON Settings Persistence**: Implemented `load_settings_from_disk` and `save_settings_to_disk` in `lib.rs` targeting `$APP_DATA_DIR/<AppName>/settings.json` (explicitly nested within an application subfolder in AppData). User preferences (such as `minimize_to_tray`) now persist cleanly across application re-launches.
+- **`get_app_info` IPC Command**: Added native IPC command returning app name, version, Tauri core version (`tauri::VERSION`), target OS, and architecture (`x86_64`).
+- **Comprehensive Rust Documentation**: Added detailed Rust doc comments (`///`) describing thread safety (`Mutex`), Win32 WebView2 teardown mechanics, and tray lifetime rules.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Modular Multi-Tab Interface**: Upgraded `App.tsx` layout into a modular tab navigation system featuring **Preferences** and **System & About** views.
+- **System Info & Architecture View**: Added a runtime environment tile grid displaying application version, Tauri core engine version, platform OS/arch, and template key highlights.
+- **Frameless Window Drag Region**: Added `data-tauri-drag-region` to titlebar header, allowing native window repositioning across operating systems.
+- **Full Keyboard ARIA Accessibility**: Added `role="switch"`, `aria-checked`, `tabIndex`, and `onKeyDown` handlers (`Space` / `Enter` keys) to switch controls, complemented by high-contrast `:focus-visible` ring indicators in CSS.
+- **Release Notes Drawer**: Enhanced `UpdateChecker.tsx` with collapsible release notes preview for available updates.
+
+#### 🤖 Tooling & CI/CD Pipeline (`.github` & `scripts`)
+- **GitHub Actions CI Workflow**: Added `.github/workflows/ci.yml` running automated type checks (`bun x tsc -b`), Vite bundling, and Cargo check on every push and pull request.
+- **Architecture Inventory Sync**: Re-generated `ARCHITECTURE.md` via `bun run repomix:arch`.
+
 ## [0.4.1] - 2026-07-30
 
 ### TypeScript Project References & 7-Step Pipeline Upgrade
