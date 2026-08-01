@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.1",
   "type": "module",
   "scripts": {
     "dev": "bun run tauri dev",
@@ -10,6 +10,7 @@
     "build": "bun run tauri build",
     "tauri": "tauri",
     "typecheck": "bun x tsc -b",
+    "before-commit": "bun scripts/before-commit.ts",
     "arch": "bun scripts/generate-arch.ts",
     "create-icons": "bun scripts/create-icons.ts",
     "update-deps": "bun run scripts/update-deps.ts",

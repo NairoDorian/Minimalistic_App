@@ -178,7 +178,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
 
   if (variant === "footer") {
     return (
-      <div className="update-checker-footer">
+      <div className="update-checker-footer" aria-live="polite">
         {isChecking && (
           <span className="update-status-label">
             <RefreshCw size={12} className="spin-icon" /> Checking updates...

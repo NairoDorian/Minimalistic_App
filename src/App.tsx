@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from "react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { invoke } from "@tauri-apps/api/core";
 import { Settings, Power, Minimize2, Shield, AppWindow, Info, Cpu, HardDrive, Terminal } from "lucide-react";
@@ -146,6 +146,18 @@ export default function App() {
     [updateStatus]
   );
 
+  /**
+   * Roving-tabindex keyboard navigation for the tablist (ARIA tabs pattern):
+   * ArrowLeft / ArrowRight switch tabs and move focus to the newly active tab.
+   */
+  const handleTabKeyDown = useCallback((e: KeyboardEvent<HTMLButtonElement>, tab: TabType) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const next: TabType = tab === "preferences" ? "about" : "preferences";
+    setActiveTab(next);
+    document.getElementById(`tab-${next}`)?.focus();
+  }, []);
+
   return (
     <div className="app-container">
       {/* Sleek Native Window Header Bar with data-tauri-drag-region */}
@@ -171,9 +183,11 @@ export default function App() {
             id="tab-preferences"
             className={`tab-btn ${activeTab === "preferences" ? "active" : ""}`}
             onClick={() => setActiveTab("preferences")}
+            onKeyDown={(e) => handleTabKeyDown(e, "preferences")}
             aria-selected={activeTab === "preferences"}
             aria-controls="panel-preferences"
             role="tab"
+            tabIndex={activeTab === "preferences" ? 0 : -1}
           >
             <Settings size={14} />
             <span>Preferences</span>
@@ -183,9 +197,11 @@ export default function App() {
             id="tab-about"
             className={`tab-btn ${activeTab === "about" ? "active" : ""}`}
             onClick={() => setActiveTab("about")}
+            onKeyDown={(e) => handleTabKeyDown(e, "about")}
             aria-selected={activeTab === "about"}
             aria-controls="panel-about"
             role="tab"
+            tabIndex={activeTab === "about" ? 0 : -1}
           >
             <Info size={14} />
             <span>System & About</span>
@@ -260,7 +276,7 @@ export default function App() {
                   <span className="tile-title">Target Platform / Arch</span>
                 </div>
                 <span className="tile-value">
-                  {appInfo?.os || "win32"} ({appInfo?.arch || "x86_64"})
+                  {appInfo?.os || "unknown"} ({appInfo?.arch || "unknown"})
                 </span>
               </div>
 

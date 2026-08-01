@@ -262,13 +262,14 @@ async function updateEverything() {
     console.log(`🦀 Step 3/7: Syncing ${outdatedCargo.length} Outdated Cargo Crates in Cargo.toml...`);
     let newCargoContent = cargoContent;
     outdatedCargo.forEach(crate => {
+      // Inline and simple Cargo.toml spec forms are mutually exclusive per line,
+      // so applying both replacements unconditionally is safe and avoids the
+      // stateful lastIndex quirk of `RegExp.test()` on global regexes.
       const regInline = new RegExp(`(${crate.name}\\s*=\\s*\\{[^}]*version\\s*=\\s*")([^"]+)(")`, 'g');
       const regSimple = new RegExp(`(${crate.name}\\s*=\\s*")([^"]+)(")`, 'g');
-      if (regInline.test(newCargoContent)) {
-        newCargoContent = newCargoContent.replace(regInline, `$1^${crate.latestVersion}$3`);
-      } else {
-        newCargoContent = newCargoContent.replace(regSimple, `$1^${crate.latestVersion}$3`);
-      }
+      newCargoContent = newCargoContent
+        .replace(regInline, `$1^${crate.latestVersion}$3`)
+        .replace(regSimple, `$1^${crate.latestVersion}$3`);
     });
     fs.writeFileSync(cargoTomlPath, newCargoContent, 'utf8');
     console.log("✅ Cargo.toml specifications updated to @latest!");

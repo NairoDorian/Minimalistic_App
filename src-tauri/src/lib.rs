@@ -10,7 +10,7 @@ use tauri::{
 };
 
 /// Persistent application preferences saved as JSON in the OS app configuration directory.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AppSettings {
     /// Controls whether closing the main GUI window minimizes the app to the system tray
     /// instead of terminating the application process. Default is false.
@@ -111,14 +111,19 @@ fn get_minimize_to_tray(state: State<'_, AppState>) -> bool {
 /// Returns an error when the on-disk persistence fails so the frontend can roll back its UI.
 #[tauri::command]
 fn set_minimize_to_tray(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
-    // Mutate the in-memory state, then persist a snapshot to disk. The lock is
-    // dropped before the disk write so I/O never blocks other IPC handlers.
-    let snapshot = {
-        let mut settings = lock_guard(&state.settings);
-        settings.minimize_to_tray = enabled;
-        settings.clone()
+    // Persist the new value to disk first, then commit it to memory. If the disk
+    // write fails, neither the in-memory state nor the UI changes, so the setting
+    // can never silently drift between memory, disk, and UI (previously the memory
+    // was mutated first, leaving a stale value behind on write failure).
+    if lock_guard(&state.settings).minimize_to_tray == enabled {
+        return Ok(());
+    }
+    let new_settings = AppSettings {
+        minimize_to_tray: enabled,
     };
-    save_settings_to_disk(&state.settings_path, &snapshot)
+    save_settings_to_disk(&state.settings_path, &new_settings)?;
+    *lock_guard(&state.settings) = new_settings;
+    Ok(())
 }
 
 /// Tauri IPC command: Returns application and runtime system diagnostic information.
@@ -143,6 +148,17 @@ fn show_and_focus_window(app: &AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+/// Shows and focuses the main window only when it is currently hidden.
+/// Used by the "Check for Updates..." tray item so a focused window is left
+/// undisturbed when triggering an update check from the tray.
+fn show_window_if_hidden(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if !window.is_visible().unwrap_or(false) {
+            show_and_focus_window(app);
+        }
     }
 }
 
@@ -217,18 +233,21 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &check_updates_item, &quit_item])?;
 
-            // Resolve app icon with clear error message if default icon is unconfigured
+            // Resolve app icon with a descriptive setup error instead of panicking
+            // if the default icon is unconfigured (misconfiguration should fail the
+            // launch gracefully, not abort the process mid-bootstrap).
             let icon = app
                 .default_window_icon()
-                .expect(
+                .ok_or(
                     "No default window icon found — ensure icons are configured in tauri.conf.json",
-                )
+                )?
                 .clone();
 
-            // Initialize System Tray Icon with event routing
+            // Initialize System Tray Icon with event routing. The tooltip reads the
+            // product name from package_info() so it always matches tauri.conf.json.
             let tray = TrayIconBuilder::new()
                 .icon(icon)
-                .tooltip("Minimalistic App")
+                .tooltip(app.package_info().name.clone())
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -236,13 +255,8 @@ pub fn run() {
                         toggle_window_visibility(app);
                     }
                     "check_updates" => {
-                        // Only surface the window if it is currently hidden — leaves a
-                        // focused window undisturbed when checking from the tray.
-                        if let Some(window) = app.get_webview_window("main") {
-                            if !window.is_visible().unwrap_or(false) {
-                                show_and_focus_window(app);
-                            }
-                        }
+                        // Surface the window only if hidden, then notify the webview.
+                        show_window_if_hidden(app);
                         let _ = app.emit("check-for-updates", ());
                     }
                     "quit" => {

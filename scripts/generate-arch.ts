@@ -46,7 +46,9 @@ const fileDescriptions: Record<string, string> = {
   "src-tauri/icons/icon.icns": "Valid macOS Apple Icon Image container (icp4-ic15, base + retina).",
   "scripts/generate-arch.ts": "Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory.",
   "scripts/create-icons.ts": "Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2.",
-  "scripts/update-deps.ts": "End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates."
+  "scripts/update-deps.ts": "End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates.",
+  "scripts/version.ts": "Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.",
+  "scripts/before-commit.ts": "Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes."
 };
 
 /** Human-readable byte size (e.g. `1.2 KB`). */

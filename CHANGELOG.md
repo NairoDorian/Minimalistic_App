@@ -5,6 +5,42 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> [!NOTE]
+> **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
+
+## [0.8.1] - 2026-08-01
+
+### Deep Cross-Platform Audit & Optimization — Round 7
+
+#### 🔢 Single-Source Version Management (`scripts/version.ts` + `scripts/before-commit.ts`)
+- **Global version constant**: New `scripts/version.ts` exports `APP_VERSION` — the single place the application version is defined. Every other occurrence is now a synced mirror or a build-time derivation.
+- **`bun run before-commit`**: New `scripts/before-commit.ts` propagates `APP_VERSION` to `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `Cargo.lock` root crate entry via `cargo update` — eliminating the hardcoded-copy drift that has now been fixed twice in this template's history.
+- **Modes**: default sync mode prints a per-mirror report; `--check` validates read-only and exits 1 on drift (CI / git hooks); `--bump <major|minor|patch>` increments the global and syncs the whole chain; `--install-hook` wires a `.git/hooks/pre-commit` running `--check`. Changelog header presence for the current version is validated (advisory warning).
+- **Vite derive**: `vite.config.ts` now imports `APP_VERSION` from `scripts/version.ts` (replacing the `package.json` JSON import), so `__APP_VERSION__` and the web-preview fallback can never drift from the global.
+- **Audited every legacy version string** (`0.1.0`–`0.8.0`): confirmed no hardcoded app versions remain in `src/` or `src-tauri/src/`; remaining old numbers are intentional (CHANGELOG release history, AUTO-UPDATE.md feed schema examples, third-party lockfile entries).
+
+## [0.8.1] - 2026-08-01
+
+### Deep Cross-Platform Audit & Optimization — Round 6
+
+#### 🔧 Version Drift & Consistency Fixes
+- **Version drift fixed**: `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` still declared `0.7.0` while the changelog/commit already described v0.8.0 — all three bumped to `0.8.0` (single source of truth restored).
+- **`set_minimize_to_tray` memory/disk/UI consistency**: The IPC handler now persists the new value to disk *first*, then commits it to memory. Previously memory was mutated before the disk write, so a failed write left in-memory state diverged from both the UI (rolled back) and disk. A no-op early return also skips redundant disk writes when the value is unchanged. The now-unused `Clone` derive on `AppSettings` was removed.
+- **Non-panic icon bootstrap**: `default_window_icon().expect(...)` panicked the process on misconfiguration; it now returns a descriptive setup error so the app fails the launch gracefully.
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Tray tooltip de-hardcoded**: `TrayIconBuilder::tooltip` now reads the product name from `AppHandle::package_info()` so it can never drift from `tauri.conf.json`.
+- **`show_window_if_hidden()` helper extracted**: Deduplicated the show-if-hidden sequence in the "Check for Updates..." tray menu handler.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Full ARIA tabs keyboard pattern**: The tablist now implements roving `tabIndex` (active tab `0`, inactive `-1`) plus ArrowLeft / ArrowRight navigation that switches tabs and moves focus — completing the WAI-ARIA tabs pattern beyond the existing `aria-selected`/`aria-controls` wiring.
+- **Neutral platform fallbacks**: The System & About platform tile falls back to `unknown` instead of Node.js-style `"win32"` / assumed `"x86_64"` (Rust reports `"windows"`).
+- **Footer update status announces to screen readers**: The footer `UpdateChecker` container is now `aria-live="polite"` alongside the existing footer status region.
+
+#### 🛠️ Tooling, CI/CD & Docs
+- **Deprecated CI runner updated**: `ubuntu-22.04` (retired by GitHub Actions) → `ubuntu-24.04` in `.github/workflows/ci.yml` and the release workflow template in `AUTO-UPDATE.md`.
+- **`update-deps.ts` regex hygiene**: Replaced the stateful `RegExp.test()` lastIndex quirk in the Cargo.toml updater with unconditional dual-form replacements (inline + simple spec forms are mutually exclusive per line).
+
 ## [0.8.0] - 2026-08-01
 
 ### Deep Cross-Platform Audit & Optimization — Round 5
