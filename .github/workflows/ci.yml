@@ -38,6 +38,9 @@ jobs:
       - name: Validate TypeScript static types (tsc -b)
         run: bun x tsc -b
 
+      - name: Validate version mirrors in sync (before-commit --check)
+        run: bun run before-commit --check
+
       - name: Validate Vite production bundle
         run: bun run vite:build
 

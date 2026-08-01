@@ -55,11 +55,13 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         setReleaseNotes(update.body || null);
         setUpdateAvailable(true);
         setShowUpToDate(false);
+        setShowNotes(false); // never leave a stale release-notes drawer open
         onStatusChange?.(`New version v${update.version} available!`);
       } else {
         pendingUpdateRef.current = null;
         setUpdateAvailable(false);
         setReleaseNotes(null);
+        setShowNotes(false);
 
         if (isManual) {
           setShowUpToDate(true);

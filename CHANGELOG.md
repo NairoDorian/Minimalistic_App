@@ -8,7 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
-## [0.8.1] - 2026-08-01
+## [0.9.0] - 2026-08-01
+
+### Deep Audit Round 8 — Documentation Deep-Dive & Component Extraction
+
+#### 📖 Documentation Overhaul (README.md)
+- **Unified SOP**: The README's Standard Operating Procedure now matches `AGENTS.md` exactly — 7 steps including the environment verification step (`bun --version` / `cargo --version`) that was previously missing.
+- **Deep-dive Key Features**: Expanded each feature section with detailed mechanics: a tray event-flow breakdown (left-click toggle → right-click menu → quit teardown), a complete IPC command table (`get_minimize_to_tray`, `set_minimize_to_tray`, `get_app_info`), a per-OS settings file path table, and a version-sync file graph tracing `scripts/version.ts` → mirrors → Vite `define`.
+- **New "From Template to Your App" section**: A step-by-step rebranding checklist (product name, app identifier, crate name, icon regeneration, Minisign keys, GitHub endpoints, window title) so the template can be forked into a real app without missing a location.
+- **Annotated project structure**: Every file now carries a "what it does / when to touch it" note, and a troubleshooting cheatsheet was added (WebView2 devtools, Linux tray dependencies, Minisign misconfiguration).
+
+#### 📖 Agent Guidelines (AGENTS.md)
+- **Golden Rule promoted**: The `rtk` command prefix rule (always use `rtk` before shell commands) is now part of the Primary Standard section, not just the release procedure.
+- **Expanded Best Practices**: Documented the IPC error pattern (`Result<(), String>` + frontend optimistic rollback), the `UpdateChecker` ref-based concurrency-guard pattern, the `ToggleSwitch` accessibility contract, and the inline-comment standard.
+- **New "Common Tasks" quick-reference table**: rename the app, bump the version, add a dependency, regenerate icons, run the CI checks — one row per task with the exact command.
+
+#### 📖 Auto-Update Documentation (AUTO-UPDATE.md)
+- **Stale examples fixed**: Release-tag example updated (`v0.1.1` → `v0.9.0`) and the `latest.json` feed schema example refreshed to the current template version.
+- **"Your First Release" walkthrough**: End-to-end first-publish flow (repo links → keys → secrets → tag → verify feed) with a checklist.
+- **Troubleshooting section**: Endpoint 404, Minisign public-key mismatch, missing `TAURI_SIGNING_PRIVATE_KEY` secrets, CSP `connect-src` requirements, and capabilities (`updater:default`, `process:default`) explained.
+
+#### 📖 Changelog (CHANGELOG.md)
+- **Duplicate version header fixed**: Round 6 (version-drift fixes) and Round 7 (single-source version management) were both committed under `0.8.1`, producing two identical `## [0.8.1]` headers. Round 7 is renumbered to `## [0.8.2] - 2026-08-01`; Round 6 keeps `0.8.1`. Each version now appears exactly once, restoring Keep-a-Changelog compliance and making `before-commit --check` changelog validation unambiguous.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Tab panels extracted into components**: `App.tsx` shrank from ~316 to ~160 lines by moving the two tab views into `src/components/PreferencesTab.tsx` (owns autostart + minimize-to-tray state, toggle handlers, and their IPC initialization; receives an `onStatusChange` prop for the shared footer status) and `src/components/AboutTab.tsx` (pure presentational; also exports the `AppInfo` interface and `WEB_PREVIEW_APP_INFO` fallback). `App.tsx` is now the application shell: tablist, header, footer, app-info loading, status bar.
+- **React `<StrictMode>` enabled** in `main.tsx`: standard React 19 best practice; surfaces double-invoke bugs during development (production output unaffected). All mount effects are idempotent / guarded, so dev double-mounting is harmless.
+- **Neutral web-preview fallback completed**: `WEB_PREVIEW_APP_INFO.arch` is now `"unknown"` (it still claimed `"x86_64"` from Round 6's neutrality fix); the browser-preview tile no longer assumes a CPU architecture.
+- **Complete ARIA tabs keyboard pattern**: `Home` / `End` keys now jump to the first / last tab (roving `tabIndex`), completing the WAI-ARIA tabs pattern alongside `ArrowLeft` / `ArrowRight`.
+- **`UpdateChecker` state hygiene**: `showNotes` (release-notes drawer) resets to false whenever a new update is found, preventing a stale open drawer when checking again.
+- **Anti-flash styling**: `index.html` now sets `color-scheme: dark` meta and an inline black background, so the webview never flashes white between document load and CSS parse.
+
+#### 🤖 CI/CD & Tooling (`.github` & `scripts`)
+- **CI now guards version drift**: `.github/workflows/ci.yml` gained a `bun run before-commit --check` step, so any mirror drift (package.json / Cargo.toml / tauri.conf.json / Cargo.lock vs. `scripts/version.ts`) fails the pipeline on push and pull request — the same check the git pre-commit hook installs locally.
+
+## [0.8.2] - 2026-08-01
 
 ### Deep Cross-Platform Audit & Optimization — Round 7
 

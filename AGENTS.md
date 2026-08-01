@@ -4,7 +4,7 @@ This repository contains a cross-platform minimalistic desktop application templ
 
 ---
 
-## ⚡ Primary Standard: Bun & Testing Command
+## ⚡ Primary Standard: Bun, Testing Command & Golden Rule
 
 > [!CRITICAL]
 > **1. Package Manager Standard**:
@@ -15,6 +15,17 @@ This repository contains a cross-platform minimalistic desktop application templ
 > ```bash
 > bun run tauri dev
 > ```
+>
+> **3. Golden Rule — `rtk` Command Prefix**:
+> Always prefix commands with `rtk`. If RTK has a dedicated filter, use it; otherwise it passes the command through unchanged. RTK is always safe.
+> - This applies to **every** command, including chains: `rtk git add . && rtk git commit -m "msg" && rtk git push`.
+> - `rtk bun ...` is NOT used — `rtk` is not needed in front of `bun` when running the sanctioned Bun scripts (see the command table below).
+>
+> | ❌ Wrong | ✅ Correct |
+> | :--- | :--- |
+> | `git add . && git commit -m "msg" && git push` | `rtk git add . && rtk git commit -m "msg" && rtk git push` |
+> | `git status` | `rtk git status` |
+> | `bun run typecheck` | `bun run typecheck` (Bun scripts run directly, no `rtk` wrapper needed) |
 
 ---
 
@@ -46,7 +57,7 @@ bun run tauri dev
 ```
 - **Left-Click Tray Icon**: Toggles GUI window show/hide.
 - **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI**, **Check for Updates...**, and **Quit**.
-- **Close Button (X)**: Minimizes to taskbar tray when enabled in preferences.
+- **Close Button (X)**: Minimizes to taskbar tray when enabled in preferences (default OFF — closing quits).
 
 ### Step 4: Version Sync Before Committing
 Before any commit, synchronize the single global application version (`APP_VERSION` in `scripts/version.ts`) across all mirrors:
@@ -54,7 +65,7 @@ Before any commit, synchronize the single global application version (`APP_VERSI
 bun run before-commit
 ```
 - `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` are auto-synced mirrors — NEVER hardcode or edit the version there; only `scripts/version.ts` (or `bun run before-commit --bump <major|minor|patch>`) may change it.
-- Use `bun run before-commit --check` for read-only validation (exit 1 on drift) in CI or pre-commit hooks.
+- Use `bun run before-commit --check` for read-only validation (exit 1 on drift) in CI or pre-commit hooks. CI runs this on every push/PR.
 
 ### Step 5: Cleaning Build Target Artifacts (Optional)
 To purge `src-tauri/target/` build directories completely:
@@ -92,9 +103,9 @@ bun run before-commit --bump <major|minor|patch>
 
 | Bump | Example | Use when | Result |
 | :--- | :--- | :--- | :--- |
-| `patch` | `0.8.1 → 0.8.2` | Backward-compatible **bug fixes**, corrections, and polish — no new behavior. The safest and most common bump. | patch digit `+1` |
-| `minor` | `0.8.1 → 0.9.0` | New **backward-compatible features** or additions (new toggles, IPC commands, views). | minor `+1`, patch → `0` |
-| `major` | `0.8.1 → 1.0.0` | **Breaking changes** — incompatible config/behavior/IPC changes, removals, renames, new runtime requirements. | major `+1`, minor → `0`, patch → `0` |
+| `patch` | `0.9.0 → 0.9.1` | Backward-compatible **bug fixes**, corrections, and polish — no new behavior. The safest and most common bump. | patch digit `+1` |
+| `minor` | `0.9.0 → 0.10.0` | New **backward-compatible features** or additions (new toggles, IPC commands, views). | minor `+1`, patch → `0` |
+| `major` | `0.9.0 → 1.0.0` | **Breaking changes** — incompatible config/behavior/IPC changes, removals, renames, new runtime requirements. | major `+1`, minor → `0`, patch → `0` |
 
 > [!NOTE]
 > SemVer nuance: while below `1.0.0` (0.x), *anything* may be considered breaking. The template convention: **patch = fixes, minor = features, major = deliberate breaking overhaul**. When the user does not specify, ask which level they want.
@@ -109,7 +120,7 @@ Add the new release entry with the exact version and today's date:
 #### ⚛️ <Category>
 - **Change**: Description.
 ```
-- The `## [X.Y.Z]` header **must** match the bumped version — `before-commit --check` warns when it's missing.
+- The `## [X.Y.Z]` header **must** match the bumped version — `before-commit --check` warns when it's missing. Each version may appear **exactly once** in the file (Keep a Changelog rule).
 - Do this BEFORE regenerating the architecture map, so metrics include the edit.
 
 ### 3. Update Other Docs ONLY if Version-Dependent
@@ -153,9 +164,9 @@ rtk git push origin main
 | :--- | :--- | :--- |
 | `bun run before-commit` | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo update` when stale. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes |
 | `bun run before-commit --check` | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift (the report names the file and shows expected vs. actual). Safe for CI and pre-commit hooks. | No |
-| `bun run before-commit --bump patch` | Increments the patch digit in `scripts/version.ts` (`0.8.1 → 0.8.2`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump minor` | Increments the minor digit and zeroes patch (`0.8.1 → 0.9.0`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump major` | Increments the major digit and zeroes minor + patch (`0.8.1 → 1.0.0`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump patch` | Increments the patch digit in `scripts/version.ts` (`0.9.0 → 0.9.1`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump minor` | Increments the minor digit and zeroes patch (`0.9.0 → 0.10.0`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump major` | Increments the major digit and zeroes minor + patch (`0.9.0 → 1.0.0`), then runs the sync. | Yes (incl. `version.ts`) |
 | `bun run before-commit --install-hook` | Installs `.git/hooks/pre-commit`, which runs `--check` before every commit and blocks drifted commits. Refuses to overwrite an existing hook (error explains how to chain manually). Remove with `rm .git/hooks/pre-commit`. | Yes (hook file) |
 | `bun run before-commit --help` | Prints the usage summary and exits `0`. | No |
 
@@ -167,23 +178,66 @@ rtk git push origin main
 
 ---
 
+## 🔧 Common Tasks — Quick Reference
+
+| Task | Command(s) |
+| :--- | :--- |
+| Live development | `bun run tauri dev` |
+| Add a runtime dependency | `bun add <package>` |
+| Add a dev dependency | `bun add -d <package>` |
+| Upgrade everything to @latest | `bun run update-deps` |
+| Bump version (then sync mirrors) | `bun run before-commit --bump <major\|minor\|patch>` |
+| Check version drift (read-only) | `bun run before-commit --check` |
+| Install version-check git hook | `bun run before-commit --install-hook` |
+| Type-check the whole workspace | `bun run typecheck` |
+| Regenerate `ARCHITECTURE.md` | `bun run arch` |
+| Regenerate all app icons | `bun run create-icons` |
+| Purge Rust build artifacts | `bun run clean` |
+| Production build | `bun run build` |
+| Commit / push | `rtk git add <files>` → `rtk git commit -m "feat(vX.Y.Z): ..."` → `rtk git push origin main` |
+
+---
+
 ## 💡 Best Practices & Coding Standards
 
 1. **Package Management Rules**:
    - To add packages: `bun add <package>` (or `bun add -d <package>` for devDependencies).
    - To execute scripts: `bun run <script-name>`.
-   - Never generate or commit `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
+   - Never generate or commit `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`. Commit `bun.lock`.
 
 2. **System Tray & Window Lifecycle Patterns**:
    - **Single-Instance Guard**: `tauri-plugin-single-instance` is registered first in the builder; launching the app a second time focuses the existing window instead of spawning a duplicate tray icon.
    - **Graceful Win32 Teardown**: Set `is_quitting = true` in `AppState` and call `window.close()` on the main window. This allows WebView2 to unregister window classes (`Chrome_WidgetWin_0`) cleanly through the Win32 message loop without throwing log errors.
-   - **IPC State Syncing**: Use `get_minimize_to_tray` and `set_minimize_to_tray` IPC commands for preferences (persisted on disk to `$APP_DATA_DIR/<AppName>/settings.json`), and `@tauri-apps/plugin-autostart` for OS launch settings.
+   - **IPC State Syncing**: Use `get_minimize_to_tray` and `set_minimize_to_tray` IPC commands for preferences (persisted on disk to `$APP_DATA_DIR/<identifier>/settings.json`), and `@tauri-apps/plugin-autostart` for OS launch settings.
+   - **No hardcoded version strings**: never write an app version into `src/` or `src-tauri/src/` — read `__APP_VERSION__` (Vite define) or `AppHandle::package_info()`.
 
-3. **UI Theme & Aesthetic Standards**:
-   - **Background**: 100% AMOLED Deep Black (`#000000`).
+3. **Rust Backend Conventions (`src-tauri/src/lib.rs`)**:
+   - **IPC error contract**: preference-writing commands return `Result<(), String>` with descriptive messages; the frontend implements optimistic UI updates that roll back on `Err`.
+   - **Disk-first persistence**: `set_minimize_to_tray` writes the new value to disk **before** mutating memory — a failed write leaves memory, disk, and UI consistent.
+   - **Poison-safe locking**: never call `Mutex::lock().unwrap()` — use the `lock_guard()` helper which recovers from `PoisonError`.
+   - **Single source of truth**: product name/tooltip/version come from `AppHandle::package_info()`; settings paths come from `app_config_dir()`; never reconstruct either by string matching.
+   - **Descriptive `expect`/error messages**: icon bootstrapping fails gracefully with a setup error instead of a cryptic panic.
+
+4. **React 19 / TypeScript Frontend Conventions (`src`)**:
+   - **Component separation** (Round 8 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
+   - **Stable callbacks for event listeners**: any callback registered by a mount-once listener (e.g. tray `"check-for-updates"` events) must be stable — use ref-based concurrency guards (`isCheckingRef` / `isInstallingRef`) and an empty dep array rather than reading state directly.
+   - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={false} listenForEvents={false}` to prevent duplicate network requests.
+   - **Optimistic rollback**: toggles update state immediately, then revert on IPC/plugin failure (see `PreferencesTab.tsx`).
+   - **Never `import React`** unless a type requires it; use `import type { FC }` / named type imports with `verbatimModuleSyntax`-safe patterns. React 19's JSX transform handles element creation.
+   - **Catch clauses**: use `error: unknown` + `instanceof Error` narrowing — never `any`.
+
+5. **Accessibility Contract (ARIA)**:
+   - **Tabs**: `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected`, `aria-controls`, `aria-labelledby`, roving `tabIndex`, and arrow + Home/End keyboard navigation.
+   - **Switches**: `role="switch"` + `aria-checked`, `tabIndex={0}`, Space/Enter activation, and a visually-hidden native checkbox for form semantics.
+   - **Live regions**: `aria-live="polite"` on the footer status and update status regions; `role="progressbar"` with `aria-valuemin/max/now` on download progress.
+
+6. **UI Theme & Aesthetic Standards**:
+   - **Background**: 100% AMOLED Deep Black (`#000000`) — also painted inline in `index.html` to avoid white flash.
    - **Glassmorphism**: Translucent frosted cards (`backdrop-filter: blur(20px)`), `rgba(255, 255, 255, 0.08)` borders, and neon cyan (`#00f2fe`) accent glows.
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
-4. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), and [`AGENTS.md`](AGENTS.md).
-   - Keep inline code comments detailed and informative.
+7. **Documentation Rules**:
+   - Maintain [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+   - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining *why*, not just *what*.
+   - After any file add/remove/rename, regenerate the architecture map (`bun run arch`).
+   - Each changelog version header may appear exactly once; keep the exact `## [X.Y.Z] - YYYY-MM-DD` format.
