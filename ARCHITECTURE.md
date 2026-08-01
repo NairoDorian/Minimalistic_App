@@ -65,23 +65,23 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **32 files · 168.8 KB · 45,561 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **32 files · 178.0 KB · 48,089 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `.github/workflows/ci.yml` | 1.3 KB | 38 | 350 | 1327 | Cross-platform GitHub Actions CI validating TypeScript, Vite bundling, and Cargo check on Linux, macOS, and Windows. |
 | `.gitignore` | 295 B | 23 | 79 | 294 | Git ignore configuration excluding build artifacts, node_modules, and OS metadata. |
-| `AGENTS.md` | 15.0 KB | 243 | 4043 | 15268 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
+| `AGENTS.md` | 15.2 KB | 245 | 4097 | 15464 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 10.2 KB | 238 | 2611 | 10394 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
-| `CHANGELOG.md` | 32.2 KB | 309 | 8305 | 32679 | Version history tracking releases and features starting with v0.1.0. |
+| `CHANGELOG.md` | 34.2 KB | 324 | 8854 | 34741 | Version history tracking releases and features starting with v0.1.0. |
 | `index.html` | 858 B | 17 | 196 | 668 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
 | `package.json` | 1.1 KB | 38 | 395 | 1101 | Project manifest containing Bun scripts (dev, build, typecheck, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
-| `README.md` | 21.2 KB | 355 | 5642 | 21253 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
+| `README.md` | 21.9 KB | 363 | 5831 | 21951 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 602 B | 26 | 163 | 600 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
 | `scripts/before-commit.ts` | 10.1 KB | 205 | 2109 | 8007 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.7 KB | 116 | 1531 | 4619 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |
 | `scripts/generate-arch.ts` | 12.4 KB | 177 | 2929 | 11482 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
-| `scripts/update-deps.ts` | 15.8 KB | 324 | 3722 | 14432 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
+| `scripts/update-deps.ts` | 25.2 KB | 457 | 5458 | 20956 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
 | `scripts/version.ts` | 1.2 KB | 1 | 12 | 35 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
 | `src-tauri/capabilities/default.json` | 377 B | 15 | 104 | 376 | Tauri v2 capability definitions granting autostart, updater, process, and tray permissions. |

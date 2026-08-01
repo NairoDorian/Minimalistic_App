@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.9.1] - 2026-08-01
+
+### Deep Audit Round 8.1 — update-deps Pre-Release & Dry-Run Modes
+
+#### 🛠️ Tooling (`scripts/update-deps.ts`)
+- **`--prerelease` flag**: The update pipeline can now prefer **beta / alpha / RC versions** for direct dependencies instead of stable-only `@latest`. NPM packages resolve prerelease dist-tags in order (`next`, `beta`, `rc`, `alpha`, `canary`) and crates.io uses `newest_version`. A prominent warning banner explains that prereleases are unstable and that compatibility is still enforced by the pipeline's validation steps (tsc → Vite build → cargo check).
+- **`--dry-run` flag**: New read-only preview mode that queries both registries and prints a "would upgrade" report (dependency, current → target, prerelease markers) plus the list of steps a real run would execute — **without writing anything** (no `bun add`, no Cargo.toml edits, no lockfile refreshes, no builds). Safe to run at any time; exits 0.
+- **SemVer downgrade guard**: Prerelease resolution now uses a dependency-free SemVer comparator that rejects any candidate **strictly older** than the installed version. This fixed a real bug discovered while testing: stale dist-tags (e.g. `@tauri-apps/api`'s `next` tag → `2.0.1` while the project uses `^2.11.1`, `tauri-build`'s `newest_version` → `1.5.7-edition2024.0`, `vite` → `8.2.0-beta.0`) were previously proposed as "upgrades" that would actually have downgraded the stack. Only genuinely newer prereleases survive (e.g. `react 19.3.0-canary-*`, `typescript 7.1.0-dev.*`).
+- **Flag hygiene**: `--dry-run` is the single preview flag — a temporary `--check` alias was removed during the same round to avoid two names for one behavior.
+- **`--help`**: Prints the updated usage summary for all flags.
+
+#### 📖 Documentation
+- `README.md`: the update-deps SOP section now documents `--prerelease` / `--dry-run` / `--help` with a behavior table (downgrade guard, stable default, transitive resolution note).
+- `AGENTS.md`: Common Tasks table gained rows for the dry-run preview and prerelease upgrade commands.
+
 ## [0.9.0] - 2026-08-01
 
 ### Deep Audit Round 8 — Documentation Deep-Dive & Component Extraction

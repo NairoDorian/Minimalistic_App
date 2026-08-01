@@ -186,6 +186,8 @@ rtk git push origin main
 | Add a runtime dependency | `bun add <package>` |
 | Add a dev dependency | `bun add -d <package>` |
 | Upgrade everything to @latest | `bun run update-deps` |
+| Preview upgrades (no changes) | `bun run update-deps --dry-run` |
+| Upgrade with pre-releases | `bun run update-deps --prerelease` (beta/alpha/RC for direct deps; strictly-newer targets only) |
 | Bump version (then sync mirrors) | `bun run before-commit --bump <major\|minor\|patch>` |
 | Check version drift (read-only) | `bun run before-commit --check` |
 | Install version-check git hook | `bun run before-commit --install-hook` |

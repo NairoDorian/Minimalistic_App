@@ -4,7 +4,7 @@ import path from 'node:path';
 
 /**
  * Ultimate All-Inclusive Dependency Updater & Sub-Dependency Tracker.
- * 
+ *
  * Capabilities:
  * 1. Dynamic NPM Registry Querying (@latest versions)
  * 2. Dynamic Crates.io Registry Querying (@latest versions)
@@ -14,7 +14,45 @@ import path from 'node:path';
  * 6. Vite Production Build Validation (bun run vite:build)
  * 7. Native Cargo Backend Compilation Verification (cargo check)
  * 8. Single-File ARCHITECTURE.md Synchronization
+ *
+ * CLI flags:
+ *   (no args)      Stable @latest pipeline (default — only `latest` dist-tags,
+ *                  crates.io `max_version`; nothing is ever force-installed
+ *                  beyond what bun/cargo resolve as compatible).
+ *   --prerelease   Prefer pre-release versions for DIRECT dependencies:
+ *                  NPM dist-tags tried in order (`next`, `beta`, `rc`, `alpha`,
+ *                  `canary`) with fallback to `latest`; crates.io uses
+ *                  `newest_version` (which may include prereleases). Transitive
+ *                  deps still resolve via `bun update --latest` / `cargo update`
+ *                  (bun/cargo pull in prereleases only when a direct dep
+ *                  requires them).
+ *   --dry-run      Query registries and print a "would upgrade" report WITHOUT
+ *                  writing anything (no bun add, no Cargo.toml edits, no
+ *                  lockfile refreshes, no build steps). Safe to run any time.
+ *   --help         Show this usage summary.
+ *
+ * Compatibility guarantee: every proposed upgrade must survive the validation
+ * steps (tsc -b → vite build → cargo check) — steps 1-4 hard-fail (exit 1) on
+ * any resolution error, so an incompatible "latest" can never be force-applied.
  */
+
+// --- CLI flag parsing (before anything else so --help/--dry-run are side-effect free) ---
+const args = process.argv.slice(2);
+const PRERELEASE_MODE = args.includes('--prerelease');
+const DRY_RUN = args.includes('--dry-run');
+const SHOW_HELP = args.includes('--help') || args.includes('-h');
+
+/** NPM dist-tags probed in order when --prerelease is active (first existing wins). */
+const PRERELEASE_TAGS: readonly string[] = ['next', 'beta', 'rc', 'alpha', 'canary'];
+
+if (SHOW_HELP) {
+  console.log(`Usage:
+  bun run update-deps                          Stable @latest pipeline (default)
+  bun run update-deps --prerelease             Prefer beta/alpha/RC versions for direct deps
+  bun run update-deps --dry-run                Report what WOULD upgrade (no changes made)
+  bun run update-deps --prerelease --dry-run   Preview prerelease upgrades, apply nothing`);
+  process.exit(0);
+}
 
 interface DependencyStatus {
   name: string;
@@ -23,6 +61,8 @@ interface DependencyStatus {
   currentVersion: string;
   latestVersion: string;
   needsUpdate: boolean;
+  /** True when the resolved target is a pre-release (--prerelease mode). */
+  prerelease: boolean;
 }
 
 interface SubDepDiff {
@@ -32,32 +72,119 @@ interface SubDepDiff {
   after: string;
 }
 
+/** Semver versions containing a hyphen (e.g. `0.5.0-beta.1`) are pre-releases. */
+function isPrereleaseVersion(version: string): boolean {
+  return /-\d|-[a-z]/i.test(version);
+}
+
+/**
+ * Minimal SemVer comparator (no external dependency): returns 1 when `a` is
+ * newer than `b`, -1 when older, 0 when equal.
+ *
+ * Rules: numeric core parts compare numerically; a release sorts ABOVE any
+ * prerelease of the same core (`8.2.0-beta.0 < 8.2.0`); prerelease identifiers
+ * compare numerically when both numeric, lexicographically otherwise, with
+ * numeric identifiers sorting below alphanumeric ones.
+ *
+ * Used to reject prerelease dist-tags that point at OLDER lines than the
+ * installed version (e.g. `@tauri-apps/api`'s `next` tag → `2.0.1` while the
+ * project already uses `^2.11.1`) — upgrades must never downgrade.
+ */
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string): { core: number[]; pre: string | null } => {
+    const [coreStr, pre] = v.split('-', 2);
+    const core = coreStr.split('.').map(n => parseInt(n, 10) || 0);
+    while (core.length < 3) core.push(0);
+    return { core, pre: pre ?? null };
+  };
+  const A = parse(a);
+  const B = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if (A.core[i] !== B.core[i]) return A.core[i] > B.core[i] ? 1 : -1;
+  }
+  if (A.pre === null && B.pre === null) return 0;
+  if (A.pre === null) return 1;
+  if (B.pre === null) return -1;
+  const aId = A.pre.split('.');
+  const bId = B.pre.split('.');
+  const len = Math.max(aId.length, bId.length);
+  for (let i = 0; i < len; i++) {
+    const x = aId[i];
+    const y = bId[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = /^\d+$/.test(x) ? Number(x) : null;
+    const yn = /^\d+$/.test(y) ? Number(y) : null;
+    if (xn !== null && yn !== null) {
+      if (xn !== yn) return xn > yn ? 1 : -1;
+    } else if (xn !== null) {
+      return -1; // numeric identifiers sort below alphanumeric ones
+    } else if (yn !== null) {
+      return 1;
+    } else if (x !== y) {
+      return x > y ? 1 : -1;
+    }
+  }
+  return 0;
+}
+
 function cleanVersion(v: string): string {
   if (typeof v !== 'string') return '';
   return v.replace(/^[\^~=v]/, '').trim();
 }
 
-async function fetchLatestNpmVersion(pkgName: string): Promise<string | null> {
+/**
+ * Resolves the target NPM version.
+ * Stable mode: the `latest` dist-tag (cheap `/latest` endpoint).
+ * Prerelease mode: full packument, first existing prerelease tag that is
+ * STRICTLY NEWER than `current` wins (rejects stale tags pointing at older
+ * lines), falling back to `latest` when no newer prerelease exists.
+ */
+async function fetchLatestNpmVersion(pkgName: string, current: string, prerelease = false): Promise<string | null> {
   try {
-    const response = await fetch(`https://registry.npmjs.org/${pkgName}/latest`, {
+    if (!prerelease) {
+      const response = await fetch(`https://registry.npmjs.org/${pkgName}/latest`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json() as { version?: string };
+        return data.version || null;
+      }
+      return null;
+    }
+    const response = await fetch(`https://registry.npmjs.org/${pkgName}`, {
       headers: { 'Accept': 'application/json' }
     });
-    if (response.ok) {
-      const data = await response.json() as { version?: string };
-      return data.version || null;
+    if (!response.ok) return null;
+    const data = await response.json() as { 'dist-tags'?: Record<string, string> };
+    const tags = data['dist-tags'] ?? {};
+    for (const tag of PRERELEASE_TAGS) {
+      const candidate = tags[tag];
+      if (candidate && compareVersions(candidate, current) > 0) return candidate;
     }
-  } catch {}
-  return null;
+    return tags['latest'] ?? null;
+  } catch { return null; }
 }
 
-async function fetchLatestCrateVersion(crateName: string): Promise<string | null> {
+/**
+ * Resolves the target crates.io version.
+ * Stable mode: `max_version` (highest non-prerelease).
+ * Prerelease mode: `newest_version` — but only when it is STRICTLY NEWER than
+ * the installed version; otherwise falls back to `max_version`.
+ */
+async function fetchLatestCrateVersion(crateName: string, current: string, prerelease = false): Promise<string | null> {
   try {
     const response = await fetch(`https://crates.io/api/v1/crates/${crateName}`, {
       headers: { 'User-Agent': 'MinimalisticAppUpdater/1.0' }
     });
     if (response.ok) {
       const data = await response.json() as { crate?: { max_version?: string; newest_version?: string } };
-      return data.crate?.max_version || data.crate?.newest_version || null;
+      const crate = data.crate;
+      if (!crate) return null;
+      if (prerelease && crate.newest_version && compareVersions(crate.newest_version, current) > 0) {
+        return crate.newest_version;
+      }
+      return crate.max_version || null;
     }
   } catch {}
   return null;
@@ -116,10 +243,68 @@ function runCmd(cmd: string, args: string[], cwd?: string): { success: boolean; 
   return { success: res.status === 0, durationMs };
 }
 
+/** Renders a single direct-dependency row for the dry-run / summary reports. */
+function renderStatusRow(s: DependencyStatus): string {
+  const namePadded = s.name.padEnd(34, ' ');
+  const ecoPadded = s.ecosystem.padEnd(12, ' ');
+  const currPadded = s.currentVersion.padEnd(9, ' ');
+  const latPadded = s.latestVersion.padEnd(9, ' ');
+  const preMark = s.prerelease ? '⚠️' : ' ';
+  return ` ${namePadded} | ${ecoPadded} | ${currPadded} | ${latPadded} | ${preMark}`;
+}
+
+/**
+ * Dry-run report: prints every direct dependency that WOULD be upgraded,
+ * the pipeline steps that would run, and exits 0 without touching anything.
+ */
+function printDryRunReport(allStatuses: DependencyStatus[]): void {
+  const outdated = allStatuses.filter(s => s.needsUpdate);
+  const preCount = outdated.filter(s => s.prerelease).length;
+
+  console.log("=================================================================");
+  console.log(`🔍 DRY RUN${PRERELEASE_MODE ? ' (PRERELEASE PREVIEW)' : ''} — NO CHANGES WILL BE MADE`);
+  console.log("=================================================================");
+
+  if (outdated.length === 0) {
+    console.log(" ✅ All direct dependencies are already at their target versions.");
+    if (PRERELEASE_MODE) {
+      console.log("    (No pre-release tags found beyond current `latest`/`max_version` targets.)");
+    }
+  } else {
+    console.log(` 📦 ${outdated.length} direct dependency(-ies) WOULD be upgraded:`);
+    console.log(" Dependency / Crate Name           | Ecosystem    | Current   | Target    | Pre");
+    console.log("------------------------------------+--------------+-----------+-----------+-----");
+    outdated.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
+      console.log(renderStatusRow(s));
+    });
+    if (preCount > 0) {
+      console.log(`\n ⚠️  ${preCount} target(s) are PRE-RELEASES (--prerelease mode). Pre-release builds are`);
+      console.log("    unstable by nature — review them before applying with a real run.");
+    }
+  }
+
+  console.log("\n Steps that WOULD run in a real invocation:");
+  console.log("   1-2. bun add <pkg>@<target>        (runtime + dev deps)");
+  console.log("   3.   Cargo.toml spec rewrite to ^<target>");
+  console.log("   4.   bun update --latest + cargo update   (transitive sub-deps)");
+  console.log("   5.   bun x tsc -b                   (type validation)");
+  console.log("   6.   bun run vite:build             (frontend build)");
+  console.log("   7.   cargo check                    (backend compile)");
+  console.log("       bun run arch                    (ARCHITECTURE.md sync)");
+  console.log("=================================================================");
+  console.log("✅ Dry run complete — nothing was modified.");
+}
+
 async function updateEverything() {
   console.log("=================================================================");
-  console.log("🚀 STARTING ULTIMATE DUAL-ECOSYSTEM & SUB-DEPENDENCY UPDATE");
+  console.log(`🚀 STARTING ULTIMATE DUAL-ECOSYSTEM & SUB-DEPENDENCY UPDATE${PRERELEASE_MODE ? ' (PRERELEASE MODE)' : ''}`);
   console.log("=================================================================\n");
+
+  if (PRERELEASE_MODE) {
+    console.log("⚠️  PRERELEASE MODE: beta/alpha/RC versions are unstable by design.");
+    console.log("   Direct deps will prefer prerelease dist-tags / newest crates.io");
+    console.log("   versions; compatibility is still enforced by steps 5-7 (tsc, build, cargo check).\n");
+  }
 
   const pkgPath = path.resolve('package.json');
   const cargoTomlPath = path.resolve('src-tauri/Cargo.toml');
@@ -130,7 +315,7 @@ async function updateEverything() {
     process.exit(1);
   }
 
-  console.log("🔍 Querying Registries (NPM & Crates.io) for Absolute @latest Versions...");
+  console.log("🔍 Querying Registries (NPM & Crates.io) for Target Versions...");
   const queryStart = Date.now();
 
   const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -143,8 +328,8 @@ async function updateEverything() {
   // 1. Query NPM runtime dependencies
   Object.entries(runtimeDeps).forEach(([name, ver]) => {
     fetchPromises.push((async () => {
-      const latest = await fetchLatestNpmVersion(name);
       const currClean = cleanVersion(ver as string);
+      const latest = await fetchLatestNpmVersion(name, currClean, PRERELEASE_MODE);
       const needs = latest ? currClean !== latest : false;
       allStatuses.push({
         name,
@@ -152,7 +337,8 @@ async function updateEverything() {
         type: 'runtime',
         currentVersion: ver as string,
         latestVersion: latest || currClean,
-        needsUpdate: needs
+        needsUpdate: needs,
+        prerelease: needs && latest !== null && isPrereleaseVersion(latest)
       });
     })());
   });
@@ -160,8 +346,8 @@ async function updateEverything() {
   // 2. Query NPM devDependencies
   Object.entries(devDeps).forEach(([name, ver]) => {
     fetchPromises.push((async () => {
-      const latest = await fetchLatestNpmVersion(name);
       const currClean = cleanVersion(ver as string);
+      const latest = await fetchLatestNpmVersion(name, currClean, PRERELEASE_MODE);
       const needs = latest ? currClean !== latest : false;
       allStatuses.push({
         name,
@@ -169,7 +355,8 @@ async function updateEverything() {
         type: 'dev',
         currentVersion: ver as string,
         latestVersion: latest || currClean,
-        needsUpdate: needs
+        needsUpdate: needs,
+        prerelease: needs && latest !== null && isPrereleaseVersion(latest)
       });
     })());
   });
@@ -200,8 +387,8 @@ async function updateEverything() {
 
   cargoCratesToQuery.forEach(({ name, ver, section }) => {
     fetchPromises.push((async () => {
-      const latest = await fetchLatestCrateVersion(name);
       const currClean = cleanVersion(ver);
+      const latest = await fetchLatestCrateVersion(name, currClean, PRERELEASE_MODE);
       const needs = latest ? currClean !== latest : false;
       allStatuses.push({
         name,
@@ -209,7 +396,8 @@ async function updateEverything() {
         type: section === 'build-dependencies' ? 'cargo-build' : 'cargo-dep',
         currentVersion: ver,
         latestVersion: latest || currClean,
-        needsUpdate: needs
+        needsUpdate: needs,
+        prerelease: needs && latest !== null && isPrereleaseVersion(latest)
       });
     })());
   });
@@ -218,6 +406,12 @@ async function updateEverything() {
   const queryDuration = Date.now() - queryStart;
   console.log(`✅ Registry query complete (${queryDuration}ms)\n`);
 
+  // --- DRY RUN: report what would change, then stop before any write occurs ---
+  if (DRY_RUN) {
+    printDryRunReport(allStatuses);
+    process.exit(0);
+  }
+
   // --- Snapshot Sub-Dependency States BEFORE Lockfile Refresh ---
   const beforeCargoLock = parseCargoLock(cargoLockPath);
   const beforeBunLock = parseBunInstalledVersions();
@@ -225,10 +419,12 @@ async function updateEverything() {
   // --- Step 1: Upgrading Outdated NPM Runtime Dependencies ---
   const outdatedRuntime = allStatuses.filter(s => s.type === 'runtime' && s.needsUpdate);
   if (outdatedRuntime.length === 0) {
-    console.log("📦 Step 1/7: NPM Runtime Dependencies -> All direct packages already @latest");
+    console.log("📦 Step 1/7: NPM Runtime Dependencies -> All direct packages already @target");
   } else {
     console.log(`📦 Step 1/7: Upgrading ${outdatedRuntime.length} Outdated NPM Runtime Dependencies...`);
-    const targets = outdatedRuntime.map(s => `${s.name}@latest`);
+    // Stable mode pins @latest; prerelease mode pins the exact resolved target
+    // version (dist-tags are transient, exact versions are deterministic).
+    const targets = outdatedRuntime.map(s => `${s.name}@${PRERELEASE_MODE ? s.latestVersion : 'latest'}`);
     const { success, durationMs } = runCmd("bun", ["add", ...targets]);
     if (!success) {
       console.error("❌ Error: NPM runtime dependency upgrade failed!");
@@ -241,10 +437,10 @@ async function updateEverything() {
   // --- Step 2: Upgrading Outdated NPM DevDependencies ---
   const outdatedDev = allStatuses.filter(s => s.type === 'dev' && s.needsUpdate);
   if (outdatedDev.length === 0) {
-    console.log("🛠️ Step 2/7: NPM DevDependencies -> All direct packages already @latest");
+    console.log("🛠️ Step 2/7: NPM DevDependencies -> All direct packages already @target");
   } else {
     console.log(`🛠️ Step 2/7: Upgrading ${outdatedDev.length} Outdated NPM DevDependencies...`);
-    const targets = outdatedDev.map(s => `${s.name}@latest`);
+    const targets = outdatedDev.map(s => `${s.name}@${PRERELEASE_MODE ? s.latestVersion : 'latest'}`);
     const { success, durationMs } = runCmd("bun", ["add", "-d", ...targets]);
     if (!success) {
       console.error("❌ Error: NPM devDependency upgrade failed!");
@@ -257,7 +453,7 @@ async function updateEverything() {
   // --- Step 3: Upgrading Outdated Cargo Rust Crates in Cargo.toml ---
   const outdatedCargo = allStatuses.filter(s => s.ecosystem === 'Cargo (Rust)' && s.needsUpdate);
   if (outdatedCargo.length === 0) {
-    console.log("🦀 Step 3/7: Cargo Rust Crates -> All Cargo.toml specs already @latest");
+    console.log("🦀 Step 3/7: Cargo Rust Crates -> All Cargo.toml specs already @target");
   } else {
     console.log(`🦀 Step 3/7: Syncing ${outdatedCargo.length} Outdated Cargo Crates in Cargo.toml...`);
     let newCargoContent = cargoContent;
@@ -272,7 +468,7 @@ async function updateEverything() {
         .replace(regSimple, `$1^${crate.latestVersion}$3`);
     });
     fs.writeFileSync(cargoTomlPath, newCargoContent, 'utf8');
-    console.log("✅ Cargo.toml specifications updated to @latest!");
+    console.log("✅ Cargo.toml specifications updated to @target!");
   }
   console.log("");
 
@@ -367,7 +563,7 @@ async function updateEverything() {
     const ecoPadded = s.ecosystem.padEnd(12, ' ');
     const currPadded = s.currentVersion.padEnd(9, ' ');
     const latPadded = s.latestVersion.padEnd(9, ' ');
-    const statusText = s.needsUpdate ? "✨ Upgraded" : "⚡ Already @latest";
+    const statusText = s.needsUpdate ? (s.prerelease ? "⚠️ Pre-release" : "✨ Upgraded") : "⚡ Already @latest";
     console.log(` ${namePadded} | ${ecoPadded} | ${currPadded} | ${latPadded} | ${statusText}`);
   });
   console.log("=================================================================\n");

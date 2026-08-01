@@ -55,6 +55,14 @@ bun run update-deps
 ```
 *This 7-step pipeline force-upgrades all direct & transitive sub-dependencies across NPM and Crates.io to `@latest`, updates Cargo crates, validates static TypeScript types (`bun x tsc -b`), builds the Vite production bundle, verifies Rust compilation with `cargo check`, and regenerates `ARCHITECTURE.md`.*
 
+**Flags** (stable-only by default; nothing is ever force-installed beyond what `bun`/`cargo` resolve as compatible):
+
+| Flag | Effect |
+| :--- | :--- |
+| `--prerelease` | Prefer beta/alpha/RC versions for **direct** dependencies (NPM dist-tags `next`/`beta`/`rc`/`alpha`/`canary`, crates.io `newest_version`) — only targets **strictly newer** than the installed version; falls back to stable. Transitive deps still resolve via `bun update --latest` / `cargo update`. |
+| `--dry-run` | Query registries and print a "would upgrade" report **without writing anything** — no `bun add`, no Cargo.toml edits, no lockfile refreshes, no builds. Safe to run any time. |
+| `--help` | Print usage summary. |
+
 ### 3. Live Development & Primary Testing
 Run the application using the ultimate test command:
 ```bash

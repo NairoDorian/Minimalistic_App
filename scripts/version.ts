@@ -19,4 +19,4 @@
  * script propagate it — this is what prevents silent version drift between the
  * package manager, the Cargo crate, and the Tauri bundle config.
  */
-export const APP_VERSION = "0.9.0";
+export const APP_VERSION = "0.9.1";
