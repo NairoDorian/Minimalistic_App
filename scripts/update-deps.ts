@@ -225,33 +225,41 @@ async function updateEverything() {
   // --- Step 1: Upgrading Outdated NPM Runtime Dependencies ---
   const outdatedRuntime = allStatuses.filter(s => s.type === 'runtime' && s.needsUpdate);
   if (outdatedRuntime.length === 0) {
-    console.log("📦 Step 1/6: NPM Runtime Dependencies -> All direct packages already @latest");
+    console.log("📦 Step 1/7: NPM Runtime Dependencies -> All direct packages already @latest");
   } else {
-    console.log(`📦 Step 1/6: Upgrading ${outdatedRuntime.length} Outdated NPM Runtime Dependencies...`);
+    console.log(`📦 Step 1/7: Upgrading ${outdatedRuntime.length} Outdated NPM Runtime Dependencies...`);
     const targets = outdatedRuntime.map(s => `${s.name}@latest`);
     const { success, durationMs } = runCmd("bun", ["add", ...targets]);
-    if (success) console.log(`✅ Step 1/6 Complete (${durationMs}ms)`);
+    if (!success) {
+      console.error("❌ Error: NPM runtime dependency upgrade failed!");
+      process.exit(1);
+    }
+    console.log(`✅ Step 1/7 Complete (${durationMs}ms)`);
   }
   console.log("");
 
   // --- Step 2: Upgrading Outdated NPM DevDependencies ---
   const outdatedDev = allStatuses.filter(s => s.type === 'dev' && s.needsUpdate);
   if (outdatedDev.length === 0) {
-    console.log("🛠️ Step 2/6: NPM DevDependencies -> All direct packages already @latest");
+    console.log("🛠️ Step 2/7: NPM DevDependencies -> All direct packages already @latest");
   } else {
-    console.log(`🛠️ Step 2/6: Upgrading ${outdatedDev.length} Outdated NPM DevDependencies...`);
+    console.log(`🛠️ Step 2/7: Upgrading ${outdatedDev.length} Outdated NPM DevDependencies...`);
     const targets = outdatedDev.map(s => `${s.name}@latest`);
     const { success, durationMs } = runCmd("bun", ["add", "-d", ...targets]);
-    if (success) console.log(`✅ Step 2/6 Complete (${durationMs}ms)`);
+    if (!success) {
+      console.error("❌ Error: NPM devDependency upgrade failed!");
+      process.exit(1);
+    }
+    console.log(`✅ Step 2/7 Complete (${durationMs}ms)`);
   }
   console.log("");
 
   // --- Step 3: Upgrading Outdated Cargo Rust Crates in Cargo.toml ---
   const outdatedCargo = allStatuses.filter(s => s.ecosystem === 'Cargo (Rust)' && s.needsUpdate);
   if (outdatedCargo.length === 0) {
-    console.log("🦀 Step 3/6: Cargo Rust Crates -> All Cargo.toml specs already @latest");
+    console.log("🦀 Step 3/7: Cargo Rust Crates -> All Cargo.toml specs already @latest");
   } else {
-    console.log(`🦀 Step 3/6: Syncing ${outdatedCargo.length} Outdated Cargo Crates in Cargo.toml...`);
+    console.log(`🦀 Step 3/7: Syncing ${outdatedCargo.length} Outdated Cargo Crates in Cargo.toml...`);
     let newCargoContent = cargoContent;
     outdatedCargo.forEach(crate => {
       const regInline = new RegExp(`(${crate.name}\\s*=\\s*\\{[^}]*version\\s*=\\s*")([^"]+)(")`, 'g');
@@ -268,11 +276,20 @@ async function updateEverything() {
   console.log("");
 
   // --- Step 4: Refreshing All Transitive Sub-Crates & Sub-Packages ---
-  console.log("🔒 Step 4/6: Refreshing All Sub-Crates & Transitive Sub-Dependencies (bun update & cargo update)...");
-  runCmd("bun", ["update", "--latest"]);
+  console.log("🔒 Step 4/7: Refreshing All Sub-Crates & Transitive Sub-Dependencies (bun update & cargo update)...");
+  const bunUpdateResult = runCmd("bun", ["update", "--latest"]);
+  if (!bunUpdateResult.success) {
+    console.error("❌ Error: Bun sub-dependency update failed!");
+    process.exit(1);
+  }
   const cargoCwd = path.resolve("src-tauri");
   const { success: cargoSuccess, durationMs: cargoMs } = runCmd("cargo", ["update"], cargoCwd);
-  if (cargoSuccess) console.log(`✅ Step 4/6 Sub-dependency update complete (${cargoMs}ms)\n`);
+  if (cargoSuccess) {
+    console.log(`✅ Step 4/7 Sub-dependency update complete (${cargoMs}ms)\n`);
+  } else {
+    console.error("❌ Error: Cargo sub-crate update failed!");
+    process.exit(1);
+  }
 
   // --- Snapshot Sub-Dependency States AFTER Lockfile Refresh ---
   const afterCargoLock = parseCargoLock(cargoLockPath);
@@ -330,7 +347,7 @@ async function updateEverything() {
 
   // --- Synchronize Architecture Map ---
   console.log("📐 Synchronizing ARCHITECTURE.md...");
-  const { success: archSuccess } = runCmd("bun", ["run", "repomix:arch"]);
+  const { success: archSuccess } = runCmd("bun", ["run", "arch"]);
   if (archSuccess) console.log("✅ ARCHITECTURE.md updated!\n");
 
   const totalDirectCount = allStatuses.length;

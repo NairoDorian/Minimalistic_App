@@ -7,12 +7,14 @@ import { isTauri } from "../lib/tauri";
 
 interface UpdateCheckerProps {
   autoCheckOnMount?: boolean;
+  listenForEvents?: boolean;
   onStatusChange?: (status: string) => void;
   variant?: "card" | "footer";
 }
 
 export const UpdateChecker: FC<UpdateCheckerProps> = ({
   autoCheckOnMount = true,
+  listenForEvents = true,
   onStatusChange,
   variant = "card",
 }) => {
@@ -65,6 +67,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
           if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
           upToDateTimeoutRef.current = setTimeout(() => {
             setShowUpToDate(false);
+            upToDateTimeoutRef.current = null;
           }, 4000);
         } else {
           onStatusChange?.("Up to date");
@@ -92,17 +95,25 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       checkForUpdates(false);
     }
 
-    const unlistenPromise = listen("check-for-updates", () => {
-      checkForUpdates(true);
-    });
+    // Only the primary (card) instance responds to tray-triggered checks;
+    // multiple instances listening would fire duplicate network requests.
+    let unlistenPromise: Promise<() => void> | undefined;
+    if (listenForEvents) {
+      unlistenPromise = listen("check-for-updates", () => {
+        checkForUpdates(true);
+      });
+    }
 
     return () => {
       if (upToDateTimeoutRef.current) {
         clearTimeout(upToDateTimeoutRef.current);
+        upToDateTimeoutRef.current = null;
       }
-      unlistenPromise.then((unlisten) => unlisten());
+      // `.catch` prevents an unhandled promise rejection if `listen` fails
+      // after the component has already unmounted.
+      unlistenPromise?.then((unlisten) => unlisten()).catch(() => {});
     };
-  }, [autoCheckOnMount, checkForUpdates]);
+  }, [autoCheckOnMount, checkForUpdates, listenForEvents]);
 
   /**
    * Downloads and installs the pending update, then relaunches the app.
@@ -178,6 +189,11 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
             <CheckCircle2 size={12} /> App is up to date
           </span>
         )}
+        {errorMessage && (
+          <span className="update-status-label text-error">
+            <AlertCircle size={12} /> {errorMessage}
+          </span>
+        )}
         {updateAvailable && !isInstalling && (
           <button onClick={installUpdate} className="btn-update-footer">
             <Download size={12} /> Update to v{latestVersion}
@@ -235,7 +251,8 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
                 <button
                   onClick={() => setShowNotes(!showNotes)}
                   className="btn-update-secondary"
-                  title="Toggle Release Notes"
+                  aria-label="Toggle release notes"
+                  aria-expanded={showNotes}
                 >
                   <FileText size={14} />
                   {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -277,7 +294,14 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       {/* Progress Bar during download */}
       {isInstalling && (
         <div className="update-progress-container">
-          <div className="update-progress-track">
+          <div
+            className="update-progress-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={downloadProgress}
+            aria-label="Update download progress"
+          >
             <div
               className="update-progress-fill"
               style={{ width: `${Math.max(downloadProgress, 5)}%` }}

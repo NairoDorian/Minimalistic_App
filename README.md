@@ -26,7 +26,7 @@ Designed with a sleek **100% AMOLED Deep Black glassmorphic GUI (`#000000`)**, t
 graph TD
     A["1. Install / Update Packages<br><code>bun install</code> / <code>bun run update-deps</code>"] --> B["2. Test & Live Develop<br><code>bun run tauri dev</code>"]
     B --> C["3. Clean Build Cache (Optional)<br><code>bun run clean</code>"]
-    C --> D["4. Maintain Architecture Map<br><code>bun run repomix:arch</code>"]
+    C --> D["4. Maintain Architecture Map<br><code>bun run arch</code>"]
     D --> E["5. Validate Production Build<br><code>bun run build</code>"]
 ```
 
@@ -56,10 +56,10 @@ Purge compiled Rust release & debug build artifacts (`src-tauri/target/`):
 bun run clean
 ```
 
-### 4. Architecture Maintenance (Repomix)
+### 4. Architecture Maintenance
 After adding or modifying files, update the architecture map:
 ```bash
-bun run repomix:arch
+bun run arch
 ```
 Automatically updates [`ARCHITECTURE.md`](ARCHITECTURE.md) with the project directory tree and file inventory descriptions without raw code dumps.
 
@@ -75,6 +75,7 @@ bun run build
 
 ### 🖥️ Native Taskbar & System Tray Integration
 - **Normal Launch**: App opens its window on startup (`visible: true` in `tauri.conf.json`).
+- **Single-Instance Enforcement**: Launching the app a second time focuses the existing window instead of spawning a duplicate tray icon (`tauri-plugin-single-instance`).
 - **Left-Click Action**: Toggles showing/hiding the main GUI window instantly.
 - **Right-Click Action**: Opens a native context menu (**Open / Hide GUI**, **Check for Updates...**, **Quit**).
 - **Window Close Interception**: Closing the main window (X button) hides the app into the system tray when "Minimize to taskbar on close" is enabled (default: OFF — closing quits by default).
@@ -101,11 +102,12 @@ bun run build
 - Inter font with full antialiasing (`-webkit-font-smoothing` + `-moz-osx-font-smoothing`).
 
 ### 🔒 Security, CI/CD & TypeScript Rigor
-- **GitHub Actions CI Workflow**: Automated CI pipeline (`.github/workflows/ci.yml`) performing type checking (`bun x tsc -b`), Vite bundling, and Cargo compilation on push and PR.
+- **GitHub Actions CI Workflow**: Automated cross-platform CI pipeline (`.github/workflows/ci.yml`) performing type checking (`bun x tsc -b`), Vite bundling, and Cargo compilation on push and PR across **Linux (ubuntu-22.04), macOS, and Windows** runners.
 - Strict **Content Security Policy** configured in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
 - Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
 - Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.
-- Chromium 105 build target (`vite.config.ts`) tailored for WebView2 runtime efficiency on Windows.
+- Chromium 105 build target (`vite.config.ts`) matching the embedded webview baseline across Windows (WebView2), macOS (WKWebView), and Linux (WebKitGTK) — no unnecessary ES transpilation.
+- Resizable preferences window with minimum dimensions, so the layout never overflows on small or high-DPI-scaled displays.
 
 ---
 
@@ -118,7 +120,6 @@ bun run build
 | **React** | `^19.2.8` | Frontend component framework |
 | **TypeScript** | `^7.0.2` | Strict static type checking (TypeScript 7) |
 | **Vite** | `^8.2.0` | Frontend dev server & production bundler (Vite 8) |
-| **Repomix** | `^1.17.0` | Codebase architecture map generator |
 | **Cargo / Rust** | `2024 edition` | Native system tray & background process backend |
 
 ### Tauri Plugins
@@ -126,6 +127,7 @@ bun run build
 | Plugin | Version | Purpose |
 | :--- | :--- | :--- |
 | `tauri-plugin-autostart` | `^2.5.1` | OS startup launch management |
+| `tauri-plugin-single-instance` | `^2.4.3` | Duplicate-launch prevention & window focus |
 | `tauri-plugin-updater` | `^2.10.1` | GitHub Releases auto-update |
 | `tauri-plugin-process` | `^2.3.1` | App relaunch after update install |
 
@@ -139,6 +141,7 @@ Minimalistic_App/
 │   ├── lib/
 │   │   └── tauri.ts            # Shared Tauri runtime detection (isTauri)
 │   ├── components/
+│   │   ├── ToggleSwitch.tsx    # Accessible ARIA switch component (keyboard-friendly)
 │   │   └── UpdateChecker.tsx   # Auto-update UI component (card + footer variants)
 │   ├── App.tsx                 # Main preferences GUI
 │   ├── main.tsx                # React entry point
@@ -150,6 +153,7 @@ Minimalistic_App/
 │   └── tauri.conf.json         # App config, CSP, updater endpoints
 ├── scripts/
 │   ├── generate-arch.ts        # ARCHITECTURE.md generator
+│   ├── create-icons.ts         # Cross-platform PNG/ICO/ICNS icon generator
 │   └── update-deps.ts          # Dual-ecosystem 7-step upgrade pipeline
 ├── tsconfig.json               # Frontend TypeScript config
 ├── tsconfig.scripts.json       # Scripts TypeScript config (isolated Node context)

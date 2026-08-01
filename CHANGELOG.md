@@ -5,6 +5,85 @@ All notable changes to the **Minimalistic App** project are documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-01
+
+### Deep Cross-Platform Audit & Optimization — Round 5
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Single-instance enforcement**: Added `tauri-plugin-single-instance` (`^2.4.3`), registered first in the builder. Launching the app a second time now focuses the existing window instead of spawning a duplicate tray icon — the standard guard for tray-utility apps.
+- **Version/name drift eliminated**: `get_app_info` now reads `name` and `version` from `AppHandle::package_info()` (single source of truth: `tauri.conf.json`) instead of a hardcoded string + `env!("CARGO_PKG_VERSION")`. The frontend's `AppInfo` fields became `String`s accordingly.
+- **Mutex no longer held during disk I/O**: `set_minimize_to_tray` mutates in-memory state, clones a snapshot, drops the lock, then persists. The lock is now held only for memory mutation, never blocking IPC during a disk write.
+- **Corrupt/missing settings no longer silent**: `load_settings_from_disk` logs descriptive `[settings]` warnings to stderr when the file is unreadable or fails JSON parsing (missing file still quietly falls back to defaults).
+- **Derive cleanup**: `AppSettings` drops unused `Debug`; `AppInfo` drops unused `Debug`/`Clone`/`Deserialize`, keeping only the derives each type actually needs.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Extracted `ToggleSwitch` component** (`src/components/ToggleSwitch.tsx`): The two 45-line duplicated ARIA switch blocks in `App.tsx` are now a single reusable, keyboard-accessible component (`role="switch"`, Space/Enter activation, visually-hidden checkbox). `App.tsx` shrank by ~55 lines and dropped its ad-hoc `handleKeyDown`.
+- **Version fallback fixed**: The System & About "Application Version" tile falls back to `__APP_VERSION__` (Vite-injected) instead of the stale hardcoded `"0.1.0"`.
+- **`UpdateChecker` timer hygiene**: The "up to date" timeout now nulls its ref after firing, and the `unlisten()` cleanup guards against unhandled promise rejections on unmount.
+
+#### 🛠️ Tooling & Scripts (`scripts`)
+- **Hard-fail semantics in the update pipeline**: `update-deps.ts` Steps 1, 2, and 4 now `process.exit(1)` when `bun add` / `bun update --latest` / `cargo update` fail (previously failures were logged and the pipeline silently continued).
+
+## [0.7.0] - 2026-08-01
+
+### Deep Cross-Platform Audit & Optimization — Round 4
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **macOS menu-bar-only mode**: `ActivationPolicy::Accessory` is now applied on macOS (`cfg(target_os = "macos")`), hiding the Dock icon so the app behaves as a pure menu-bar utility like other tray-first macOS apps. Windows/Linux behavior unchanged.
+- **Poison-safe mutex locking**: New `lock_guard()` helper recovers from `PoisonError` instead of panicking, applied to all four `Mutex` lock sites (settings × 2, is_quitting × 2).
+- **Disk-write errors now surface to the UI**: `save_settings_to_disk()` and the `set_minimize_to_tray` IPC command return `Result<(), String>` with descriptive messages. The frontend's existing optimistic-rollback logic now triggers on real disk failures instead of silently ignoring them.
+- **`&PathBuf` → `&Path`**: Settings load/save helpers now accept `&Path`, the idiomatic borrowed path type (fewer dependencies on the concrete container).
+- **Extracted `show_and_focus_window()` helper**: Removes the third copy of the show/unminimize/focus sequence between tray left-click, "Open" menu item, and "Check for Updates" menu item.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Version drift eliminated**: `vite.config.ts` now injects `__APP_VERSION__` (from `package.json`) via Vite `define`, replacing the hardcoded `0.6.0` in the `WEB_PREVIEW_APP_INFO` fallback. New `src/vite-env.d.ts` declares the constant. Vite's native-config warning resolved via JSON import attributes (`with { type: "json" }`).
+- **Complete ARIA tab wiring**: Navigation is now a proper `role="tablist"` with `role="tab"` buttons carrying `aria-controls`, and both panels are `role="tabpanel"` with `aria-labelledby` and stable `id`s.
+- **Live status announcements**: Footer status region is now `aria-live="polite"` so screen readers announce preference and update status changes.
+- **Update download progressbar**: The progress track now exposes `role="progressbar"` with `aria-valuemin/max/now`.
+- **Footer error feedback**: The footer `UpdateChecker` variant now displays update-check failures inline (`text-error` status label) instead of silently reverting to the idle state.
+- **Icon-only button a11y**: Release-notes toggle uses `aria-label` + `aria-expanded` instead of a `title` tooltip.
+
+#### 🎨 CSS (`src/index.css`)
+- Added `color-scheme: dark` to `:root`, forcing native dark scrollbars and form controls in all embedded webviews (WebView2, WKWebView, WebKitGTK).
+- Added `.update-status-label.text-error` for the new footer error display.
+
+#### ⚙️ Config, Tooling & Cross-Platform (`src-tauri`, `.github`, `scripts`)
+- **Repomix re-integrated as the architecture engine**: `scripts/generate-arch.ts` now drives the official Repomix `pack()` API (`loadFileConfig` + `mergeConfigs` + `searchFiles` + `generateTreeString`) to produce `ARCHITECTURE.md` — gitignore-aware file inventory, per-file size/lines/tokens/chars metrics, and a box-drawing directory tree, without raw code dumps (`output.files: false`). The `repomix` devDependency (`^1.17.0`) and `repomix.config.json` were restored. Script renamed `repomix:arch` → `arch`; all references updated (README, AGENTS.md, update-deps.ts).
+- **Missing `create-icons` script added**: `scripts/create-icons.ts` existed but was unreachable from `package.json`; now runnable via `bun run create-icons`.
+- **Linux tray prerequisites fixed in CI & release docs**: `libappindicator3-dev` → `libayatana-appindicator3-dev` (the library Tauri v2's tray actually links against) plus `libxdo-dev`, matching Tauri's official Linux dependency list.
+- **Resizable window with sane minimums**: Window is now `resizable: true` with `minWidth: 380` / `minHeight: 480`, so the preferences panel never overflows on small or high-DPI-scaled displays (Linux HiDPI, Windows scaling).
+- **Architecture map descriptions**: Icon assets now get real descriptions, `vite-env.d.ts` registered, and the generator's description registry fully aligned with the Repomix-driven pipeline.
+
+## [0.6.0] - 2026-08-01
+
+### Deep Cross-Platform Audit & Optimization — Round 3
+
+#### 🖼️ Cross-Platform Icon Generation (`scripts/create-icons.ts`)
+- **Valid macOS `.icns`**: The previous generator wrote a raw PNG with an `.icns` extension, which is not a valid Apple Icon Image and breaks macOS bundling. The script now emits a proper ICNS container with PNG-encoded chunks (`icp4`–`ic15`, base + retina variants) — no macOS-specific tooling required.
+- **Multi-resolution Windows `.ico`**: `icon.ico` now embeds 6 PNG-compressed entries (16/32/48/64/128/256) instead of a single 32×32 image.
+- **Correct HiDPI assets**: `128x128@2x.png` is now a true 256×256 image (was 128×128), and `icon.png` is 512×512.
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Removed fragile settings-dir string matching**: The old logic inspected the config path with `contains("com.minimalistic.app")` / `contains("Minimalistic App")` heuristics. `app_config_dir()` is already scoped to the app identifier on Windows (`%APPDATA%\com.minimalistic.app`), Linux (`~/.config/com.minimalistic.app`), and macOS (`~/Library/Application Support/com.minimalistic.app`) — the code now uses it directly, cross-platform safe with identical on-disk paths.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Real status auto-clear**: `updateStatus` in `App.tsx` now implements the auto-clear timeout its doc comment promised (4s, timer reset per message, cleared on unmount).
+- **Optimistic rollback**: Autostart and minimize-to-tray toggles revert their UI state if the native IPC/plugin call fails.
+- **Deduplicated update checks**: The footer `UpdateChecker` no longer auto-checks on mount or listens for tray events (`autoCheckOnMount={false}`, `listenForEvents={false}`) — the settings-panel card is the single source of update checks, eliminating duplicate startup network requests.
+- **Cross-platform wording**: Header badge changed from "Taskbar Tray Active" (Windows-specific) to "System Tray Active".
+
+#### 🎨 CSS (`src/index.css`)
+- Merged duplicated `.tab-btn` rules into a single block.
+- Release notes and inline code now allow text selection (`user-select: text`) — the global `user-select: none` previously blocked copying update notes.
+- Added thin AMOLED scrollbar styling for Chromium-based webviews.
+- Added `prefers-reduced-motion` support disabling decorative animations for accessibility.
+
+#### 🤖 CI/CD & Tooling (`.github` & `scripts`)
+- **Cross-platform CI matrix**: `.github/workflows/ci.yml` now validates TypeScript, Vite bundle, and `cargo check` on `ubuntu-22.04`, `macos-latest`, and `windows-latest` (Linux system deps gated to the Ubuntu runner).
+- **Consistent step labels**: `update-deps.ts` now labels all 7 pipeline steps as `Step N/7` (previously mixed `1/6`–`4/6` with `5/7`–`7/7`).
+- **Accurate architecture map**: `generate-arch.ts` ignores gitignored artifacts (`src-tauri/gen`, `tsconfig.tsbuildinfo`) and derives the repository folder name dynamically instead of hardcoding `minimalistic-app`.
+- **`typecheck` script**: Added `bun run typecheck` (`bun x tsc -b`) to `package.json` for one-command static validation.
+
 ## [0.5.0] - 2026-07-31
 
 ### Persistent Settings, Modular Tab Navigation & Production CI/CD

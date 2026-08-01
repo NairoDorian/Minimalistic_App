@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, type KeyboardEvent } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { invoke } from "@tauri-apps/api/core";
 import { Settings, Power, Minimize2, Shield, AppWindow, Info, Cpu, HardDrive, Terminal } from "lucide-react";
 import { UpdateChecker } from "./components/UpdateChecker";
+import { ToggleSwitch } from "./components/ToggleSwitch";
 import { isTauri } from "./lib/tauri";
 
 interface AppInfo {
@@ -14,6 +15,16 @@ interface AppInfo {
 }
 
 type TabType = "preferences" | "about";
+
+// Fallback metadata used only when running in a plain browser (non-Tauri preview).
+// Mirrors the versions declared in tauri.conf.json / Cargo.toml.
+const WEB_PREVIEW_APP_INFO: AppInfo = {
+  name: "Minimalistic App",
+  version: __APP_VERSION__, // injected by Vite `define` (see vite.config.ts)
+  tauri_version: "2.11 (Web Preview)",
+  os: "Web Browser",
+  arch: "x86_64",
+};
 
 /**
  * Main Application GUI Component (React 19).
@@ -31,16 +42,20 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string>("Ready");
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
+  // Timeout handle for the auto-clearing footer status message.
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear any pending status auto-clear timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    };
+  }, []);
+
   // Load initial settings and platform metadata asynchronously
   useEffect(() => {
     if (!isTauri) {
-      setAppInfo({
-        name: "Minimalistic App",
-        version: "0.1.0",
-        tauri_version: "2.11 (Web Preview)",
-        os: "Web Browser",
-        arch: "x86_64",
-      });
+      setAppInfo(WEB_PREVIEW_APP_INFO);
       return;
     }
 
@@ -65,14 +80,18 @@ export default function App() {
   }, []);
 
   /**
-   * Helper to set status message with auto-clear timeout.
+   * Helper to set the footer status message with an auto-clear timeout.
+   * Resets the countdown on every call so rapid updates don't flicker early.
    */
   const updateStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    statusTimeoutRef.current = setTimeout(() => setStatusMessage("Ready"), 4000);
   }, []);
 
   /**
    * Toggles OS Startup setting via Tauri autostart plugin.
+   * Optimistic UI update is rolled back if the native plugin call fails.
    */
   const handleAutostartToggle = useCallback(
     async (newValue: boolean) => {
@@ -89,6 +108,7 @@ export default function App() {
           }
         } catch (error: unknown) {
           console.error("Failed to toggle autostart:", error);
+          setAutostart(!newValue);
           updateStatus("Error setting autostart");
         }
       } else {
@@ -100,6 +120,7 @@ export default function App() {
 
   /**
    * Toggles Minimize to System Tray setting via Rust IPC invoke command.
+   * Optimistic UI update is rolled back if the IPC call fails.
    */
   const handleMinimizeToTrayToggle = useCallback(
     async (newValue: boolean) => {
@@ -115,6 +136,7 @@ export default function App() {
           );
         } catch (error: unknown) {
           console.error("Failed to update minimize to tray preference:", error);
+          setMinimizeToTray(!newValue);
           updateStatus("Error saving tray preference");
         }
       } else {
@@ -123,20 +145,6 @@ export default function App() {
     },
     [updateStatus]
   );
-
-  /**
-   * Keyboard accessible switch toggle handler for Space / Enter keys.
-   */
-  const handleKeyDown = (
-    e: KeyboardEvent<HTMLLabelElement>,
-    currentValue: boolean,
-    toggleFn: (val: boolean) => void
-  ) => {
-    if (e.key === " " || e.key === "Enter") {
-      e.preventDefault();
-      toggleFn(!currentValue);
-    }
-  };
 
   return (
     <div className="app-container">
@@ -150,19 +158,21 @@ export default function App() {
         </div>
         <div className="tray-status-badge">
           <span className="status-dot"></span>
-          <span>Taskbar Tray Active</span>
+          <span>System Tray Active</span>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="app-content">
         {/* Modular Tab Navigation Header */}
-        <nav className="navigation-tab" aria-label="Main Navigation">
+        <nav className="navigation-tab" role="tablist" aria-label="Main Navigation">
           <button
             type="button"
+            id="tab-preferences"
             className={`tab-btn ${activeTab === "preferences" ? "active" : ""}`}
             onClick={() => setActiveTab("preferences")}
             aria-selected={activeTab === "preferences"}
+            aria-controls="panel-preferences"
             role="tab"
           >
             <Settings size={14} />
@@ -170,9 +180,11 @@ export default function App() {
           </button>
           <button
             type="button"
+            id="tab-about"
             className={`tab-btn ${activeTab === "about" ? "active" : ""}`}
             onClick={() => setActiveTab("about")}
             aria-selected={activeTab === "about"}
+            aria-controls="panel-about"
             role="tab"
           >
             <Info size={14} />
@@ -182,7 +194,7 @@ export default function App() {
 
         {/* Tab View 1: Preferences */}
         {activeTab === "preferences" && (
-          <div className="settings-card">
+          <div className="settings-card" id="panel-preferences" role="tabpanel" aria-labelledby="tab-preferences">
             <div className="settings-card-header">
               <h2 className="settings-card-title">Application Settings</h2>
               <p className="settings-card-desc">
@@ -191,66 +203,24 @@ export default function App() {
             </div>
 
             {/* Toggle 1: Start at OS launch */}
-            <div className="setting-item">
-              <div className="setting-info">
-                <div className="setting-icon">
-                  <Power size={18} />
-                </div>
-                <div className="setting-text">
-                  <span className="setting-title">Start at OS launch</span>
-                  <span className="setting-subtitle">
-                    Automatically start this app silently in the system tray when your computer starts.
-                  </span>
-                </div>
-              </div>
-              <label
-                className="switch"
-                tabIndex={0}
-                role="switch"
-                aria-checked={autostart}
-                aria-label="Start at OS launch"
-                onKeyDown={(e) => handleKeyDown(e, autostart, handleAutostartToggle)}
-              >
-                <input
-                  type="checkbox"
-                  checked={autostart}
-                  onChange={(e) => handleAutostartToggle(e.target.checked)}
-                  tabIndex={-1}
-                />
-                <span className="slider"></span>
-              </label>
-            </div>
+            <ToggleSwitch
+              icon={<Power size={18} />}
+              title="Start at OS launch"
+              subtitle="Automatically start this app silently in the system tray when your computer starts."
+              checked={autostart}
+              ariaLabel="Start at OS launch"
+              onToggle={handleAutostartToggle}
+            />
 
             {/* Toggle 2: Minimize to taskbar on close */}
-            <div className="setting-item">
-              <div className="setting-info">
-                <div className="setting-icon">
-                  <Minimize2 size={18} />
-                </div>
-                <div className="setting-text">
-                  <span className="setting-title">Minimize to taskbar on close</span>
-                  <span className="setting-subtitle">
-                    Closing the window keeps the app running in the taskbar tray. State persists on disk.
-                  </span>
-                </div>
-              </div>
-              <label
-                className="switch"
-                tabIndex={0}
-                role="switch"
-                aria-checked={minimizeToTray}
-                aria-label="Minimize to taskbar on close"
-                onKeyDown={(e) => handleKeyDown(e, minimizeToTray, handleMinimizeToTrayToggle)}
-              >
-                <input
-                  type="checkbox"
-                  checked={minimizeToTray}
-                  onChange={(e) => handleMinimizeToTrayToggle(e.target.checked)}
-                  tabIndex={-1}
-                />
-                <span className="slider"></span>
-              </label>
-            </div>
+            <ToggleSwitch
+              icon={<Minimize2 size={18} />}
+              title="Minimize to taskbar on close"
+              subtitle="Closing the window keeps the app running in the taskbar tray. State persists on disk."
+              checked={minimizeToTray}
+              ariaLabel="Minimize to taskbar on close"
+              onToggle={handleMinimizeToTrayToggle}
+            />
 
             {/* Section 3: Auto-Update Checker */}
             <UpdateChecker onStatusChange={updateStatus} variant="card" />
@@ -259,7 +229,7 @@ export default function App() {
 
         {/* Tab View 2: System Info & About */}
         {activeTab === "about" && (
-          <div className="settings-card">
+          <div className="settings-card" id="panel-about" role="tabpanel" aria-labelledby="tab-about">
             <div className="settings-card-header">
               <h2 className="settings-card-title">System & Architecture Metadata</h2>
               <p className="settings-card-desc">
@@ -273,7 +243,7 @@ export default function App() {
                   <AppWindow size={16} color="var(--accent-cyan)" />
                   <span className="tile-title">Application Version</span>
                 </div>
-                <span className="tile-value">v{appInfo?.version || "0.1.0"}</span>
+                <span className="tile-value">v{appInfo?.version || __APP_VERSION__}</span>
               </div>
 
               <div className="info-tile">
@@ -318,11 +288,11 @@ export default function App() {
 
       {/* Status Footer */}
       <footer className="app-footer">
-        <div className="footer-status">
+        <div className="footer-status" aria-live="polite">
           <Shield size={12} color="var(--accent-cyan)" />
           <span>Status: {statusMessage}</span>
         </div>
-        <UpdateChecker variant="footer" />
+        <UpdateChecker variant="footer" autoCheckOnMount={false} listenForEvents={false} />
       </footer>
     </div>
   );

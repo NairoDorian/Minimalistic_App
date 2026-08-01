@@ -54,10 +54,10 @@ To purge `src-tauri/target/` build directories completely:
 bun run clean
 ```
 
-### Step 5: Architecture Maintenance (Repomix)
+### Step 5: Architecture Maintenance
 Whenever files are added, modified, or removed, run the architecture map generator:
 ```bash
-bun run repomix:arch
+bun run arch
 ```
 - Ensures [`ARCHITECTURE.md`](ARCHITECTURE.md) contains the up-to-date directory tree and file inventory table without code dumps.
 
@@ -77,6 +77,7 @@ bun run build
    - Never generate or commit `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
 
 2. **System Tray & Window Lifecycle Patterns**:
+   - **Single-Instance Guard**: `tauri-plugin-single-instance` is registered first in the builder; launching the app a second time focuses the existing window instead of spawning a duplicate tray icon.
    - **Graceful Win32 Teardown**: Set `is_quitting = true` in `AppState` and call `window.close()` on the main window. This allows WebView2 to unregister window classes (`Chrome_WidgetWin_0`) cleanly through the Win32 message loop without throwing log errors.
    - **IPC State Syncing**: Use `get_minimize_to_tray` and `set_minimize_to_tray` IPC commands for preferences (persisted on disk to `$APP_DATA_DIR/<AppName>/settings.json`), and `@tauri-apps/plugin-autostart` for OS launch settings.
 

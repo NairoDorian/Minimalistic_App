@@ -1,4 +1,6 @@
 :root {
+  /* Use native dark rendering for scrollbars and form controls across all webviews. */
+  color-scheme: dark;
   --bg-amoled: #000000;
   --card-bg: rgba(20, 20, 22, 0.65);
   --card-border: rgba(255, 255, 255, 0.08);
@@ -146,6 +148,7 @@ body, html {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -153,6 +156,11 @@ body, html {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-main);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.tab-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
 }
 
 /* Settings Card */
@@ -475,6 +483,10 @@ input:checked + .slider:before {
   color: var(--accent-cyan);
 }
 
+.update-status-label.text-error {
+  color: #ef4444;
+}
+
 /* Animations */
 .spin-icon {
   animation: spin 1.5s linear infinite;
@@ -518,16 +530,6 @@ input:checked + .slider:before {
   outline: 2px solid var(--accent-cyan);
   outline-offset: 4px;
   border-radius: var(--radius-full);
-}
-
-/* Interactive Tab Button Styling */
-.tab-btn {
-  cursor: pointer;
-}
-
-.tab-btn:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-main);
 }
 
 /* System Information Grid */
@@ -631,6 +633,40 @@ input:checked + .slider:before {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.4;
+  /* Release notes and inline code are informational — allow text selection. */
+  user-select: text;
+  cursor: text;
+}
+
+/* Thin AMOLED scrollbars for WebView2 / Chromium-based webviews (Windows, Linux). */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Accessibility: honor OS-level "reduce motion" preference by disabling
+   decorative animations (status pulse, spinner, bounce, tab transitions). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 
