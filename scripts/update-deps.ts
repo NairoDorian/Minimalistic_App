@@ -31,6 +31,12 @@ import path from 'node:path';
  *                  lockfile refreshes, no build steps). Safe to run any time.
  *   --help         Show this usage summary.
  *
+ * Prerelease clobber guard (step 4b): `bun update --latest` resolves the
+ * `latest` dist-tag and rewrites package.json specs, silently downgrading
+ * exact prerelease pins (e.g. `react-dom 19.3.0-canary-* -> 19.2.8`) and
+ * stripping range operators. After the transitive refresh, prerelease mode
+ * re-runs `bun add <pkg>@<target>` to restore the exact targets.
+ *
  * Compatibility guarantee: every proposed upgrade must survive the validation
  * steps (tsc -b → vite build → cargo check) — steps 1-4 hard-fail (exit 1) on
  * any resolution error, so an incompatible "latest" can never be force-applied.
@@ -287,6 +293,9 @@ function printDryRunReport(allStatuses: DependencyStatus[]): void {
   console.log("   1-2. bun add <pkg>@<target>        (runtime + dev deps)");
   console.log("   3.   Cargo.toml spec rewrite to ^<target>");
   console.log("   4.   bun update --latest + cargo update   (transitive sub-deps)");
+  if (PRERELEASE_MODE) {
+    console.log("   4b.  bun add <pkg>@<target> again   (re-pin after --latest clobbers exact pins)");
+  }
   console.log("   5.   bun x tsc -b                   (type validation)");
   console.log("   6.   bun run vite:build             (frontend build)");
   console.log("   7.   cargo check                    (backend compile)");
@@ -491,6 +500,32 @@ async function updateEverything() {
   // --- Snapshot Sub-Dependency States AFTER Lockfile Refresh ---
   const afterCargoLock = parseCargoLock(cargoLockPath);
   const afterBunLock = parseBunInstalledVersions();
+
+  // --- Step 4b: Re-pin Exact Prerelease Targets (Clobber Guard) ---
+  // `bun update --latest` resolves the `latest` dist-tag and REWRITES package.json
+  // specs (e.g. `react-dom 19.3.0-canary-d5736f09-20260507 -> 19.2.8`), silently
+  // downgrading exact prerelease pins and stripping range operators. Stable mode
+  // is unaffected (`@latest` pins survive unchanged), so this re-pin only runs in
+  // prerelease mode when any direct NPM dependency was upgraded.
+  if (PRERELEASE_MODE && (outdatedRuntime.length > 0 || outdatedDev.length > 0)) {
+    if (outdatedRuntime.length > 0) {
+      const pins = outdatedRuntime.map(s => `${s.name}@${s.latestVersion}`);
+      const { success: repinRuntimeOk } = runCmd("bun", ["add", ...pins]);
+      if (!repinRuntimeOk) {
+        console.error("❌ Error: prerelease runtime re-pin failed after bun update --latest!");
+        process.exit(1);
+      }
+    }
+    if (outdatedDev.length > 0) {
+      const pins = outdatedDev.map(s => `${s.name}@${s.latestVersion}`);
+      const { success: repinDevOk } = runCmd("bun", ["add", "-d", ...pins]);
+      if (!repinDevOk) {
+        console.error("❌ Error: prerelease dev re-pin failed after bun update --latest!");
+        process.exit(1);
+      }
+    }
+    console.log("✅ Step 4b/7: Re-pinned exact prerelease targets (bun update --latest clobber guard)\n");
+  }
 
   const subDepChanges: SubDepDiff[] = [];
 

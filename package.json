@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "bun run tauri dev",
@@ -22,8 +22,8 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "lucide-react": "^1.28.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "19.3.0-canary-d5736f09-20260507",
+    "react-dom": "19.3.0-canary-d5736f09-20260507"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
@@ -32,7 +32,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "repomix": "^1.17.0",
-    "typescript": "^7.0.2",
+    "typescript": "7.1.0-dev.20260801.1",
     "vite": "^8.2.0"
   }
 }

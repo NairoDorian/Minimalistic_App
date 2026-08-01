@@ -65,7 +65,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **32 files · 178.0 KB · 48,089 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **32 files · 180.4 KB · 48,783 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -73,19 +73,19 @@ Repomix metrics: **32 files · 178.0 KB · 48,089 tokens** (text files; binary a
 | `.gitignore` | 295 B | 23 | 79 | 294 | Git ignore configuration excluding build artifacts, node_modules, and OS metadata. |
 | `AGENTS.md` | 15.2 KB | 245 | 4097 | 15464 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 10.2 KB | 238 | 2611 | 10394 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
-| `CHANGELOG.md` | 34.2 KB | 324 | 8854 | 34741 | Version history tracking releases and features starting with v0.1.0. |
+| `CHANGELOG.md` | 35.5 KB | 337 | 9233 | 36073 | Version history tracking releases and features starting with v0.1.0. |
 | `index.html` | 858 B | 17 | 196 | 668 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
-| `package.json` | 1.1 KB | 38 | 395 | 1101 | Project manifest containing Bun scripts (dev, build, typecheck, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
+| `package.json` | 1.1 KB | 38 | 424 | 1164 | Project manifest containing Bun scripts (dev, build, typecheck, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
 | `README.md` | 21.9 KB | 363 | 5831 | 21951 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 602 B | 26 | 163 | 600 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
 | `scripts/before-commit.ts` | 10.1 KB | 205 | 2109 | 8007 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.7 KB | 116 | 1531 | 4619 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |
 | `scripts/generate-arch.ts` | 12.4 KB | 177 | 2929 | 11482 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
-| `scripts/update-deps.ts` | 25.2 KB | 457 | 5458 | 20956 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
-| `scripts/version.ts` | 1.2 KB | 1 | 12 | 35 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
+| `scripts/update-deps.ts` | 27.0 KB | 479 | 5744 | 21973 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
+| `scripts/version.ts` | 1.2 KB | 1 | 12 | 36 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
 | `src-tauri/capabilities/default.json` | 377 B | 15 | 104 | 376 | Tauri v2 capability definitions granting autostart, updater, process, and tray permissions. |
-| `src-tauri/Cargo.toml` | 721 B | 23 | 216 | 720 | Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, serde, and serde_json. |
+| `src-tauri/Cargo.toml` | 722 B | 23 | 216 | 721 | Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, serde, and serde_json. |
 | `src-tauri/icons/128x128.png` | 523 B | — | — | — | Application icon at 128x128 pixels. |
 | `src-tauri/icons/128x128@2x.png` | 1.6 KB | — | — | — | HiDPI application icon at 256x256 pixels (128x128 @2x). |
 | `src-tauri/icons/32x32.png` | 108 B | — | — | — | Application tray/window icon at 32x32 pixels. |
@@ -94,7 +94,7 @@ Repomix metrics: **32 files · 178.0 KB · 48,089 tokens** (text files; binary a
 | `src-tauri/icons/icon.png` | 5.7 KB | — | — | — | 512x512 master application icon. |
 | `src-tauri/src/lib.rs` | 13.0 KB | 233 | 1939 | 8891 | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept. |
 | `src-tauri/src/main.rs` | 171 B | 4 | 28 | 109 | Main Rust entry point launching the lib run loop without extra Windows console. |
-| `src-tauri/tauri.conf.json` | 1.4 KB | 50 | 454 | 1447 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
+| `src-tauri/tauri.conf.json` | 1.4 KB | 50 | 454 | 1448 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
 | `src/App.tsx` | 6.2 KB | 127 | 1126 | 4614 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
 | `src/components/AboutTab.tsx` | 3.8 KB | 76 | 718 | 2862 | Presentational System & About tab panel; exports the AppInfo interface and WEB_PREVIEW_APP_INFO fallback. |
 | `src/components/PreferencesTab.tsx` | 4.8 KB | 110 | 905 | 3816 | Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, and the embedded update checker card. |

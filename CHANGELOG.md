@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.10.0] - 2026-08-01
+
+### Prerelease Channels & Stack Adoption — Canary React + Dev TypeScript
+
+#### ⚛️ Stack (`package.json`)
+- **`react` / `react-dom` → `19.3.0-canary-d5736f09-20260507`**: Frontend moved to the React 19.3 canary channel (approved deliberately — canaries are unstable by design). Pinned to the exact build (never a floating tag) so `bun install` is deterministic.
+- **`typescript` → `7.1.0-dev.20260801.1`**: TypeScript compiler moved to the 7.1 dev/nightly channel, resolved via the `next` dist-tag with the SemVer guard.
+- Full pipeline validation passed on the new stack: `tsc -b` ✅, Vite production build ✅, `cargo check` ✅.
+
+#### 🛠️ Tooling (`scripts/update-deps.ts`)
+- **Prerelease clobber guard (step 4b)**: Found and fixed a real bug during the first real `--prerelease` run — `bun update --latest` resolves the `latest` dist-tag and **rewrites package.json specs**, silently downgrading exact prerelease pins (`react-dom 19.3.0-canary-d5736f09-20260507 -> 19.2.8`) while stripping range operators. The pipeline now re-runs `bun add <pkg>@<target>` after the transitive refresh whenever prerelease mode upgraded a direct NPM dependency, and hard-fails if the re-pin fails. Stable mode is unaffected (`@latest` pins survive unchanged).
+- Dry-run preview and `--help` now document the 4b re-pin step.
+
 ## [0.9.1] - 2026-08-01
 
 ### Deep Audit Round 8.1 — update-deps Pre-Release & Dry-Run Modes
