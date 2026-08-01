@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.10.1",
   "type": "module",
   "scripts": {
     "dev": "bun run tauri dev",
@@ -22,8 +22,8 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "lucide-react": "^1.28.0",
-    "react": "19.3.0-canary-d5736f09-20260507",
-    "react-dom": "19.3.0-canary-d5736f09-20260507"
+    "react": "19.3.0-canary-cbb046ab-20260731",
+    "react-dom": "19.3.0-canary-cbb046ab-20260731"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",

@@ -59,7 +59,7 @@ bun run update-deps
 
 | Flag | Effect |
 | :--- | :--- |
-| `--prerelease` | Prefer beta/alpha/RC versions for **direct** dependencies (NPM dist-tags `next`/`beta`/`rc`/`alpha`/`canary`, crates.io `newest_version`) — only targets **strictly newer** than the installed version; falls back to stable. Transitive deps still resolve via `bun update --latest` / `cargo update`. |
+| `--prerelease` | Prefer beta/alpha/RC versions for **direct** dependencies (NPM dist-tags `next`/`beta`/`rc`/`alpha`/`canary`/`experimental`/`insiders`/`dev`, crates.io `newest_version`) — **every** prerelease tag is evaluated and the best **strictly-newer** candidate wins (highest SemVer core, then newest publish time); falls back to stable. Transitive deps still resolve via `bun update --latest` / `cargo update`. |
 | `--dry-run` | Query registries and print a "would upgrade" report **without writing anything** — no `bun add`, no Cargo.toml edits, no lockfile refreshes, no builds. Safe to run any time. |
 | `--help` | Print usage summary. |
 

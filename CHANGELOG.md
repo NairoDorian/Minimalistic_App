@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.10.1] - 2026-08-01
+
+### Publisher-Agnostic Prerelease Selection & Freshest-Canary Refresh
+
+#### ⚛️ Stack (`package.json`)
+- **`react` / `react-dom` → `19.3.0-canary-cbb046ab-20260731`**: refreshed to the freshest published canary build (2026-07-31), replacing the 2026-05-07 build that the previous tag-order heuristic had selected. Exact-pinned and fully validated (tsc → Vite build → cargo check).
+
+#### 🛠️ Tooling (`scripts/update-deps.ts`)
+- **Publisher-agnostic prerelease selection**: `--prerelease` no longer stops at the first qualifying dist-tag in a fixed order. EVERY tag is now evaluated and the best **strictly-newer** candidate wins. Ranking: highest SemVer core first; for equal cores, the **newest publish date** (packument `time` field) — this is what un-stuck react's `canary` tag (published 07-31) from the older `next` build (05-07) that sorts lexically *higher*. A lexical SemVer comparison is only the last-resort tiebreak.
+- **Tag pool widened**: `experimental`, `insiders`, and `dev` join `next`/`beta`/`rc`/`alpha`/`canary` as probed keywords, covering publisher-specific channels (react's `experimental`, typescript's `dev`/`insiders`). Stale pointers (react `experimental` → `0.0.0-experimental-*`, typescript `dev` → `3.9.4`, `insiders` → `4.6.2`) are still rejected by the core-version gate.
+- **Publish-date-aware upgrade gate**: a same-core build published later than the installed build now counts as a genuine upgrade (previously rejected when its build hash sorted lexically lower), and the `latest`-tag fallback is only returned when it is itself strictly newer — `null` means "nothing newer exists", eliminating the downgrade-to-stable proposals the old string-inequality check produced.
+- **Step 4b clobber guard hardened**: the re-pin pass now restores **every** prerelease pin in the pre-refresh snapshot (spec-based diff vs. `bun update --latest`'s rewrite), not just the deps the current run targeted. This fixed a verification-caught regression where an already-pinned `typescript 7.1.0-dev.*` was silently downgraded to `7.0.2` — and the pipeline then validated against the wrong compiler.
+
+#### 📖 Documentation
+- `README.md`: `--prerelease` flag description updated with the full tag list and the new selection rules.
+
 ## [0.10.0] - 2026-08-01
 
 ### Prerelease Channels & Stack Adoption — Canary React + Dev TypeScript

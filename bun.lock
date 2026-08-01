@@ -10,8 +10,8 @@
         "@tauri-apps/plugin-process": "^2.3.1",
         "@tauri-apps/plugin-updater": "^2.10.1",
         "lucide-react": "^1.28.0",
-        "react": "19.3.0-canary-d5736f09-20260507",
-        "react-dom": "19.3.0-canary-d5736f09-20260507",
+        "react": "19.3.0-canary-cbb046ab-20260731",
+        "react-dom": "19.3.0-canary-cbb046ab-20260731",
       },
       "devDependencies": {
         "@tauri-apps/cli": "^2.11.4",
@@ -418,9 +418,9 @@
 
     "raw-body": ["raw-body@3.0.2", "", { "dependencies": { "bytes": "~3.1.2", "http-errors": "~2.0.1", "iconv-lite": "~0.7.0", "unpipe": "~1.0.0" } }, "sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA=="],
 
-    "react": ["react@19.3.0-canary-d5736f09-20260507", "", {}, "sha512-EL3w0mHylqEtiySCjcj/nPOkK1j6KvKsaFkeavTqR6hbd6bQi7gyCcTSHXQ2XpTjv8hfKWFArSVF6he1sgQcEQ=="],
+    "react": ["react@19.3.0-canary-cbb046ab-20260731", "", {}, "sha512-BPBSnLktoolb4Wgnxcndg2ECQjbCppWC8i1Stkw6ywgp0TdZGRq1DtLvfH3CubNGx2UF0ENskjTP0tqeVzeBYg=="],
 
-    "react-dom": ["react-dom@19.3.0-canary-d5736f09-20260507", "", { "dependencies": { "scheduler": "0.28.0-canary-d5736f09-20260507" }, "peerDependencies": { "react": "19.3.0-canary-d5736f09-20260507" } }, "sha512-PrjUaYOYc1dX65Td8StJSNJ3TFTeO2KBpAdXQJiOmW5kxDbKK+lvkJmSK/U+f7LcNnJxQKwHzKVf8WdJVjJohg=="],
+    "react-dom": ["react-dom@19.3.0-canary-cbb046ab-20260731", "", { "dependencies": { "scheduler": "0.28.0-canary-cbb046ab-20260731" }, "peerDependencies": { "react": "19.3.0-canary-cbb046ab-20260731" } }, "sha512-MXhUd1hp6JM8Zn2Nz+dTxQyeygE7X9OKH2s5hi77BoMR/jSd5JX7tEYnjEly5L/Jb4ulUimeDbRQWAh+0gE7tA=="],
 
     "readdirp": ["readdirp@5.0.0", "", {}, "sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ=="],
 
@@ -438,7 +438,7 @@
 
     "safer-buffer": ["safer-buffer@2.1.2", "", {}, "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="],
 
-    "scheduler": ["scheduler@0.28.0-canary-d5736f09-20260507", "", {}, "sha512-HkpDsMMSty/+FrYjvNnBZRwfU5P+LhZs8xRaWKVwTnB0rffXMg+BOntOebDmvlwI8hhB6D8ONBGXeOlWTzwVdA=="],
+    "scheduler": ["scheduler@0.28.0-canary-cbb046ab-20260731", "", {}, "sha512-zcVbnThE7YQMWlijGcGjADuIMh+H+ksNrrXnk0MvUwjze2lzIV6fX7LYbO63sRi5w2of7K1QM7XDAaM1ltHWWQ=="],
 
     "send": ["send@1.2.1", "", { "dependencies": { "debug": "^4.4.3", "encodeurl": "^2.0.0", "escape-html": "^1.0.3", "etag": "^1.8.1", "fresh": "^2.0.0", "http-errors": "^2.0.1", "mime-types": "^3.0.2", "ms": "^2.1.3", "on-finished": "^2.4.1", "range-parser": "^1.2.1", "statuses": "^2.0.2" } }, "sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ=="],
 

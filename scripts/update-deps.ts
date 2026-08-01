@@ -20,12 +20,13 @@ import path from 'node:path';
  *                  crates.io `max_version`; nothing is ever force-installed
  *                  beyond what bun/cargo resolve as compatible).
  *   --prerelease   Prefer pre-release versions for DIRECT dependencies:
- *                  NPM dist-tags tried in order (`next`, `beta`, `rc`, `alpha`,
- *                  `canary`) with fallback to `latest`; crates.io uses
- *                  `newest_version` (which may include prereleases). Transitive
- *                  deps still resolve via `bun update --latest` / `cargo update`
- *                  (bun/cargo pull in prereleases only when a direct dep
- *                  requires them).
+ *                  every NPM prerelease dist-tag (`next`, `beta`, `rc`, `alpha`,
+ *                  `canary`, `experimental`, `insiders`, `dev`) is evaluated and
+ *                  the best strictly-newer candidate wins (highest SemVer core,
+ *                  then newest publish time); crates.io uses `newest_version`
+ *                  (which may include prereleases). Transitive deps still
+ *                  resolve via `bun update --latest` / `cargo update` (bun/cargo
+ *                  pull in prereleases only when a direct dep requires them).
  *   --dry-run      Query registries and print a "would upgrade" report WITHOUT
  *                  writing anything (no bun add, no Cargo.toml edits, no
  *                  lockfile refreshes, no build steps). Safe to run any time.
@@ -35,7 +36,8 @@ import path from 'node:path';
  * `latest` dist-tag and rewrites package.json specs, silently downgrading
  * exact prerelease pins (e.g. `react-dom 19.3.0-canary-* -> 19.2.8`) and
  * stripping range operators. After the transitive refresh, prerelease mode
- * re-runs `bun add <pkg>@<target>` to restore the exact targets.
+ * re-runs `bun add <pkg>@<spec>` to restore EVERY prerelease pin in the
+ * snapshot — whether or not this run targeted it.
  *
  * Compatibility guarantee: every proposed upgrade must survive the validation
  * steps (tsc -b → vite build → cargo check) — steps 1-4 hard-fail (exit 1) on
@@ -48,8 +50,8 @@ const PRERELEASE_MODE = args.includes('--prerelease');
 const DRY_RUN = args.includes('--dry-run');
 const SHOW_HELP = args.includes('--help') || args.includes('-h');
 
-/** NPM dist-tags probed in order when --prerelease is active (first existing wins). */
-const PRERELEASE_TAGS: readonly string[] = ['next', 'beta', 'rc', 'alpha', 'canary'];
+/** NPM dist-tags probed when --prerelease is active — every tag is evaluated, the best strictly-newer candidate wins. */
+const PRERELEASE_TAGS: readonly string[] = ['next', 'beta', 'rc', 'alpha', 'canary', 'experimental', 'insiders', 'dev'];
 
 if (SHOW_HELP) {
   console.log(`Usage:
@@ -134,6 +136,22 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Compares only the numeric X.Y.Z core of two versions (ignores prerelease
+ * identifiers): returns 1 when `a`'s core is newer, -1 when older, 0 when equal.
+ * Used to rank prerelease candidates by release line before deciding between
+ * different builds of the same line — for equal cores, lexical build-hash
+ * comparison is meaningless, so publish time decides instead.
+ */
+function compareCores(a: string, b: string): number {
+  const A = a.split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+  const B = b.split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1;
+  }
+  return 0;
+}
+
 function cleanVersion(v: string): string {
   if (typeof v !== 'string') return '';
   return v.replace(/^[\^~=v]/, '').trim();
@@ -141,10 +159,18 @@ function cleanVersion(v: string): string {
 
 /**
  * Resolves the target NPM version.
- * Stable mode: the `latest` dist-tag (cheap `/latest` endpoint).
- * Prerelease mode: full packument, first existing prerelease tag that is
- * STRICTLY NEWER than `current` wins (rejects stale tags pointing at older
- * lines), falling back to `latest` when no newer prerelease exists.
+ * Stable mode: the `latest` dist-tag (cheap `/latest` endpoint), returned only
+ * when it is STRICTLY NEWER than `current` — never a downgrade of a
+ * deliberately pinned prerelease.
+ * Prerelease mode: full packument; EVERY probed prerelease dist-tag is
+ * evaluated and the best candidate that is strictly newer than `current` wins
+ * (publisher-agnostic — react ships fresher builds under `canary` than under
+ * `next`, typescript under `next`, etc.). Ranking: highest core version first;
+ * for equal cores, the chronologically newest publish wins (packument `time`
+ * field — lexical build-hash comparison is meaningless for canary builds); a
+ * lexical SemVer tiebreak decides otherwise. Stale tags pointing at older
+ * lines are rejected by the gate; `latest` is returned only when it is itself
+ * an upgrade, and `null` means "nothing newer exists".
  */
 async function fetchLatestNpmVersion(pkgName: string, current: string, prerelease = false): Promise<string | null> {
   try {
@@ -154,7 +180,7 @@ async function fetchLatestNpmVersion(pkgName: string, current: string, prereleas
       });
       if (response.ok) {
         const data = await response.json() as { version?: string };
-        return data.version || null;
+        return data.version && compareVersions(data.version, current) > 0 ? data.version : null;
       }
       return null;
     }
@@ -162,13 +188,47 @@ async function fetchLatestNpmVersion(pkgName: string, current: string, prereleas
       headers: { 'Accept': 'application/json' }
     });
     if (!response.ok) return null;
-    const data = await response.json() as { 'dist-tags'?: Record<string, string> };
+    const data = await response.json() as { 'dist-tags'?: Record<string, string>; time?: Record<string, string> };
     const tags = data['dist-tags'] ?? {};
+    const times = data.time ?? {};
+    const currentTime = times[current] ?? null;
+
+    // Upgrade gate: strictly newer by core version; for equal cores, the
+    // publish-time comparison decides (when both timestamps are known and
+    // differ) — a canary build published later IS an upgrade even when its
+    // build hash sorts lexically lower. Falls back to lexical SemVer.
+    const isStrictlyNewer = (v: string, publishedAt: string | null): boolean => {
+      const coreDiff = compareCores(v, current);
+      if (coreDiff !== 0) return coreDiff > 0;
+      if (publishedAt !== null && currentTime !== null && publishedAt !== currentTime) {
+        return new Date(publishedAt).getTime() > new Date(currentTime).getTime();
+      }
+      return compareVersions(v, current) > 0;
+    };
+
+    let best: { version: string; publishedAt: string | null } | null = null;
     for (const tag of PRERELEASE_TAGS) {
       const candidate = tags[tag];
-      if (candidate && compareVersions(candidate, current) > 0) return candidate;
+      const publishedAt = candidate ? (times[candidate] ?? null) : null;
+      if (!candidate || !isStrictlyNewer(candidate, publishedAt)) continue;
+      if (best === null) {
+        best = { version: candidate, publishedAt };
+        continue;
+      }
+      const coreDiff = compareCores(candidate, best.version);
+      let takeCandidate: boolean;
+      if (coreDiff !== 0) {
+        takeCandidate = coreDiff > 0;
+      } else if (publishedAt !== null && best.publishedAt !== null && publishedAt !== best.publishedAt) {
+        takeCandidate = new Date(publishedAt).getTime() > new Date(best.publishedAt).getTime();
+      } else {
+        takeCandidate = compareVersions(candidate, best.version) > 0;
+      }
+      if (takeCandidate) best = { version: candidate, publishedAt };
     }
-    return tags['latest'] ?? null;
+
+    const latestTag = tags['latest'] ?? null;
+    return best?.version ?? (latestTag && isStrictlyNewer(latestTag, times[latestTag] ?? null) ? latestTag : null);
   } catch { return null; }
 }
 
@@ -481,6 +541,16 @@ async function updateEverything() {
   }
   console.log("");
 
+  // --- Capture Direct Spec Snapshot AFTER steps 1-3 ---
+  // bun add (steps 1-2) may have rewritten specs for upgraded deps. This
+  // snapshot feeds the step 4b clobber guard, which restores EVERY prerelease
+  // pin that `bun update --latest` downgrades — including ones this run never
+  // targeted (e.g. an already-pinned `typescript 7.1.0-dev.*`).
+  const specSnapshot = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+
   // --- Step 4: Refreshing All Transitive Sub-Crates & Sub-Packages ---
   console.log("🔒 Step 4/7: Refreshing All Sub-Crates & Transitive Sub-Dependencies (bun update & cargo update)...");
   const bunUpdateResult = runCmd("bun", ["update", "--latest"]);
@@ -501,30 +571,45 @@ async function updateEverything() {
   const afterCargoLock = parseCargoLock(cargoLockPath);
   const afterBunLock = parseBunInstalledVersions();
 
-  // --- Step 4b: Re-pin Exact Prerelease Targets (Clobber Guard) ---
+  // --- Step 4b: Re-pin Prerelease Pins (Clobber Guard) ---
   // `bun update --latest` resolves the `latest` dist-tag and REWRITES package.json
   // specs (e.g. `react-dom 19.3.0-canary-d5736f09-20260507 -> 19.2.8`), silently
-  // downgrading exact prerelease pins and stripping range operators. Stable mode
-  // is unaffected (`@latest` pins survive unchanged), so this re-pin only runs in
-  // prerelease mode when any direct NPM dependency was upgraded.
-  if (PRERELEASE_MODE && (outdatedRuntime.length > 0 || outdatedDev.length > 0)) {
-    if (outdatedRuntime.length > 0) {
-      const pins = outdatedRuntime.map(s => `${s.name}@${s.latestVersion}`);
-      const { success: repinRuntimeOk } = runCmd("bun", ["add", ...pins]);
+  // downgrading ANY exact prerelease pin — including ones this run did not touch
+  // — and stripping range operators. Stable mode is unaffected (`@latest` pins
+  // survive unchanged), so this re-pin only runs in prerelease mode and restores
+  // every direct NPM dependency whose snapshot spec is a prerelease.
+  if (PRERELEASE_MODE) {
+    const pkgNow = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const repinRuntime: string[] = [];
+    const repinDev: string[] = [];
+    const specs = { ...(specSnapshot.dependencies ?? {}), ...(specSnapshot.devDependencies ?? {}) };
+    for (const [name, spec] of Object.entries(specs)) {
+      if (!isPrereleaseVersion(cleanVersion(spec))) continue;
+      const currentSpec = pkgNow.dependencies?.[name] ?? pkgNow.devDependencies?.[name];
+      if (currentSpec === spec) continue;
+      const isDev = (specSnapshot.devDependencies ?? {})[name] !== undefined;
+      (isDev ? repinDev : repinRuntime).push(`${name}@${spec}`);
+    }
+    if (repinRuntime.length > 0) {
+      const { success: repinRuntimeOk } = runCmd("bun", ["add", ...repinRuntime]);
       if (!repinRuntimeOk) {
         console.error("❌ Error: prerelease runtime re-pin failed after bun update --latest!");
         process.exit(1);
       }
     }
-    if (outdatedDev.length > 0) {
-      const pins = outdatedDev.map(s => `${s.name}@${s.latestVersion}`);
-      const { success: repinDevOk } = runCmd("bun", ["add", "-d", ...pins]);
+    if (repinDev.length > 0) {
+      const { success: repinDevOk } = runCmd("bun", ["add", "-d", ...repinDev]);
       if (!repinDevOk) {
         console.error("❌ Error: prerelease dev re-pin failed after bun update --latest!");
         process.exit(1);
       }
     }
-    console.log("✅ Step 4b/7: Re-pinned exact prerelease targets (bun update --latest clobber guard)\n");
+    if (repinRuntime.length > 0 || repinDev.length > 0) {
+      console.log("✅ Step 4b/7: Re-pinned exact prerelease targets (bun update --latest clobber guard)\n");
+    }
   }
 
   const subDepChanges: SubDepDiff[] = [];
