@@ -101,14 +101,19 @@ function isPrereleaseVersion(version: string): boolean {
 function compareVersions(a: string, b: string): number {
   const parse = (v: string): { core: number[]; pre: string | null } => {
     const [coreStr, pre] = v.split('-', 2);
-    const core = coreStr.split('.').map(n => parseInt(n, 10) || 0);
+    // `noUncheckedIndexedAccess` makes `coreStr` `string | undefined`; a
+    // version string always has a core part before any `-`, so the fallback
+    // to "0" is unreachable but satisfies the type checker.
+    const core = (coreStr ?? '0').split('.').map(n => parseInt(n, 10) || 0);
     while (core.length < 3) core.push(0);
     return { core, pre: pre ?? null };
   };
   const A = parse(a);
   const B = parse(b);
   for (let i = 0; i < 3; i++) {
-    if (A.core[i] !== B.core[i]) return A.core[i] > B.core[i] ? 1 : -1;
+    const aCore = A.core[i] ?? 0;
+    const bCore = B.core[i] ?? 0;
+    if (aCore !== bCore) return aCore > bCore ? 1 : -1;
   }
   if (A.pre === null && B.pre === null) return 0;
   if (A.pre === null) return 1;
@@ -144,10 +149,12 @@ function compareVersions(a: string, b: string): number {
  * comparison is meaningless, so publish time decides instead.
  */
 function compareCores(a: string, b: string): number {
-  const A = a.split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
-  const B = b.split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+  const A = (a.split('-')[0] ?? '0').split('.').map(n => parseInt(n, 10) || 0);
+  const B = (b.split('-')[0] ?? '0').split('.').map(n => parseInt(n, 10) || 0);
   for (let i = 0; i < 3; i++) {
-    if (A[i] !== B[i]) return A[i] > B[i] ? 1 : -1;
+    const aCore = A[i] ?? 0;
+    const bCore = B[i] ?? 0;
+    if (aCore !== bCore) return aCore > bCore ? 1 : -1;
   }
   return 0;
 }
@@ -264,7 +271,7 @@ function parseCargoLock(filePath: string): Record<string, string> {
   for (const block of blocks) {
     const nameMatch = block.match(/^\s*name\s*=\s*"([^"]+)"/m);
     const verMatch = block.match(/^\s*version\s*=\s*"([^"]+)"/m);
-    if (nameMatch && verMatch) {
+    if (nameMatch && verMatch && nameMatch[1] !== undefined && verMatch[1] !== undefined) {
       map[nameMatch[1]] = verMatch[1];
     }
   }
@@ -448,7 +455,7 @@ async function updateEverything() {
       const matchInline = trimmed.match(/^([a-zA-Z0-9_-]+)\s*=\s*\{[^}]*version\s*=\s*"([^"]+)"/);
       const matchSimple = trimmed.match(/^([a-zA-Z0-9_-]+)\s*=\s*"([^"]+)"/);
       const match = matchInline || matchSimple;
-      if (match) {
+      if (match && match[1] !== undefined && match[2] !== undefined) {
         cargoCratesToQuery.push({ name: match[1], ver: match[2], section: currentSection });
       }
     }

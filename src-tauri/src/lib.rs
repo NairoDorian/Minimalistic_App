@@ -10,7 +10,7 @@ use tauri::{
 };
 
 /// Persistent application preferences saved as JSON in the OS app configuration directory.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct AppSettings {
     /// Controls whether closing the main GUI window minimizes the app to the system tray
     /// instead of terminating the application process. Default is false.
@@ -118,9 +118,11 @@ fn set_minimize_to_tray(enabled: bool, state: State<'_, AppState>) -> Result<(),
     if lock_guard(&state.settings).minimize_to_tray == enabled {
         return Ok(());
     }
-    let new_settings = AppSettings {
-        minimize_to_tray: enabled,
-    };
+    // Clone the current settings, mutate the single field, then persist and
+    // commit. Cloning avoids reconstructing the struct from scratch and keeps
+    // the disk-first ordering (a failed write leaves memory and UI unchanged).
+    let mut new_settings = lock_guard(&state.settings).clone();
+    new_settings.minimize_to_tray = enabled;
     save_settings_to_disk(&state.settings_path, &new_settings)?;
     *lock_guard(&state.settings) = new_settings;
     Ok(())
@@ -151,12 +153,16 @@ fn show_and_focus_window(app: &AppHandle) {
     }
 }
 
-/// Shows and focuses the main window only when it is currently hidden.
-/// Used by the "Check for Updates..." tray item so a focused window is left
-/// undisturbed when triggering an update check from the tray.
+/// Shows and focuses the main window only when it is currently hidden or
+/// minimized. Used by the "Check for Updates..." tray item so a focused,
+/// visible window is left undisturbed when triggering an update check from
+/// the tray — but a minimized-but-visible window is still surfaced so the
+/// user can see the update result.
 fn show_window_if_hidden(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        if !window.is_visible().unwrap_or(false) {
+        let is_visible = window.is_visible().unwrap_or(false);
+        let is_minimized = window.is_minimized().unwrap_or(false);
+        if !is_visible || is_minimized {
             show_and_focus_window(app);
         }
     }
@@ -206,10 +212,15 @@ pub fn run() {
             // platform: %APPDATA%\com.minimalistic.app (Windows),
             // ~/.config/com.minimalistic.app (Linux), ~/Library/Application Support/
             // com.minimalistic.app (macOS). No extra subfolder juggling required.
-            let config_dir = app
-                .path()
-                .app_config_dir()
-                .unwrap_or_else(|_| PathBuf::from("."));
+            let config_dir = app.path().app_config_dir().unwrap_or_else(|err| {
+                // A missing config dir is a real misconfiguration — log it so the
+                // failure is visible, then fall back to the current directory so
+                // the app can still start (settings just won't persist across runs).
+                eprintln!(
+                    "[settings] Failed to resolve app config dir: {err} — falling back to current directory"
+                );
+                PathBuf::from(".")
+            });
 
             let settings_path = config_dir.join("settings.json");
             let initial_settings = load_settings_from_disk(&settings_path);

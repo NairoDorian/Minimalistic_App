@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.10.4] - 2026-08-03
+
+### Deep Audit Round 11 — Correctness, Type-Safety & Polish
+
+Full-pass audit of every source file with targeted bug fixes, stricter type checking, and cleanup.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Nullish fallback consistency**: `AboutTab`'s "Tauri Core Engine" tile now uses `??` instead of `||` for the `tauri_version` fallback — `||` would incorrectly fall back on an empty string; `??` only falls back for `null`/`undefined` (matching the `version` field's Round 10 fix).
+- **Stale error banner cleared on install**: `UpdateChecker.installUpdate` now clears `errorMessage` at the start, so a previous failed check's error banner doesn't linger during a new install.
+- **Re-fetched update surfaced in UI**: When `installUpdate` re-fetches an update (because `pendingUpdateRef` was null), it now sets `updateAvailable`, `latestVersion`, `releaseNotes`, etc. so the card/footer reflect the newly discovered version.
+- **Footer check button a11y**: The footer's icon-only "Check Updates" button now carries `aria-label="Check for updates"` for screen readers.
+- **Stricter TypeScript**: `tsconfig.json` and `tsconfig.scripts.json` now enable `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`; all 19 latent type errors this surfaced across the scripts were fixed.
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Minimized-window surfacing**: `show_window_if_hidden` now also unminimizes/focuses a minimized-but-visible window when "Check for Updates" is triggered from the tray.
+- **`AppSettings` derives `Clone`**: `set_minimize_to_tray` now clone-modifies the current settings instead of reconstructing the struct from scratch.
+- **Config-dir fallback logging**: `app_config_dir()` failure now logs a descriptive `[settings]` warning to stderr instead of silently falling back to the current directory.
+
+#### 🎨 CSS (`src/index.css`)
+- **Scoped `user-select`**: `user-select: none` moved from the global `*` selector to `.app-container` + interactive children, so informational content (About notes, tile values, release notes) remains selectable. Added `user-select: text` to `.tile-value` and `.notes-list`.
+
+#### 🛠️ Tooling & Scripts (`scripts`)
+- **`generate-arch.ts` Cargo.lock path fixed**: The description registry key was `"Cargo.lock"` but the actual path is `src-tauri/Cargo.lock` — the lockfile now gets its proper description in ARCHITECTURE.md.
+- **`package.json` redundant `dev` script removed**: Identical to `bun run tauri dev`.
+
+#### 📖 Documentation
+- `README.md`: `rtk` prefix rule clarified — sanctioned Bun scripts (`bun run ...`) run directly without the `rtk` wrapper (matches AGENTS.md).
+- `ARCHITECTURE.md`: Regenerated.
+
 ## [0.10.3] - 2026-08-03
 
 ### Deep Audit Round 10 — Correctness, Cleanup & Documentation

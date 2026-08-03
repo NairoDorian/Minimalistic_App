@@ -50,7 +50,7 @@ const fileDescriptions: Record<string, string> = {
   "scripts/update-deps.ts": "End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates.",
   "scripts/version.ts": "Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.",
   "scripts/before-commit.ts": "Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes.",
-  "Cargo.lock": "Rust dependency lockfile, committed to track exact crate versions for reproducible builds."
+  "src-tauri/Cargo.lock": "Rust dependency lockfile, committed to track exact crate versions for reproducible builds."
 };
 
 /** Human-readable byte size (e.g. `1.2 KB`). */
@@ -78,23 +78,29 @@ function toBoxDrawingTree(treeString: string): string {
   // isLast[i]: entry i has no following sibling at the same depth.
   const isLast = new Array<boolean>(entries.length).fill(true);
   for (let i = entries.length - 2; i >= 0; i--) {
-    const next = entries.slice(i + 1).find((e) => e.depth <= entries[i].depth);
-    if (next !== undefined && next.depth === entries[i].depth) isLast[i] = false;
+    const current = entries[i];
+    if (current === undefined) continue;
+    const next = entries.slice(i + 1).find((e) => e.depth <= current.depth);
+    if (next !== undefined && next.depth === current.depth) isLast[i] = false;
   }
 
   // Nearest ancestor entry at a given depth. Repomix emits the tree in DFS
   // preorder, so scanning backwards always hits the direct ancestor first.
   const findAncestor = (i: number, depth: number): number => {
     for (let j = i - 1; j >= 0; j--) {
-      if (entries[j].depth === depth) return j;
-      if (entries[j].depth < depth) break;
+      const entry = entries[j];
+      if (entry === undefined) continue;
+      if (entry.depth === depth) return j;
+      if (entry.depth < depth) break;
     }
     return -1;
   };
 
   const lines: string[] = [];
   for (let i = 0; i < entries.length; i++) {
-    const { depth, name } = entries[i];
+    const entry = entries[i];
+    if (entry === undefined) continue;
+    const { depth, name } = entry;
     const prefix: string[] = [];
     for (let d = 1; d <= depth; d++) {
       const anc = findAncestor(i, d - 1);

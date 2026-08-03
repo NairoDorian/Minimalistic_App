@@ -1,10 +1,9 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.10.3",
+  "version": "0.10.4",
   "type": "module",
   "scripts": {
-    "dev": "bun run tauri dev",
     "vite": "vite",
     "vite:build": "vite build",
     "build": "bun run tauri build",

@@ -66,7 +66,7 @@ export function AboutTab({ appInfo }: AboutTabProps) {
             <Cpu size={16} color="var(--accent-cyan)" />
             <span className="tile-title">Tauri Core Engine</span>
           </div>
-          <span className="tile-value">v{appInfo?.tauri_version || WEB_PREVIEW_APP_INFO.tauri_version}</span>
+          <span className="tile-value">v{appInfo?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version}</span>
         </div>
 
         <div className="info-tile">

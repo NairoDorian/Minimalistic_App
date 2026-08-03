@@ -19,7 +19,7 @@ Designed with a sleek **100% AMOLED Deep Black glassmorphic GUI (`#000000`)**, t
 > ```
 >
 > **3. Command Prefix Rule (Agent Operations)**:
-> All shell commands — especially `git` — must be prefixed with `rtk` (e.g. `rtk git status`, `rtk bun run typecheck`). RTK is always safe and is the sanctioned wrapper for every command in this repository.
+> All shell commands — especially `git` — must be prefixed with `rtk` (e.g. `rtk git status`). RTK is always safe and is the sanctioned wrapper for every command in this repository. Exception: sanctioned Bun scripts (`bun run ...`) run directly without the `rtk` wrapper — see `AGENTS.md`.
 
 ---
 

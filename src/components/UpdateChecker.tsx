@@ -141,6 +141,9 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     isInstallingRef.current = true;
     setIsInstalling(true);
     setDownloadProgress(0);
+    // Clear any stale error banner from a previous failed check so the install
+    // progress is the only visible state while the download is in flight.
+    setErrorMessage(null);
     onStatusChange?.("Starting update download...");
 
     try {
@@ -153,6 +156,15 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         onStatusChange?.("No update found to install");
         return;
       }
+
+      // If the update was re-fetched (pendingUpdateRef was null), surface it in
+      // the UI so the card/footer reflect the newly discovered version.
+      pendingUpdateRef.current = update;
+      setLatestVersion(update.version);
+      setReleaseNotes(update.body || null);
+      setUpdateAvailable(true);
+      setShowUpToDate(false);
+      setShowNotes(false);
 
       let downloadedBytes = 0;
       let contentLength = 0;
@@ -223,7 +235,11 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
           </span>
         )}
         {!isChecking && !showUpToDate && !updateAvailable && !isInstalling && (
-          <button onClick={() => checkForUpdates(true)} className="btn-footer-check">
+          <button
+            onClick={() => checkForUpdates(true)}
+            className="btn-footer-check"
+            aria-label="Check for updates"
+          >
             <RefreshCw size={12} /> Check Updates
           </button>
         )}

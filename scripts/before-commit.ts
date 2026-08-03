@@ -109,7 +109,9 @@ function bumpVersion(current: string, part: string): string {
   if (segments.length !== 3 || segments.some((n) => Number.isNaN(n))) {
     fail(`Cannot bump malformed version "${current}" — expected semver like "0.8.0".`);
   }
-  const [major, minor, patch] = segments;
+  // `noUncheckedIndexedAccess` makes these `number | undefined`; the length
+  // check above guarantees all three exist, so the non-null assertions are safe.
+  const [major, minor, patch] = segments as [number, number, number];
   switch (part) {
     case "major":
       return `${major + 1}.0.0`;

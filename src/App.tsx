@@ -89,24 +89,25 @@ export default function App() {
     switch (e.key) {
       case "ArrowRight":
         e.preventDefault();
-        next = TAB_ORDER[(index + 1) % TAB_ORDER.length];
+        next = TAB_ORDER[(index + 1) % TAB_ORDER.length] ?? null;
         break;
       case "ArrowLeft":
         e.preventDefault();
-        next = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+        next = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length] ?? null;
         break;
       case "Home":
         e.preventDefault();
-        next = TAB_ORDER[0];
+        next = TAB_ORDER[0] ?? null;
         break;
       case "End":
         e.preventDefault();
-        next = TAB_ORDER[TAB_ORDER.length - 1];
+        next = TAB_ORDER[TAB_ORDER.length - 1] ?? null;
         break;
       default:
         return;
     }
 
+    if (next === null) return;
     setActiveTab(next);
     document.getElementById(`tab-${next}`)?.focus();
   }, []);
