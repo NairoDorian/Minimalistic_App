@@ -25,7 +25,7 @@ import { APP_VERSION } from "./version";
  *   - src-tauri/Cargo.toml      (package version)
  *   - src-tauri/tauri.conf.json (version field — drives the bundled artifact
  *                                and the auto-updater's latest.json feed)
- *   - src-tauri/Cargo.lock      (root crate entry, refreshed via `cargo update`)
+ *   - src-tauri/Cargo.lock      (root crate entry, refreshed via `cargo generate-lockfile`)
  *
  * The frontend version (`__APP_VERSION__`, Vite `define`) derives from
  * `scripts/version.ts` directly and needs no syncing.
@@ -96,7 +96,7 @@ function readLockfileVersion(): string | null {
 
 /** Refreshes the Cargo.lock root entry after a Cargo.toml version change. */
 function refreshLockfileVersion(): boolean {
-  const result = spawnSync("cargo", ["update", "-p", CARGO_CRATE_NAME], {
+  const result = spawnSync("cargo", ["generate-lockfile"], {
     cwd: CARGO_MANIFEST_DIR,
     stdio: "inherit",
   });
