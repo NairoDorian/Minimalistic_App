@@ -668,5 +668,3 @@ input:checked + .slider:before {
     transition-duration: 0.01ms !important;
   }
 }
-
-

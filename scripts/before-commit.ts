@@ -87,7 +87,11 @@ function readLockfileVersion(): string | null {
   const content = fs.readFileSync(lockPath, "utf8");
   // The root package entry is the one matching the crate name (its version
   // line sits directly beneath the `name = ...` line inside the [[package]] block).
-  return content.match(/name = "minimalistic-app"\nversion = "([^"]+)"/m)?.[1] ?? null;
+  return (
+    content.match(
+      new RegExp(`name = "${CARGO_CRATE_NAME}"\\nversion = "([^"]+)"`, "m")
+    )?.[1] ?? null
+  );
 }
 
 /** Refreshes the Cargo.lock root entry after a Cargo.toml version change. */

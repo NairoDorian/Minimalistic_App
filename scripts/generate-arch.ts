@@ -24,7 +24,6 @@ const fileDescriptions: Record<string, string> = {
   "CHANGELOG.md": "Version history tracking releases and features starting with v0.1.0.",
   "AGENTS.md": "Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository.",
   "AUTO-UPDATE.md": "Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow.",
-  "ARCHITECTURE.md": "Generated single file architecture map listing directory structure and file descriptions.",
   "src/main.tsx": "React 19 application entry point rendering App root (no React import needed with JSX transform).",
   "src/App.tsx": "Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading.",
   "src/vite-env.d.ts": "Vite client type references and declaration of the build-time __APP_VERSION__ constant.",
@@ -50,7 +49,8 @@ const fileDescriptions: Record<string, string> = {
   "scripts/create-icons.ts": "Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2.",
   "scripts/update-deps.ts": "End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates.",
   "scripts/version.ts": "Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.",
-  "scripts/before-commit.ts": "Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes."
+  "scripts/before-commit.ts": "Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes.",
+  "Cargo.lock": "Rust dependency lockfile, committed to track exact crate versions for reproducible builds."
 };
 
 /** Human-readable byte size (e.g. `1.2 KB`). */

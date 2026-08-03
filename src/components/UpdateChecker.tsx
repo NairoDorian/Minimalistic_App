@@ -12,6 +12,17 @@ interface UpdateCheckerProps {
   variant?: "card" | "footer";
 }
 
+/**
+ * Module-level install guard shared by every UpdateChecker instance.
+ *
+ * The card (Preferences tab) and footer render as two separate component
+ * instances, each with its own `isInstallingRef` — so per-instance guards
+ * alone would allow a second `downloadAndInstall()` to start from the other
+ * variant while one is already in flight. This shared flag makes the install
+ * operation process-wide, preventing duplicate concurrent downloads.
+ */
+let installInFlight = false;
+
 export const UpdateChecker: FC<UpdateCheckerProps> = ({
   autoCheckOnMount = true,
   listenForEvents = true,
@@ -77,6 +88,9 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       }
     } catch (error: unknown) {
       console.error("Failed to check for updates:", error);
+      // Drop any stale update handle so a previously offered update cannot be
+      // installed after the check itself has failed (e.g. network went down).
+      pendingUpdateRef.current = null;
       const errStr = error instanceof Error ? error.message : String(error);
       if (errStr.includes("404") || errStr.includes("Could not fetch")) {
         setErrorMessage("Update endpoint not found (GitHub release pending)");
@@ -121,8 +135,9 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
    * Downloads and installs the pending update, then relaunches the app.
    */
   const installUpdate = useCallback(async () => {
-    if (!isTauri || isInstallingRef.current) return;
+    if (!isTauri || isInstallingRef.current || installInFlight) return;
 
+    installInFlight = true;
     isInstallingRef.current = true;
     setIsInstalling(true);
     setDownloadProgress(0);
@@ -172,6 +187,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       setErrorMessage("Installation failed: " + errMsg);
       onStatusChange?.("Update installation failed");
     } finally {
+      installInFlight = false;
       isInstallingRef.current = false;
       setIsInstalling(false);
       setDownloadProgress(0);
@@ -312,9 +328,10 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
         </div>
       )}
 
-      {/* Error notification banner */}
+      {/* Error notification banner — role="alert" so failures interrupt screen
+          readers immediately instead of waiting for a polite-live pass. */}
       {errorMessage && (
-        <div className="update-error-banner">
+        <div className="update-error-banner" role="alert">
           <AlertCircle size={14} />
           <span>{errorMessage}</span>
         </div>

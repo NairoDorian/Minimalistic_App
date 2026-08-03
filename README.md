@@ -265,8 +265,8 @@ scripts/version.ts  (APP_VERSION = "0.9.0")  ← THE ONLY PLACE THE VERSION IS D
 | :--- | :--- | :--- |
 | **Bun.js** | `1.3+` | Runtime, script runner & package manager |
 | **Tauri** | `^2.11.5` | Lightweight cross-platform native desktop shell |
-| **React** | `^19.2.8` | Frontend component framework |
-| **TypeScript** | `^7.0.2` | Strict static type checking (TypeScript 7) |
+| **React** | `19.3.0-canary-*` (exact-pinned canary build) | Frontend component framework |
+| **TypeScript** | `7.1.0-dev.*` (nightly, `next` channel) | Strict static type checking (TypeScript 7) |
 | **Vite** | `^8.2.0` | Frontend dev server & production bundler (Vite 8) |
 | **Cargo / Rust** | `2024 edition` | Native system tray & background process backend |
 

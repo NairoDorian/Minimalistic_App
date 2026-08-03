@@ -65,7 +65,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **32 files · 186.2 KB · 50,336 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **32 files · 189.6 KB · 51,259 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -73,14 +73,14 @@ Repomix metrics: **32 files · 186.2 KB · 50,336 tokens** (text files; binary a
 | `.gitignore` | 295 B | 23 | 79 | 294 | Git ignore configuration excluding build artifacts, node_modules, and OS metadata. |
 | `AGENTS.md` | 15.2 KB | 245 | 4097 | 15464 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 10.2 KB | 238 | 2611 | 10394 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
-| `CHANGELOG.md` | 37.8 KB | 353 | 9833 | 38344 | Version history tracking releases and features starting with v0.1.0. |
+| `CHANGELOG.md` | 41.4 KB | 391 | 10747 | 41977 | Version history tracking releases and features starting with v0.1.0. |
 | `index.html` | 858 B | 17 | 196 | 668 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
-| `package.json` | 1.1 KB | 38 | 422 | 1164 | Project manifest containing Bun scripts (dev, build, typecheck, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
-| `README.md` | 22.0 KB | 363 | 5862 | 22057 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
+| `package.json` | 1.1 KB | 38 | 421 | 1160 | Project manifest containing Bun scripts (dev, build, typecheck, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
+| `README.md` | 22.1 KB | 363 | 5882 | 22124 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 602 B | 26 | 163 | 600 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
-| `scripts/before-commit.ts` | 10.1 KB | 205 | 2109 | 8007 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes. |
+| `scripts/before-commit.ts` | 10.1 KB | 207 | 2097 | 7912 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.7 KB | 116 | 1531 | 4619 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |
-| `scripts/generate-arch.ts` | 12.4 KB | 177 | 2929 | 11482 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
+| `scripts/generate-arch.ts` | 12.4 KB | 177 | 2930 | 11478 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
 | `scripts/update-deps.ts` | 31.4 KB | 545 | 6668 | 25494 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
 | `scripts/version.ts` | 1.2 KB | 1 | 12 | 36 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
@@ -95,11 +95,11 @@ Repomix metrics: **32 files · 186.2 KB · 50,336 tokens** (text files; binary a
 | `src-tauri/src/lib.rs` | 13.0 KB | 233 | 1939 | 8891 | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept. |
 | `src-tauri/src/main.rs` | 171 B | 4 | 28 | 109 | Main Rust entry point launching the lib run loop without extra Windows console. |
 | `src-tauri/tauri.conf.json` | 1.4 KB | 50 | 454 | 1448 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
-| `src/App.tsx` | 6.2 KB | 127 | 1126 | 4614 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
-| `src/components/AboutTab.tsx` | 3.8 KB | 76 | 718 | 2862 | Presentational System & About tab panel; exports the AppInfo interface and WEB_PREVIEW_APP_INFO fallback. |
+| `src/App.tsx` | 6.1 KB | 120 | 1080 | 4350 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
+| `src/components/AboutTab.tsx` | 3.9 KB | 76 | 721 | 2890 | Presentational System & About tab panel; exports the AppInfo interface and WEB_PREVIEW_APP_INFO fallback. |
 | `src/components/PreferencesTab.tsx` | 4.8 KB | 110 | 905 | 3816 | Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, and the embedded update checker card. |
-| `src/components/ToggleSwitch.tsx` | 2.1 KB | 51 | 319 | 1260 | Reusable accessible ARIA toggle switch (role=switch, Space/Enter keys, visually-hidden checkbox) used by the Preferences tab. |
-| `src/components/UpdateChecker.tsx` | 11.2 KB | 285 | 2448 | 10788 | Auto-update checker component handling release checks, streamed progress, and app relaunch. |
+| `src/components/ToggleSwitch.tsx` | 2.3 KB | 52 | 325 | 1289 | Reusable accessible ARIA toggle switch (role=switch, Space/Enter keys, visually-hidden checkbox) used by the Preferences tab. |
+| `src/components/UpdateChecker.tsx` | 12.1 KB | 290 | 2486 | 10948 | Auto-update checker component handling release checks, streamed progress, and app relaunch. |
 | `src/index.css` | 13.7 KB | 580 | 4619 | 13647 | 100% AMOLED deep black theme (#000000) with glassmorphism, glowing toggle switches, and reduced-motion support. |
 | `src/lib/tauri.ts` | 456 B | 2 | 26 | 99 | Shared Tauri v2 runtime detection utility exporting the isTauri constant. |
 | `src/main.tsx` | 516 B | 9 | 61 | 245 | React 19 application entry point rendering App root (no React import needed with JSX transform). |

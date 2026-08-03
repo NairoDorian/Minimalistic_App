@@ -8,6 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.10.3] - 2026-08-03
+
+### Deep Audit Round 10 — Correctness, Cleanup & Documentation
+
+Full-pass audit of every source file with targeted improvements and bug fixes.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Nullish coalescing in `AboutTab`**: `appInfo?.version || __APP_VERSION__` → `appInfo?.version ?? __APP_VERSION__` — `||` would incorrectly fall back to `__APP_VERSION__` if the version string were ever an empty string; `??` only falls back for `null`/`undefined`, which is the intended semantics.
+
+#### 📖 Documentation
+- `ARCHITECTURE.md`: `generate-arch.ts` file descriptions registry now includes `Cargo.lock` (committed lockfile, not gitignored, previously unlisted).
+- `CHANGELOG.md`: This entry.
+
+#### 🧹 Cleaning
+- `index.css`: Removed trailing blank line at end of file.
+
+## [0.10.2] - 2026-08-03
+
+### Deep Audit Round 9 — Concurrency, Accessibility & Drift Cleanup
+
+Full-pass audit of every doc, source file, and script (bug fixes, dead-code removal, refactoring, commenting — no new behavior).
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Cross-instance install race fixed**: `UpdateChecker` now guards `downloadAndInstall` with a module-level `installInFlight` flag shared by every variant — the card (Preferences tab) and footer are separate component instances with independent refs, so simultaneous "Install" clicks on both could previously start two concurrent downloads of the same update. The shared flag makes the install process-wide.
+- **Stale update handle cleared on check failure**: `pendingUpdateRef` is nulled when a check throws, so a previously offered update can never be installed after the check that offered it has failed (e.g. network went down mid-check).
+- **Error banner now `role="alert"`**: update failures interrupt screen readers immediately instead of waiting for the footer's polite-live pass.
+- **`ToggleSwitch` double-announcement fixed**: the visually-hidden native checkbox is now `aria-hidden="true"` — the label's `role="switch"` + `aria-checked` already expose the on/off semantics, so screen readers no longer announce the control twice (once as switch, once as checkbox).
+- **Tauri-version fallback de-drifted**: `AboutTab`'s "Tauri Core Engine" tile now falls back to `WEB_PREVIEW_APP_INFO.tauri_version` instead of a hardcoded `"2.11"` that could silently diverge from the compiled `tauri::VERSION`.
+- **Tab bar deduplicated**: `App.tsx` renders both tab buttons from a single `TABS` array (id / label / icon), eliminating ~25 lines of duplicated markup — the ARIA wiring (`aria-selected`, `aria-controls`, roving `tabIndex`) can no longer drift between the two tabs.
+
+#### 🛠️ Tooling & Scripts (`scripts`)
+- **`before-commit.ts` crate-name hygiene**: the `Cargo.lock` root-crate regex now interpolates `CARGO_CRATE_NAME` instead of a hardcoded `"minimalistic-app"` literal — renaming the crate (per the "From Template to Your App" flow) can no longer silently break the lockfile drift check.
+- **Dead description removed**: `generate-arch.ts` dropped its `ARCHITECTURE.md` registry entry — the file is self-excluded from the repomix collection (`repomix.config.json`), so the entry was unreachable.
+- **Script consistency**: `package.json` `update-deps` now runs `bun scripts/update-deps.ts` like every other script (was `bun run scripts/...`).
+
+#### 📖 Documentation
+- `README.md`: tech-stack table refreshed to the actual pinned versions — React `19.3.0-canary-*` (exact-pinned canary build) and TypeScript `7.1.0-dev.*` (nightly, `next` channel) replace the stale `^19.2.8` / `^7.0.2` entries that had drifted from `package.json` since Round 8.1.
+
 ## [0.10.1] - 2026-08-01
 
 ### Publisher-Agnostic Prerelease Selection & Freshest-Canary Refresh

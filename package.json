@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.10.1",
+  "version": "0.10.3",
   "type": "module",
   "scripts": {
     "dev": "bun run tauri dev",
@@ -13,7 +13,7 @@
     "before-commit": "bun scripts/before-commit.ts",
     "arch": "bun scripts/generate-arch.ts",
     "create-icons": "bun scripts/create-icons.ts",
-    "update-deps": "bun run scripts/update-deps.ts",
+    "update-deps": "bun scripts/update-deps.ts",
     "clean": "cargo clean --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Settings, Info, AppWindow, Shield } from "lucide-react";
+import { Settings, Info, AppWindow, Shield, type LucideIcon } from "lucide-react";
 import { PreferencesTab } from "./components/PreferencesTab";
 import { AboutTab, type AppInfo, WEB_PREVIEW_APP_INFO } from "./components/AboutTab";
 import { UpdateChecker } from "./components/UpdateChecker";
@@ -10,6 +10,16 @@ type TabType = "preferences" | "about";
 
 /** Tab order used for roving-tabindex keyboard navigation (Home / End). */
 const TAB_ORDER: readonly TabType[] = ["preferences", "about"];
+
+/**
+ * Single source of truth for the tab bar: id (drives DOM ids + state), label,
+ * and icon. Rendered data-driven below so the two tab buttons can never drift
+ * from each other in markup or accessibility attributes.
+ */
+const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
+  { id: "preferences", label: "Preferences", icon: Settings },
+  { id: "about", label: "System & About", icon: Info },
+];
 
 /**
  * Main Application GUI Component (React 19) — the application shell.
@@ -121,34 +131,23 @@ export default function App() {
       <main className="app-content">
         {/* Modular Tab Navigation Header */}
         <nav className="navigation-tab" role="tablist" aria-label="Main Navigation">
-          <button
-            type="button"
-            id="tab-preferences"
-            className={`tab-btn ${activeTab === "preferences" ? "active" : ""}`}
-            onClick={() => setActiveTab("preferences")}
-            onKeyDown={(e) => handleTabKeyDown(e, "preferences")}
-            aria-selected={activeTab === "preferences"}
-            aria-controls="panel-preferences"
-            role="tab"
-            tabIndex={activeTab === "preferences" ? 0 : -1}
-          >
-            <Settings size={14} />
-            <span>Preferences</span>
-          </button>
-          <button
-            type="button"
-            id="tab-about"
-            className={`tab-btn ${activeTab === "about" ? "active" : ""}`}
-            onClick={() => setActiveTab("about")}
-            onKeyDown={(e) => handleTabKeyDown(e, "about")}
-            aria-selected={activeTab === "about"}
-            aria-controls="panel-about"
-            role="tab"
-            tabIndex={activeTab === "about" ? 0 : -1}
-          >
-            <Info size={14} />
-            <span>System & About</span>
-          </button>
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              id={`tab-${id}`}
+              className={`tab-btn ${activeTab === id ? "active" : ""}`}
+              onClick={() => setActiveTab(id)}
+              onKeyDown={(e) => handleTabKeyDown(e, id)}
+              aria-selected={activeTab === id}
+              aria-controls={`panel-${id}`}
+              role="tab"
+              tabIndex={activeTab === id ? 0 : -1}
+            >
+              <Icon size={14} />
+              <span>{label}</span>
+            </button>
+          ))}
         </nav>
 
         {/* Active Tab Panel (ternary so the inactive panel unmounts) */}

@@ -63,6 +63,10 @@ export function ToggleSwitch({
           checked={checked}
           onChange={(e) => onToggle(e.target.checked)}
           tabIndex={-1}
+          // Hidden from assistive tech: the label's role="switch" + aria-checked
+          // already expose the on/off semantics — without this, screen readers
+          // announce the control twice (once as switch, once as checkbox).
+          aria-hidden="true"
         />
         <span className="slider"></span>
       </label>
