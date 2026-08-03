@@ -89,7 +89,7 @@ function readLockfileVersion(): string | null {
   // line sits directly beneath the `name = ...` line inside the [[package]] block).
   return (
     content.match(
-      new RegExp(`name = "${CARGO_CRATE_NAME}"\\nversion = "([^"]+)"`, "m")
+      new RegExp(`name = "${CARGO_CRATE_NAME}"\\r?\\nversion = "([^"]+)"`, "m")
     )?.[1] ?? null
   );
 }
