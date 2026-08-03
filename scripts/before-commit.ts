@@ -218,7 +218,8 @@ function run(): void {
   let hasDrift = false;
 
   // 1. JSON / TOML mirrors.
-  const lockfileWasOutdated = readLockfileVersion() !== version;
+  const currentLockVersion = readLockfileVersion();
+  const lockfileWasOutdated = currentLockVersion !== version;
   for (const mirror of mirrors) {
     if (!fs.existsSync(mirror.file)) {
       fail(`Mirror file missing: ${mirror.file}`);
@@ -241,10 +242,10 @@ function run(): void {
   // 2. Cargo.lock root entry (generated file — refreshed via cargo, not edited).
   if (lockfileWasOutdated) {
     if (isCheck) {
-      console.log(` ❌ src-tauri/Cargo.lock              (root crate)  →  expected ${version}`);
+      console.log(` ❌ src-tauri/Cargo.lock              (root crate)  ${currentLockVersion ?? "(absent)"}  →  expected ${version}`);
       hasDrift = true;
     } else {
-      console.log(" 🔧 src-tauri/Cargo.lock  refreshing root crate entry (cargo update)...");
+      console.log(" 🔧 src-tauri/Cargo.lock  refreshing root crate entry (cargo generate-lockfile)...");
       if (refreshLockfileVersion() && readLockfileVersion() === version) {
         console.log(` ✅ src-tauri/Cargo.lock              ${version}  (refreshed)`);
       } else {
