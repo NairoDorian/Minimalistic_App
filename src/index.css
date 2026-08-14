@@ -16,7 +16,9 @@
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-full: 9999px;
-  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-family:
+    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, sans-serif;
 }
 
 * {
@@ -36,7 +38,8 @@
   user-select: none;
 }
 
-body, html {
+body,
+html {
   width: 100%;
   height: 100%;
   background-color: var(--bg-amoled);
@@ -108,7 +111,10 @@ body, html {
   border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 500;
-  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .tray-status-badge.tray-active {
@@ -143,8 +149,15 @@ body, html {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); }
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 /* Main Content Area */
@@ -179,7 +192,10 @@ body, html {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .tab-btn.active {
@@ -271,7 +287,9 @@ body, html {
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .setting-item:hover:not(.disabled) {
@@ -354,7 +372,10 @@ body, html {
   right: 0;
   bottom: 0;
   background-color: var(--toggle-off);
-  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: var(--radius-full);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -366,13 +387,15 @@ input:disabled + .slider {
 
 .slider:before {
   position: absolute;
-  content: "";
+  content: '';
   height: 18px;
   width: 18px;
   left: 2px;
   bottom: 2px;
   background-color: var(--text-muted);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 50%;
 }
 
@@ -438,7 +461,9 @@ input:checked + .slider:before {
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 0 15px var(--accent-glow);
-  transition: filter 0.2s ease, transform 0.2s ease;
+  transition:
+    filter 0.2s ease,
+    transform 0.2s ease;
 }
 
 .btn-update-primary:hover {
@@ -458,7 +483,9 @@ input:checked + .slider:before {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .btn-update-secondary:hover:not(:disabled) {
@@ -578,8 +605,12 @@ input:checked + .slider:before {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .bounce-icon {
@@ -587,8 +618,12 @@ input:checked + .slider:before {
 }
 
 @keyframes bounce {
-  from { transform: translateY(0); }
-  to { transform: translateY(-3px); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-3px);
+  }
 }
 
 /* Window Drag Region for Custom Frameless Header Bar */
@@ -642,7 +677,9 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .info-tile:hover {

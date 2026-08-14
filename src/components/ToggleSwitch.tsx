@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from 'react';
 
 interface ToggleSwitchProps {
   /** Icon rendered in the setting row's leading tile. */
@@ -39,14 +39,14 @@ export function ToggleSwitch({
   /** Keyboard activation handler for Space / Enter keys. */
   const handleKeyDown = (e: KeyboardEvent<HTMLLabelElement>) => {
     if (disabled) return;
-    if (e.key === " " || e.key === "Enter") {
+    if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       onToggle(!checked);
     }
   };
 
   return (
-    <div className={`setting-item ${disabled ? "disabled" : ""}`}>
+    <div className={`setting-item ${disabled ? 'disabled' : ''}`}>
       <div className="setting-info">
         <div className="setting-icon">{icon}</div>
         <div className="setting-text">
@@ -55,7 +55,7 @@ export function ToggleSwitch({
         </div>
       </div>
       <label
-        className={`switch ${disabled ? "disabled" : ""}`}
+        className={`switch ${disabled ? 'disabled' : ''}`}
         tabIndex={disabled ? -1 : 0}
         role="switch"
         aria-checked={checked}

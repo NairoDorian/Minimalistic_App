@@ -1,0 +1,140 @@
+name: 'Release & Publish Desktop Bundles'
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (auto-detected from package.json if empty, e.g. v0.11.0)'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: 'Create GitHub Draft Release'
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.result }}
+      version: ${{ steps.get_version.outputs.version }}
+      tag_name: ${{ steps.get_version.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Version & Tag Name
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' package.json | head -1 | cut -d'"' -f4)
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v$VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION | Tag: $TAG"
+
+      - name: Extract Release Notes from CHANGELOG.md
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          # Extract changelog section for the matching version
+          NOTES=$(awk "/^## \[${VERSION}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md | sed '/^$/N;/^\n$/D')
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full release details."
+          fi
+          EOF=$(openssl rand -hex 8)
+          echo "notes<<$EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create Draft Release on GitHub
+        id: create_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: "${{ steps.get_version.outputs.tag_name }}",
+              name: "Minimalistic App ${{ steps.get_version.outputs.tag_name }}",
+              body: `${{ steps.changelog.outputs.notes }}`,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: false
+            });
+            return data.id;
+
+  build-and-upload:
+    name: 'Build Platform Bundle (${{ matrix.platform.name }})'
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: 'Windows (x86_64)'
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ''
+          - name: 'macOS (Apple Silicon)'
+            os: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - name: 'macOS (Intel)'
+            os: macos-13
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - name: 'Linux (Ubuntu x86_64)'
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: '--bundles deb,appimage'
+
+    runs-on: ${{ matrix.platform.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install Linux build dependencies
+        if: startsWith(matrix.platform.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build frontend bundle
+        run: bun run vite:build
+
+      - name: Build and Package with Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ needs.create-release.outputs.tag_name }}
+          releaseName: 'Minimalistic App ${{ needs.create-release.outputs.tag_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.platform.args }}

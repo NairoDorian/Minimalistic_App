@@ -1,15 +1,23 @@
-import { useState, useEffect, useRef, useCallback, type FC } from "react";
-import { check, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { listen } from "@tauri-apps/api/event";
-import { RefreshCw, Download, CheckCircle2, AlertCircle, FileText, ChevronDown, ChevronUp } from "lucide-react";
-import { isTauri } from "../lib/tauri";
+import { useState, useEffect, useRef, useCallback, type FC } from 'react';
+import { check, type Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { listen } from '@tauri-apps/api/event';
+import {
+  RefreshCw,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { isTauri } from '../lib/tauri';
 
 interface UpdateCheckerProps {
   autoCheckOnMount?: boolean;
   listenForEvents?: boolean;
   onStatusChange?: (status: string) => void;
-  variant?: "card" | "footer";
+  variant?: 'card' | 'footer';
 }
 
 /**
@@ -27,7 +35,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
   autoCheckOnMount = true,
   listenForEvents = true,
   onStatusChange,
-  variant = "card",
+  variant = 'card',
 }) => {
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
@@ -49,60 +57,63 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
   /**
    * Checks GitHub Releases for a newer version.
    */
-  const checkForUpdates = useCallback(async (isManual = false) => {
-    if (!isTauri || isCheckingRef.current || isInstallingRef.current) return;
+  const checkForUpdates = useCallback(
+    async (isManual = false) => {
+      if (!isTauri || isCheckingRef.current || isInstallingRef.current) return;
 
-    isCheckingRef.current = true;
-    setIsChecking(true);
-    setErrorMessage(null);
-    onStatusChange?.("Checking for updates...");
+      isCheckingRef.current = true;
+      setIsChecking(true);
+      setErrorMessage(null);
+      onStatusChange?.('Checking for updates...');
 
-    try {
-      const update = await check();
+      try {
+        const update = await check();
 
-      if (update?.available) {
-        pendingUpdateRef.current = update;
-        setLatestVersion(update.version);
-        setReleaseNotes(update.body || null);
-        setUpdateAvailable(true);
-        setShowUpToDate(false);
-        setShowNotes(false); // never leave a stale release-notes drawer open
-        onStatusChange?.(`New version v${update.version} available!`);
-      } else {
-        pendingUpdateRef.current = null;
-        setUpdateAvailable(false);
-        setReleaseNotes(null);
-        setShowNotes(false);
-
-        if (isManual) {
-          setShowUpToDate(true);
-          onStatusChange?.("Application is up to date");
-          if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
-          upToDateTimeoutRef.current = setTimeout(() => {
-            setShowUpToDate(false);
-            upToDateTimeoutRef.current = null;
-          }, 4000);
+        if (update?.available) {
+          pendingUpdateRef.current = update;
+          setLatestVersion(update.version);
+          setReleaseNotes(update.body || null);
+          setUpdateAvailable(true);
+          setShowUpToDate(false);
+          setShowNotes(false); // never leave a stale release-notes drawer open
+          onStatusChange?.(`New version v${update.version} available!`);
         } else {
-          onStatusChange?.("Up to date");
+          pendingUpdateRef.current = null;
+          setUpdateAvailable(false);
+          setReleaseNotes(null);
+          setShowNotes(false);
+
+          if (isManual) {
+            setShowUpToDate(true);
+            onStatusChange?.('Application is up to date');
+            if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
+            upToDateTimeoutRef.current = setTimeout(() => {
+              setShowUpToDate(false);
+              upToDateTimeoutRef.current = null;
+            }, 4000);
+          } else {
+            onStatusChange?.('Up to date');
+          }
         }
+      } catch (error: unknown) {
+        console.error('Failed to check for updates:', error);
+        // Drop any stale update handle so a previously offered update cannot be
+        // installed after the check itself has failed (e.g. network went down).
+        pendingUpdateRef.current = null;
+        const errStr = error instanceof Error ? error.message : String(error);
+        if (errStr.includes('404') || errStr.includes('Could not fetch')) {
+          setErrorMessage('Update endpoint not found (GitHub release pending)');
+        } else {
+          setErrorMessage('Unable to connect to update server');
+        }
+        onStatusChange?.('Update check failed');
+      } finally {
+        isCheckingRef.current = false;
+        setIsChecking(false);
       }
-    } catch (error: unknown) {
-      console.error("Failed to check for updates:", error);
-      // Drop any stale update handle so a previously offered update cannot be
-      // installed after the check itself has failed (e.g. network went down).
-      pendingUpdateRef.current = null;
-      const errStr = error instanceof Error ? error.message : String(error);
-      if (errStr.includes("404") || errStr.includes("Could not fetch")) {
-        setErrorMessage("Update endpoint not found (GitHub release pending)");
-      } else {
-        setErrorMessage("Unable to connect to update server");
-      }
-      onStatusChange?.("Update check failed");
-    } finally {
-      isCheckingRef.current = false;
-      setIsChecking(false);
-    }
-  }, [onStatusChange]);
+    },
+    [onStatusChange]
+  );
 
   useEffect(() => {
     if (!isTauri) return;
@@ -116,7 +127,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     // Only the primary (card) instance responds to tray-triggered checks;
     // multiple instances listening would fire duplicate network requests.
     if (listenForEvents) {
-      listen("check-for-updates", () => {
+      listen('check-for-updates', () => {
         if (isMounted) checkForUpdates(true);
       })
         .then((fn) => {
@@ -152,7 +163,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     // Clear any stale error banner from a previous failed check so the install
     // progress is the only visible state while the download is in flight.
     setErrorMessage(null);
-    onStatusChange?.("Starting update download...");
+    onStatusChange?.('Starting update download...');
 
     try {
       let update = pendingUpdateRef.current;
@@ -161,7 +172,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
       }
 
       if (!update?.available) {
-        onStatusChange?.("No update found to install");
+        onStatusChange?.('No update found to install');
         return;
       }
 
@@ -179,33 +190,36 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
 
       await update.downloadAndInstall((event) => {
         switch (event.event) {
-          case "Started":
+          case 'Started':
             downloadedBytes = 0;
             contentLength = event.data.contentLength ?? 0;
             break;
-          case "Progress":
+          case 'Progress':
             downloadedBytes += event.data.chunkLength;
             if (contentLength > 0) {
-              const pct = Math.min(Math.max(Math.round((downloadedBytes / contentLength) * 100), 0), 100);
+              const pct = Math.min(
+                Math.max(Math.round((downloadedBytes / contentLength) * 100), 0),
+                100
+              );
               setDownloadProgress(pct);
               onStatusChange?.(`Downloading update... ${pct}%`);
             } else {
-              onStatusChange?.("Downloading binary...");
+              onStatusChange?.('Downloading binary...');
             }
             break;
-          case "Finished":
-            onStatusChange?.("Download complete. Applying update...");
+          case 'Finished':
+            onStatusChange?.('Download complete. Applying update...');
             break;
         }
       });
 
-      onStatusChange?.("Relaunching application...");
+      onStatusChange?.('Relaunching application...');
       await relaunch();
     } catch (error: unknown) {
-      console.error("Failed to install update:", error);
+      console.error('Failed to install update:', error);
       const errMsg = error instanceof Error ? error.message : String(error);
-      setErrorMessage("Installation failed: " + errMsg);
-      onStatusChange?.("Update installation failed");
+      setErrorMessage('Installation failed: ' + errMsg);
+      onStatusChange?.('Update installation failed');
     } finally {
       installInFlight = false;
       isInstallingRef.current = false;
@@ -214,7 +228,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     }
   }, [onStatusChange]);
 
-  if (variant === "footer") {
+  if (variant === 'footer') {
     return (
       <div className="update-checker-footer" aria-live="polite">
         {isChecking && (
@@ -259,7 +273,7 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     <div className="update-checker-card">
       <div className="setting-item">
         <div className="setting-info">
-          <div className={`setting-icon ${updateAvailable ? "highlight" : ""}`}>
+          <div className={`setting-icon ${updateAvailable ? 'highlight' : ''}`}>
             {isChecking ? (
               <RefreshCw size={18} className="spin-icon" />
             ) : updateAvailable ? (
@@ -274,14 +288,14 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
             <span className="setting-title">Software Updates</span>
             <span className="setting-subtitle">
               {isChecking
-                ? "Checking GitHub releases for newer version..."
+                ? 'Checking GitHub releases for newer version...'
                 : isInstalling
-                ? `Downloading update binary (${downloadProgress}%)...`
-                : updateAvailable
-                ? `New update v${latestVersion} is ready to install!`
-                : showUpToDate
-                ? "Your app is currently running the latest version."
-                : "Check for new releases, bug fixes, and feature updates."}
+                  ? `Downloading update binary (${downloadProgress}%)...`
+                  : updateAvailable
+                    ? `New update v${latestVersion} is ready to install!`
+                    : showUpToDate
+                      ? 'Your app is currently running the latest version.'
+                      : 'Check for new releases, bug fixes, and feature updates.'}
             </span>
           </div>
         </div>
@@ -312,8 +326,8 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
               disabled={isChecking}
               className="btn-update-secondary"
             >
-              <RefreshCw size={14} className={isChecking ? "spin-icon" : ""} />
-              {isChecking ? "Checking..." : showUpToDate ? "Up to Date" : "Check for Updates"}
+              <RefreshCw size={14} className={isChecking ? 'spin-icon' : ''} />
+              {isChecking ? 'Checking...' : showUpToDate ? 'Up to Date' : 'Check for Updates'}
             </button>
           )}
 
@@ -363,4 +377,3 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
     </div>
   );
 };
-

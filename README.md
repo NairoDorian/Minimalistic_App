@@ -14,6 +14,7 @@ Designed with a sleek **100% AMOLED Deep Black glassmorphic GUI (`#000000`)**, t
 >
 > **2. Ultimate Testing Command**:
 > The **ONLY** primary command to launch, test, and develop this application is:
+>
 > ```bash
 > bun run tauri dev
 > ```
@@ -38,64 +39,84 @@ graph TD
 ```
 
 ### 1. Environment Verification
+
 Verify that Bun and Cargo/Rust toolchains are installed:
+
 ```bash
 bun --version
 cargo --version
 ```
 
 ### 2. Dependency Management & Automatic @latest Upgrades
+
 Install dependencies using Bun:
+
 ```bash
 bun install
 ```
+
 To run the automated **End-to-End Dual-Ecosystem & Sub-Dependency Upgrade Pipeline**:
+
 ```bash
 bun run update-deps
 ```
-*This 7-step pipeline force-upgrades all direct & transitive sub-dependencies across NPM and Crates.io to `@latest`, updates Cargo crates, validates static TypeScript types (`bun x tsc -b`), builds the Vite production bundle, verifies Rust compilation with `cargo check`, and regenerates `ARCHITECTURE.md`.*
+
+_This 7-step pipeline force-upgrades all direct & transitive sub-dependencies across NPM and Crates.io to `@latest`, updates Cargo crates, validates static TypeScript types (`bun x tsc -b`), builds the Vite production bundle, verifies Rust compilation with `cargo check`, and regenerates `ARCHITECTURE.md`._
 
 **Flags** (stable-only by default; nothing is ever force-installed beyond what `bun`/`cargo` resolve as compatible):
 
-| Flag | Effect |
-| :--- | :--- |
+| Flag           | Effect                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--prerelease` | Prefer beta/alpha/RC versions for **direct** dependencies (NPM dist-tags `next`/`beta`/`rc`/`alpha`/`canary`/`experimental`/`insiders`/`dev`, crates.io `newest_version`) — **every** prerelease tag is evaluated and the best **strictly-newer** candidate wins (highest SemVer core, then newest publish time); falls back to stable. Transitive deps still resolve via `bun update --latest` / `cargo update`. |
-| `--dry-run` | Query registries and print a "would upgrade" report **without writing anything** — no `bun add`, no Cargo.toml edits, no lockfile refreshes, no builds. Safe to run any time. |
-| `--help` | Print usage summary. |
+| `--dry-run`    | Query registries and print a "would upgrade" report **without writing anything** — no `bun add`, no Cargo.toml edits, no lockfile refreshes, no builds. Safe to run any time.                                                                                                                                                                                                                                     |
+| `--help`       | Print usage summary.                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 3. Live Development & Primary Testing
+
 Run the application using the ultimate test command:
+
 ```bash
 bun run tauri dev
 ```
+
 - **Left-Click Tray Icon**: Toggles GUI window show/hide.
 - **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI**, **Check for Updates...**, and **Quit**.
 - **Close Button (X)**: Minimizes to taskbar tray when "Minimize to taskbar on close" is enabled (default: OFF — closing quits by default).
 
 ### 4. Version Synchronization Before Committing
+
 Before committing, synchronize the single global application version across every mirror:
+
 ```bash
 bun run before-commit
 ```
+
 - `scripts/version.ts` (`APP_VERSION`) is the **single source of truth** — `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` are auto-synced mirrors; the frontend's `__APP_VERSION__` derives from the same constant via Vite `define`.
 - `--check` validates without writing (exit 1 on drift) — ideal for CI or a git pre-commit hook (`--install-hook` wires one automatically). CI runs it on every push/PR.
 - `--bump <major|minor|patch>` increments `APP_VERSION` and propagates it everywhere.
 
 ### 5. Cleaning Build Folders (`bun run clean`)
+
 Purge compiled Rust release & debug build artifacts (`src-tauri/target/`):
+
 ```bash
 bun run clean
 ```
 
 ### 6. Architecture Maintenance
+
 After adding or modifying files, update the architecture map:
+
 ```bash
 bun run arch
 ```
+
 Automatically updates [`ARCHITECTURE.md`](ARCHITECTURE.md) with the project directory tree and file inventory descriptions (size, lines, tokens, chars) without raw code dumps.
 
 ### 7. Production Build Validation
+
 Build the production desktop app binary:
+
 ```bash
 bun run build
 ```
@@ -107,19 +128,22 @@ bun run build
 Follow these steps **in this order** when bumping the version, preparing a release, and publishing:
 
 1. **Bump & sync the version everywhere** (single command — the global `APP_VERSION` in `scripts/version.ts` is propagated to `package.json`, `Cargo.toml`, `tauri.conf.json`, and `Cargo.lock`):
+
    ```bash
    bun run before-commit --bump <major|minor|patch>
    ```
+
    Which bump level fits your change (SemVer)?
 
-   | Bump | Example | Use when | Result |
-   | :--- | :--- | :--- | :--- |
-   | `patch` | `0.9.0 → 0.9.1` | Bug fixes, corrections, polish — no new behavior. Safest, most common. | patch `+1` |
-   | `minor` | `0.9.0 → 0.10.0` | New backward-compatible features (toggles, IPC commands, views). | minor `+1`, patch → `0` |
-   | `major` | `0.9.0 → 1.0.0` | Breaking changes — incompatible config/behavior/IPC changes, removals. | major `+1`, minor & patch → `0` |
+   | Bump    | Example          | Use when                                                               | Result                          |
+   | :------ | :--------------- | :--------------------------------------------------------------------- | :------------------------------ |
+   | `patch` | `0.9.0 → 0.9.1`  | Bug fixes, corrections, polish — no new behavior. Safest, most common. | patch `+1`                      |
+   | `minor` | `0.9.0 → 0.10.0` | New backward-compatible features (toggles, IPC commands, views).       | minor `+1`, patch → `0`         |
+   | `major` | `0.9.0 → 1.0.0`  | Breaking changes — incompatible config/behavior/IPC changes, removals. | major `+1`, minor & patch → `0` |
 
    > [!NOTE]
    > Below `1.0.0`, anything may be considered breaking per SemVer — the template convention is **patch = fixes, minor = features, major = deliberate breaking overhaul**. Ask the user which level when unspecified.
+
 2. **Update `CHANGELOG.md`** — add the new `## [X.Y.Z] - YYYY-MM-DD` entry at the top (must match the bumped version; each version may appear exactly once).
 3. **Update other docs only if version-dependent** (`README.md`, `AUTO-UPDATE.md`, `AGENTS.md`) — usually unnecessary for a patch bump.
 4. **Regenerate the architecture map** so metrics include the changelog edit:
@@ -143,15 +167,15 @@ Follow these steps **in this order** when bumping the version, preparing a relea
 
 ### `bun run before-commit` — Every Mode
 
-| Command | Effect | Writes? |
-| :--- | :--- | :--- |
-| `bun run before-commit` | Sync `APP_VERSION` from `scripts/version.ts` into `package.json`, `Cargo.toml`, `tauri.conf.json` (+ `Cargo.lock` via `cargo update`); per-mirror report. | Yes |
-| `bun run before-commit --check` | Read-only drift validation; exits `1` on any mismatch. Safe for CI / hooks. | No |
-| `bun run before-commit --bump patch` | `0.9.0 → 0.9.1` then sync. | Yes |
-| `bun run before-commit --bump minor` | `0.9.0 → 0.10.0` then sync. | Yes |
-| `bun run before-commit --bump major` | `0.9.0 → 1.0.0` then sync. | Yes |
-| `bun run before-commit --install-hook` | Install `.git/hooks/pre-commit` running `--check`; refuses to overwrite an existing hook. | Yes |
-| `bun run before-commit --help` | Print usage. | No |
+| Command                                | Effect                                                                                                                                                    | Writes? |
+| :------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :------ |
+| `bun run before-commit`                | Sync `APP_VERSION` from `scripts/version.ts` into `package.json`, `Cargo.toml`, `tauri.conf.json` (+ `Cargo.lock` via `cargo update`); per-mirror report. | Yes     |
+| `bun run before-commit --check`        | Read-only drift validation; exits `1` on any mismatch. Safe for CI / hooks.                                                                               | No      |
+| `bun run before-commit --bump patch`   | `0.9.0 → 0.9.1` then sync.                                                                                                                                | Yes     |
+| `bun run before-commit --bump minor`   | `0.9.0 → 0.10.0` then sync.                                                                                                                               | Yes     |
+| `bun run before-commit --bump major`   | `0.9.0 → 1.0.0` then sync.                                                                                                                                | Yes     |
+| `bun run before-commit --install-hook` | Install `.git/hooks/pre-commit` running `--check`; refuses to overwrite an existing hook.                                                                 | Yes     |
+| `bun run before-commit --help`         | Print usage.                                                                                                                                              | No      |
 
 Details: after a bump, a missing `## [<version>]` changelog header is an advisory `⚠️`, never a blocker. Invalid usage (`--bump` without a part, unknown part, `--check --bump` together) exits `1` with a descriptive message.
 
@@ -163,17 +187,18 @@ Details: after a bump, a missing `## [<version>]` changelog header is an advisor
 
 The tray icon is the app's primary surface. The full interaction model:
 
-| Trigger | Behavior |
-| :--- | :--- |
-| **Normal launch** | Window opens on startup (`visible: true` in `tauri.conf.json`). |
-| **Second launch** | `tauri-plugin-single-instance` focuses the existing window — no duplicate tray icon. |
-| **Left-click tray** | `on_tray_icon_event` → `toggle_window_visibility()` (show or hide). |
-| **Right-click tray** | Native context menu: **Open / Hide GUI**, **Check for Updates...**, **Quit**. |
+| Trigger              | Behavior                                                                                  |
+| :------------------- | :---------------------------------------------------------------------------------------- |
+| **Normal launch**    | Window opens on startup (`visible: true` in `tauri.conf.json`).                           |
+| **Second launch**    | `tauri-plugin-single-instance` focuses the existing window — no duplicate tray icon.      |
+| **Left-click tray**  | `on_tray_icon_event` → `toggle_window_visibility()` (show or hide).                       |
+| **Right-click tray** | Native context menu: **Open / Hide GUI**, **Check for Updates...**, **Quit**.             |
 | **Close (X) button** | `CloseRequested` intercept: hides to tray when "minimize to tray" is ON; otherwise quits. |
-| **Quit menu item** | Sets `is_quitting = true`, then `window.close()` — clean WebView2 Win32 teardown. |
-| **Tray tooltip** | Reads `AppHandle::package_info().name` — can never drift from `tauri.conf.json`. |
+| **Quit menu item**   | Sets `is_quitting = true`, then `window.close()` — clean WebView2 Win32 teardown.         |
+| **Tray tooltip**     | Reads `AppHandle::package_info().name` — can never drift from `tauri.conf.json`.          |
 
 **Event flow (tray → webview):**
+
 ```
 Tray "Check for Updates..." click
    │  show_window_if_hidden(app)        ← only surfaces a hidden window
@@ -186,11 +211,11 @@ UpdateChecker card (listenForEvents=true) → check() → GitHub Releases API
 
 ### ⚙️ IPC Command Surface (Rust ↔ React)
 
-| Command | Direction | Payload | Purpose |
-| :--- | :--- | :--- | :--- |
-| `get_minimize_to_tray` | Rust → UI | `bool` | Current tray-on-close preference. |
-| `set_minimize_to_tray` | UI → Rust | `{ enabled: bool }` → `Result<(), String>` | Persists to disk first, then commits memory; error string surfaces to the UI for optimistic rollback. |
-| `get_app_info` | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch) | Reads `AppHandle::package_info()` — single source of truth, never hardcoded. |
+| Command                | Direction | Payload                                            | Purpose                                                                                               |
+| :--------------------- | :-------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
+| `get_minimize_to_tray` | Rust → UI | `bool`                                             | Current tray-on-close preference.                                                                     |
+| `set_minimize_to_tray` | UI → Rust | `{ enabled: bool }` → `Result<(), String>`         | Persists to disk first, then commits memory; error string surfaces to the UI for optimistic rollback. |
+| `get_app_info`         | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch) | Reads `AppHandle::package_info()` — single source of truth, never hardcoded.                          |
 
 All handlers are registered via `tauri::generate_handler!` in `src-tauri/src/lib.rs` and callable from React through `@tauri-apps/api/core` `invoke()`.
 
@@ -198,11 +223,11 @@ All handlers are registered via `tauri::generate_handler!` in `src-tauri/src/lib
 
 Preferences serialize to JSON inside the OS config directory, **scoped by the app identifier** (`app_config_dir()`):
 
-| OS | Location |
-| :--- | :--- |
+| OS          | Location                                                                                                                   |
+| :---------- | :------------------------------------------------------------------------------------------------------------------------- |
 | **Windows** | `%APPDATA%\com.minimalistic.app\settings.json` (i.e. `C:\Users\<User>\AppData\Roaming\com.minimalistic.app\settings.json`) |
-| **Linux** | `~/.config/com.minimalistic.app/settings.json` |
-| **macOS** | `~/Library/Application Support/com.minimalistic.app/settings.json` |
+| **Linux**   | `~/.config/com.minimalistic.app/settings.json`                                                                             |
+| **macOS**   | `~/Library/Application Support/com.minimalistic.app/settings.json`                                                         |
 
 - Corrupt or unreadable files log a `[settings]` warning and fall back to defaults (missing file = quiet defaults).
 - **Atomic persistence**: Writes serialize to an adjacent `.tmp` file and atomically rename over the destination, preventing 0-byte corrupt files on power loss or abrupt exit.
@@ -266,23 +291,23 @@ scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS 
 
 ## 🛠️ Tech Stack & Absolute @latest Versions
 
-| Tool / Library | Version | Purpose |
-| :--- | :--- | :--- |
-| **Bun.js** | `1.3+` | Runtime, script runner & package manager |
-| **Tauri** | `^2.11.5` | Lightweight cross-platform native desktop shell |
-| **React** | `19.3.0-canary-*` (exact-pinned canary build) | Frontend component framework |
-| **TypeScript** | `7.1.0-dev.*` (nightly, `next` channel) | Strict static type checking (TypeScript 7) |
-| **Vite** | `^8.2.1` | Frontend dev server & production bundler (Vite 8) |
-| **Cargo / Rust** | `2024 edition` | Native system tray & background process backend |
+| Tool / Library   | Version                                       | Purpose                                           |
+| :--------------- | :-------------------------------------------- | :------------------------------------------------ |
+| **Bun.js**       | `1.3+`                                        | Runtime, script runner & package manager          |
+| **Tauri**        | `^2.11.5`                                     | Lightweight cross-platform native desktop shell   |
+| **React**        | `19.3.0-canary-*` (exact-pinned canary build) | Frontend component framework                      |
+| **TypeScript**   | `7.1.0-dev.*` (nightly, `next` channel)       | Strict static type checking (TypeScript 7)        |
+| **Vite**         | `^8.2.1`                                      | Frontend dev server & production bundler (Vite 8) |
+| **Cargo / Rust** | `2024 edition`                                | Native system tray & background process backend   |
 
 ### Tauri Plugins
 
-| Plugin | Version | Purpose |
-| :--- | :--- | :--- |
-| `tauri-plugin-autostart` | `^2.5.1` | OS startup launch management |
-| `tauri-plugin-single-instance` | `^2.4.3` | Duplicate-launch prevention & window focus |
-| `tauri-plugin-updater` | `^2.10.1` | GitHub Releases auto-update |
-| `tauri-plugin-process` | `^2.3.1` | App relaunch after update install |
+| Plugin                         | Version   | Purpose                                    |
+| :----------------------------- | :-------- | :----------------------------------------- |
+| `tauri-plugin-autostart`       | `^2.5.1`  | OS startup launch management               |
+| `tauri-plugin-single-instance` | `^2.4.3`  | Duplicate-launch prevention & window focus |
+| `tauri-plugin-updater`         | `^2.10.1` | GitHub Releases auto-update                |
+| `tauri-plugin-process`         | `^2.3.1`  | App relaunch after update install          |
 
 ---
 
@@ -348,20 +373,24 @@ Turning this template into your own application, in order:
 
 ## 🧰 Troubleshooting Cheatsheet
 
-| Symptom | Fix |
-| :--- | :--- |
-| App quits when closing the window | That's the default (`minimize_to_tray: false`). Enable the toggle in Preferences. |
-| No tray icon on Linux | System tray requires `libayatana-appindicator3-dev` + `libxdo-dev` (and a tray-supporting desktop shell). CI installs them for Ubuntu. |
-| Devtools not opening | WebView2 devtools are disabled in release builds by design; in dev, right-click → Inspect or `bun run tauri dev -- --devtools`. |
-| "Update endpoint not found (GitHub release pending)" | No release published yet, or `endpoints` URL doesn't match your repo. Publish a tag via the release workflow. |
-| Version mismatch between files | Run `bun run before-commit` (sync) or `--check` (diagnose). CI blocks drifted pushes. |
-| White flash on app start | Shouldn't happen — `index.html` paints `#000` inline. If it returns, verify the inline `<style>` survived bundling. |
-| `cargo` commands fail after edits | Run `bun run before-commit` (refreshes `Cargo.lock` root entry) or `cargo check` inside `src-tauri/`. |
+| Symptom                                              | Fix                                                                                                                                    |
+| :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
+| App quits when closing the window                    | That's the default (`minimize_to_tray: false`). Enable the toggle in Preferences.                                                      |
+| No tray icon on Linux                                | System tray requires `libayatana-appindicator3-dev` + `libxdo-dev` (and a tray-supporting desktop shell). CI installs them for Ubuntu. |
+| Devtools not opening                                 | WebView2 devtools are disabled in release builds by design; in dev, right-click → Inspect or `bun run tauri dev -- --devtools`.        |
+| "Update endpoint not found (GitHub release pending)" | No release published yet, or `endpoints` URL doesn't match your repo. Publish a tag via the release workflow.                          |
+| Version mismatch between files                       | Run `bun run before-commit` (sync) or `--check` (diagnose). CI blocks drifted pushes.                                                  |
+| White flash on app start                             | Shouldn't happen — `index.html` paints `#000` inline. If it returns, verify the inline `<style>` survived bundling.                    |
+| `cargo` commands fail after edits                    | Run `bun run before-commit` (refreshes `Cargo.lock` root entry) or `cargo check` inside `src-tauri/`.                                  |
 
 ---
 
 ## 📄 Documentation Links
 
+- [`BUILD.md`](BUILD.md) — Cross-platform build instructions, prerequisites & troubleshooting.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contribution guidelines, Conventional Commits & code quality standards.
+- [`SECURITY.md`](SECURITY.md) — Security policy, DPAPI/keychain storage & vulnerability disclosure.
+- [`CRUSH.md`](CRUSH.md) — Developer & AI agent rapid reference cheat sheet.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — Project directory tree & file inventory (auto-generated).
 - [`AUTO-UPDATE.md`](AUTO-UPDATE.md) — Auto-updater and GitHub Releases setup.
 - [`CHANGELOG.md`](CHANGELOG.md) — Release history.

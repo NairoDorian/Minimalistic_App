@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { invoke } from "@tauri-apps/api/core";
-import { Power, Minimize2 } from "lucide-react";
-import { ToggleSwitch } from "./ToggleSwitch";
-import { UpdateChecker } from "./UpdateChecker";
-import { isTauri } from "../lib/tauri";
+import { useState, useEffect, useCallback } from 'react';
+import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
+import { invoke } from '@tauri-apps/api/core';
+import { Power, Minimize2 } from 'lucide-react';
+import { ToggleSwitch } from './ToggleSwitch';
+import { UpdateChecker } from './UpdateChecker';
+import { isTauri } from '../lib/tauri';
 
 interface PreferencesTabProps {
   /** Callback for the shared footer status message (auto-cleared by App.tsx). */
@@ -33,11 +33,11 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
 
     Promise.all([
       isEnabled().catch((err: unknown) => {
-        console.warn("Autostart check failed:", err);
+        console.warn('Autostart check failed:', err);
         return false;
       }),
-      invoke<boolean>("get_minimize_to_tray").catch((err: unknown) => {
-        console.warn("Minimize to tray check failed:", err);
+      invoke<boolean>('get_minimize_to_tray').catch((err: unknown) => {
+        console.warn('Minimize to tray check failed:', err);
         return false;
       }),
     ]).then(([autostartEnabled, minimizeEnabled]) => {
@@ -63,15 +63,15 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
         try {
           if (newValue) {
             await enable();
-            onStatusChange("Autostart enabled for OS startup");
+            onStatusChange('Autostart enabled for OS startup');
           } else {
             await disable();
-            onStatusChange("Autostart disabled");
+            onStatusChange('Autostart disabled');
           }
         } catch (error: unknown) {
-          console.error("Failed to toggle autostart:", error);
+          console.error('Failed to toggle autostart:', error);
           setAutostart(!newValue);
-          onStatusChange("Error setting autostart");
+          onStatusChange('Error setting autostart');
         }
       } else {
         onStatusChange(`[Web Preview] Autostart set to ${newValue}`);
@@ -90,16 +90,16 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
 
       if (isTauri) {
         try {
-          await invoke("set_minimize_to_tray", { enabled: newValue });
+          await invoke('set_minimize_to_tray', { enabled: newValue });
           onStatusChange(
             newValue
-              ? "Minimize to tray on close enabled (Saved)"
-              : "Quit on window close enabled (Saved)"
+              ? 'Minimize to tray on close enabled (Saved)'
+              : 'Quit on window close enabled (Saved)'
           );
         } catch (error: unknown) {
-          console.error("Failed to update minimize to tray preference:", error);
+          console.error('Failed to update minimize to tray preference:', error);
           setMinimizeToTray(!newValue);
-          onStatusChange("Error saving tray preference");
+          onStatusChange('Error saving tray preference');
         }
       } else {
         onStatusChange(`[Web Preview] Minimize to tray set to ${newValue}`);

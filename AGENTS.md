@@ -12,20 +12,22 @@ This repository contains a cross-platform minimalistic desktop application templ
 >
 > **2. Ultimate Testing Command**:
 > The **ONLY** primary command to launch, test, and develop this application is:
+>
 > ```bash
 > bun run tauri dev
 > ```
 >
 > **3. Golden Rule — `rtk` Command Prefix**:
 > Always prefix commands with `rtk`. If RTK has a dedicated filter, use it; otherwise it passes the command through unchanged. RTK is always safe.
+>
 > - This applies to **every** command, including chains: `rtk git add . && rtk git commit -m "msg" && rtk git push`.
 > - `rtk bun ...` is NOT used — `rtk` is not needed in front of `bun` when running the sanctioned Bun scripts (see the command table below).
 >
-> | ❌ Wrong | ✅ Correct |
-> | :--- | :--- |
-> | `git add . && git commit -m "msg" && git push` | `rtk git add . && rtk git commit -m "msg" && rtk git push` |
-> | `git status` | `rtk git status` |
-> | `bun run typecheck` | `bun run typecheck` (Bun scripts run directly, no `rtk` wrapper needed) |
+> | ❌ Wrong                                       | ✅ Correct                                                              |
+> | :--------------------------------------------- | :---------------------------------------------------------------------- |
+> | `git add . && git commit -m "msg" && git push` | `rtk git add . && rtk git commit -m "msg" && rtk git push`              |
+> | `git status`                                   | `rtk git status`                                                        |
+> | `bun run typecheck`                            | `bun run typecheck` (Bun scripts run directly, no `rtk` wrapper needed) |
 
 ---
 
@@ -34,54 +36,73 @@ This repository contains a cross-platform minimalistic desktop application templ
 Follow this 7-step process when developing, modifying, or testing this repository:
 
 ### Step 1: Environment Verification
+
 Verify that Bun and Cargo/Rust toolchains are installed:
+
 ```bash
 bun --version
 cargo --version
 ```
 
 ### Step 2: Dependency Installation & Automated @latest Upgrades
+
 Install project dependencies using Bun:
+
 ```bash
 bun install
 ```
+
 To run the automated **End-to-End Dual-Ecosystem & Sub-Dependency Upgrade Pipeline**:
+
 ```bash
 bun run update-deps
 ```
 
 ### Step 3: Development & Primary Testing
+
 Run the app in live development mode using the ultimate test command:
+
 ```bash
 bun run tauri dev
 ```
+
 - **Left-Click Tray Icon**: Toggles GUI window show/hide.
 - **Right-Click Tray Icon**: Opens context menu with **Open / Hide GUI**, **Check for Updates...**, and **Quit**.
 - **Close Button (X)**: Minimizes to taskbar tray when enabled in preferences (default OFF — closing quits).
 
 ### Step 4: Version Sync Before Committing
+
 Before any commit, synchronize the single global application version (`APP_VERSION` in `scripts/version.ts`) across all mirrors:
+
 ```bash
 bun run before-commit
 ```
+
 - `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` are auto-synced mirrors — NEVER hardcode or edit the version there; only `scripts/version.ts` (or `bun run before-commit --bump <major|minor|patch>`) may change it.
 - Use `bun run before-commit --check` for read-only validation (exit 1 on drift) in CI or pre-commit hooks. CI runs this on every push/PR.
 
 ### Step 5: Cleaning Build Target Artifacts (Optional)
+
 To purge `src-tauri/target/` build directories completely:
+
 ```bash
 bun run clean
 ```
 
 ### Step 6: Architecture Maintenance
+
 Whenever files are added, modified, or removed, run the architecture map generator:
+
 ```bash
 bun run arch
 ```
+
 - Ensures [`ARCHITECTURE.md`](ARCHITECTURE.md) contains the up-to-date directory tree and file inventory table without code dumps.
 
 ### Step 7: Production Build Validation
+
 Validate production compilation and native bundle generation:
+
 ```bash
 bun run build
 ```
@@ -93,64 +114,79 @@ bun run build
 Follow these steps **in this order** whenever a version bump / release is requested. Do NOT skip or reorder them.
 
 ### 1. Bump the Version (single command, propagates everywhere)
+
 ```bash
 bun run before-commit --bump <major|minor|patch>
 ```
+
 - Updates `scripts/version.ts` (the **only** place the version is defined) and auto-syncs the mirrors: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo update`.
 - NEVER hand-edit the version in any mirror file — the script owns them.
 
 #### Choosing `major`, `minor`, or `patch` (SemVer semantics)
 
-| Bump | Example | Use when | Result |
-| :--- | :--- | :--- | :--- |
-| `patch` | `0.9.0 → 0.9.1` | Backward-compatible **bug fixes**, corrections, and polish — no new behavior. The safest and most common bump. | patch digit `+1` |
-| `minor` | `0.9.0 → 0.10.0` | New **backward-compatible features** or additions (new toggles, IPC commands, views). | minor `+1`, patch → `0` |
-| `major` | `0.9.0 → 1.0.0` | **Breaking changes** — incompatible config/behavior/IPC changes, removals, renames, new runtime requirements. | major `+1`, minor → `0`, patch → `0` |
+| Bump    | Example          | Use when                                                                                                       | Result                               |
+| :------ | :--------------- | :------------------------------------------------------------------------------------------------------------- | :----------------------------------- |
+| `patch` | `0.9.0 → 0.9.1`  | Backward-compatible **bug fixes**, corrections, and polish — no new behavior. The safest and most common bump. | patch digit `+1`                     |
+| `minor` | `0.9.0 → 0.10.0` | New **backward-compatible features** or additions (new toggles, IPC commands, views).                          | minor `+1`, patch → `0`              |
+| `major` | `0.9.0 → 1.0.0`  | **Breaking changes** — incompatible config/behavior/IPC changes, removals, renames, new runtime requirements.  | major `+1`, minor → `0`, patch → `0` |
 
 > [!NOTE]
-> SemVer nuance: while below `1.0.0` (0.x), *anything* may be considered breaking. The template convention: **patch = fixes, minor = features, major = deliberate breaking overhaul**. When the user does not specify, ask which level they want.
+> SemVer nuance: while below `1.0.0` (0.x), _anything_ may be considered breaking. The template convention: **patch = fixes, minor = features, major = deliberate breaking overhaul**. When the user does not specify, ask which level they want.
 
 ### 2. Update `CHANGELOG.md` (top of file)
+
 Add the new release entry with the exact version and today's date:
+
 ```markdown
 ## [X.Y.Z] - YYYY-MM-DD
 
 ### <Round / Release Title>
 
 #### ⚛️ <Category>
+
 - **Change**: Description.
 ```
+
 - The `## [X.Y.Z]` header **must** match the bumped version — `before-commit --check` warns when it's missing. Each version may appear **exactly once** in the file (Keep a Changelog rule).
 - Do this BEFORE regenerating the architecture map, so metrics include the edit.
 
 ### 3. Update Other Docs ONLY if Version-Dependent
+
 `README.md`, `AUTO-UPDATE.md`, and `AGENTS.md` usually need no changes for a patch bump. Only edit them when their content actually references version-dependent facts (e.g. tech-stack tables, new scripts, changed workflow steps). Do not churn docs for the sake of it.
 
 ### 4. Regenerate the Architecture Map
+
 ```bash
 bun run arch
 ```
+
 - `ARCHITECTURE.md` embeds per-file metrics (sizes, lines, tokens) — the changelog edit and any new files change these, so regeneration MUST happen after steps 1–3.
 
 ### 5. Validate Everything (order: check, then typecheck)
+
 ```bash
 bun run before-commit --check   # all mirrors at X.Y.Z — exit 1 on drift
 bun run typecheck               # bun x tsc -b
 ```
+
 - If `--check` fails, run `bun run before-commit` (plain sync) or re-run `--bump` and fix the drift before committing.
 
 ### 6. Commit (repository message style)
+
 ```bash
 rtk git add <files>
 rtk git commit -m "feat(vX.Y.Z): <short summary> — <key changes, comma separated>"
 ```
+
 - Style precedent: `feat(v0.8.0): deep audit round 5 — single-instance guard, ToggleSwitch extraction, ...`
 - Only commit when explicitly asked. Inspect `rtk git status` / `rtk git diff` first; never stage secrets or build artifacts (they are gitignored).
 
 ### 7. Push
+
 ```bash
 rtk git push origin main
 ```
+
 - If the commit was already pushed and you must amend it (`rtk git commit --amend`), push with `--force-with-lease` (never bare `--force`).
 
 > [!IMPORTANT]
@@ -160,21 +196,22 @@ rtk git push origin main
 
 ### `bun run before-commit` Reference — Every Mode, Explained
 
-| Command | What it does | Writes? |
-| :--- | :--- | :--- |
-| `bun run before-commit` | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes |
-| `bun run before-commit --check` | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks. | No |
-| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 5 quality gates sequentially: version check, TS typecheck (`tsc -b`), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown. | Yes (`arch`) |
-| `bun run before-commit --bump patch` | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump minor` | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump major` | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --set <version>` | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors. | Yes (incl. `version.ts`) |
-| `bun run before-commit --stage` | Automatically stages updated mirror files with `git add`. | Git index |
-| `bun run before-commit --install-hook` | Installs `.git/hooks/pre-commit` (runs `--check` + `typecheck` before every commit). | Yes (hook file) |
-| `bun run before-commit --uninstall-hook` | Removes the `.git/hooks/pre-commit` hook cleanly. | Yes (removes hook) |
-| `bun run before-commit --help` | Prints the usage summary and exits `0`. | No |
+| Command                                                | What it does                                                                                                                                                                                                                                                     | Writes?                  |
+| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
+| `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes                      |
+| `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                  | No                       |
+| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 5 quality gates sequentially: version check, TS typecheck (`tsc -b`), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown.                                   | Yes (`arch`)             |
+| `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                             | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
+| `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                         | Yes (incl. `version.ts`) |
+| `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                        | Git index                |
+| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `typecheck` before every commit).                                                                                                                                                                             | Yes (hook file)          |
+| `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                | Yes (removes hook)       |
+| `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                          | No                       |
 
 **Behavioral details:**
+
 - **Changelog advisory**: after any bump, if `CHANGELOG.md` has no `## [<new version>]` header yet, the script prints a non-blocking `⚠️` reminder.
 - **Exit codes**: `0` = all mirrors in sync / success; `1` = drift (`--check`), invalid usage, missing mirror files, or non-git repo (`--install-hook`).
 - **Rejected combinations**: `--bump` without a part, unknown bump part, `--set` with invalid semver, and combining `--check` with `--bump`/`--set`.
@@ -183,27 +220,31 @@ rtk git push origin main
 
 ## 🔧 Common Tasks — Quick Reference
 
-| Task | Command(s) |
-| :--- | :--- |
-| Live development | `bun run tauri dev` |
-| Add a runtime dependency | `bun add <package>` |
-| Add a dev dependency | `bun add -d <package>` |
-| Upgrade everything to @latest | `bun run update-deps` |
-| Preview upgrades (no changes) | `bun run update-deps --dry-run` |
-| Upgrade with pre-releases | `bun run update-deps --prerelease` (beta/alpha/RC for direct deps; strictly-newer targets only) |
-| Bump version (then sync mirrors) | `bun run before-commit --bump <major\|minor\|patch>` |
-| Set exact custom version | `bun run before-commit --set <semver>` |
-| Check version drift (read-only) | `bun run before-commit --check` |
-| Full pre-commit test suite | `bun run validate` (or `bun run before-commit --full`) |
-| Auto-stage synced mirrors | `bun run before-commit --stage` |
-| Install pre-commit git hook | `bun run before-commit --install-hook` |
-| Uninstall pre-commit git hook | `bun run before-commit --uninstall-hook` |
-| Type-check the whole workspace | `bun run typecheck` |
-| Regenerate `ARCHITECTURE.md` | `bun run arch` |
-| Regenerate all app icons | `bun run create-icons` |
-| Purge Rust build artifacts | `bun run clean` |
-| Production build | `bun run build` |
-| Commit / push | `rtk git add <files>` → `rtk git commit -m "feat(vX.Y.Z): ..."` → `rtk git push origin main` |
+| Task                                     | Command(s)                                                                                      |
+| :--------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| Live development                         | `bun run tauri dev`                                                                             |
+| Add a runtime dependency                 | `bun add <package>`                                                                             |
+| Add a dev dependency                     | `bun add -d <package>`                                                                          |
+| Upgrade everything to @latest            | `bun run update-deps`                                                                           |
+| Preview upgrades (no changes)            | `bun run update-deps --dry-run`                                                                 |
+| Upgrade with pre-releases                | `bun run update-deps --prerelease` (beta/alpha/RC for direct deps; strictly-newer targets only) |
+| Bump version (then sync mirrors)         | `bun run before-commit --bump <major\|minor\|patch>`                                            |
+| Set exact custom version                 | `bun run before-commit --set <semver>`                                                          |
+| Check version drift (read-only)          | `bun run before-commit --check`                                                                 |
+| Full pre-commit test suite               | `bun run validate` (or `bun run before-commit --full`)                                          |
+| Auto-stage synced mirrors                | `bun run before-commit --stage`                                                                 |
+| Install pre-commit git hook              | `bun run before-commit --install-hook`                                                          |
+| Uninstall pre-commit git hook            | `bun run before-commit --uninstall-hook`                                                        |
+| Format codebase (Prettier + cargo fmt)   | `bun run format`                                                                                |
+| Check formatting without modifying files | `bun run format:check`                                                                          |
+| Format frontend only (Prettier)          | `bun run format:frontend`                                                                       |
+| Format backend only (cargo fmt)          | `bun run format:backend`                                                                        |
+| Type-check the whole workspace           | `bun run typecheck`                                                                             |
+| Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
+| Regenerate all app icons                 | `bun run create-icons`                                                                          |
+| Purge Rust build artifacts               | `bun run clean`                                                                                 |
+| Production build                         | `bun run build`                                                                                 |
+| Commit / push                            | `rtk git add <files>` → `rtk git commit -m "feat(vX.Y.Z): ..."` → `rtk git push origin main`    |
 
 ---
 
@@ -246,7 +287,7 @@ rtk git push origin main
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
 7. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
-   - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining *why*, not just *what*.
+   - Maintain [`README.md`](README.md), [`BUILD.md`](BUILD.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+   - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining _why_, not just _what_.
    - After any file add/remove/rename, regenerate the architecture map (`bun run arch`).
    - Each changelog version header may appear exactly once; keep the exact `## [X.Y.Z] - YYYY-MM-DD` format.

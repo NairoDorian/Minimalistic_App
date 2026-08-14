@@ -1,0 +1,123 @@
+# Contributing to Minimalistic App
+
+Thank you for your interest in contributing to **Minimalistic App**! This guide outlines our development workflow, coding standards, and contribution processes.
+
+---
+
+## 📖 Philosophy & Core Principles
+
+1. **Minimalistic & Focused**: Keep dependencies lean, architecture modular, and binary footprints lightweight.
+2. **AMOLED Deep Black Aesthetic**: Maintain the 100% `#000000` AMOLED dark theme with frosted glassmorphic containers and subtle cyan/emerald glows.
+3. **Robust Cross-Platform Reliability**: The app runs as a resident background taskbar utility with rock-solid single-instance lifecycle management, safe Win32 shutdown, and crash-resistant atomic persistence.
+4. **Accessible by Default**: Full keyboard navigability (roving tabIndex, ARIA live regions, semantic roles) on all UI controls.
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+- **Bun** (v1.2+) - The primary package manager.
+- **Rust & Cargo** (2024 Edition / stable).
+- Platform-specific build tools (see [BUILD.md](BUILD.md)).
+
+### 2. Fork & Setup
+
+```bash
+# 1. Clone your fork
+git clone https://github.com/YOUR_USERNAME/minimalistic-app.git
+cd minimalistic-app
+
+# 2. Install dependencies
+bun install
+
+# 3. Launch live development
+bun run tauri dev
+```
+
+---
+
+## 🌿 Git Branching Strategy
+
+- **`main`**: Production-ready branch. Never commit directly to `main`.
+- **Feature Branches**:
+  - `feature/` - New capabilities, UI features, or IPC commands (e.g. `feature/audio-alerts`).
+  - `fix/` - Bug fixes, stability patches, and corrections (e.g. `fix/tray-unminimize-focus`).
+  - `refactor/` - Architectural cleanups without behavioral changes (e.g. `refactor/tab-state`).
+  - `docs/` - Documentation updates and architecture maps (e.g. `docs/update-build-instructions`).
+
+---
+
+## 📝 Conventional Commits Standard
+
+Commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+<type>(<scope>): <short description>
+```
+
+### Commit Types:
+
+- `feat`: New feature or user-facing addition (e.g. `feat(tray): add shortcut trigger`).
+- `fix`: Bug fix (e.g. `fix(persistence): prevent race condition during atomic rename`).
+- `docs`: Documentation updates (e.g. `docs(build): add Fedora dependencies`).
+- `style`: Formatting, whitespace, or Prettier adjustments without code logic changes.
+- `refactor`: Code restructuring without functional changes.
+- `chore`: Dependency updates, tooling, and build script maintenance.
+
+### Release Commit Style:
+
+For version releases, use the standardized format:
+
+```bash
+rtk git commit -m "feat(v0.11.0): deep audit round 5 — single-instance guard, ToggleSwitch extraction"
+```
+
+---
+
+## 💡 Code Quality & Architecture Standards
+
+### 1. Rust Backend Conventions (`src-tauri/src/lib.rs`)
+
+- **Poison-Safe Mutex Locking**: Never call `mutex.lock().unwrap()`. Always use the poison-recovering `lock_guard()` helper.
+- **Disk-First Atomic Persistence**: When persisting configuration to disk:
+  1. Write serialized JSON to a temporary file (`settings.json.tmp`).
+  2. Atomically rename to `settings.json`.
+  3. Only mutate in-memory state after the disk write succeeds.
+- **Descriptive Error Contracts**: IPC functions returning `Result<(), String>` must provide clear, user-actionable error messages.
+- **Single Source of Truth**: Read metadata from `AppHandle::package_info()`; never hardcode version or app names.
+
+### 2. React 19 & TypeScript Conventions (`src/`)
+
+- **Modern JSX Transform**: Do not write `import React from 'react'`; import named symbols only (e.g. `import { useState, useCallback } from 'react'`).
+- **Strict Typing**: Strict TypeScript with `noUnusedLocals` and `verbatimModuleSyntax` safety. Never use `any`; use `unknown` with narrowing (`if (err instanceof Error)`).
+- **ARIA Accessibility**:
+  - Tabs: `role="tablist"`, `role="tab"`, `role="tabpanel"`, with keyboard arrow handling.
+  - Toggles: `role="switch"`, `aria-checked`, Space/Enter triggers, and visually-hidden checkboxes.
+  - Dynamic status: `aria-live="polite"`.
+- **Optimistic UI with Rollback**: Toggle switches update state immediately for instantaneous response, rolling back if the underlying IPC call rejects.
+- **Component Modularity**: Keep tab views, toggle switches, and update checkers decoupled in separate component files under `src/components/`.
+
+### 3. Formatting Standards
+
+- Keep files formatted with Prettier:
+  ```bash
+  bun run format
+  ```
+- Validate format compliance before pushing:
+  ```bash
+  bun run format:check
+  ```
+
+---
+
+## ✅ Pull Request Checklist
+
+Before submitting a Pull Request:
+
+1. [ ] **Format Check**: `bun run format:check` passes without errors.
+2. [ ] **Type Check**: `bun run typecheck` (`bun x tsc -b`) passes with 0 errors.
+3. [ ] **Version Sync**: `bun run before-commit --check` confirms all mirrors are synchronized.
+4. [ ] **Architecture Map**: `bun run arch` has updated `ARCHITECTURE.md` with any new or modified files.
+5. [ ] **Full Validation Gate**: `bun run validate` passes 100% of all 5 pre-commit checks.
+6. [ ] **Documentation**: Any new feature or configuration setting is documented in `README.md` and `CHANGELOG.md`.

@@ -1,0 +1,17 @@
+# Build artifacts and caches
+dist/
+src-tauri/target/
+src-tauri/gen/
+node_modules/
+.git/
+.vscode/
+
+# Lockfiles & build info
+bun.lock
+src-tauri/Cargo.lock
+tsconfig.tsbuildinfo
+
+# Binary files & icons
+*.png
+*.ico
+*.icns

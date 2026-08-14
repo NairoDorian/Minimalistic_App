@@ -14,6 +14,10 @@
     "arch": "bun scripts/generate-arch.ts",
     "create-icons": "bun scripts/create-icons.ts",
     "update-deps": "bun scripts/update-deps.ts",
+    "format": "prettier --write . && cd src-tauri && cargo fmt",
+    "format:check": "prettier --check . && cd src-tauri && cargo fmt -- --check",
+    "format:frontend": "prettier --write .",
+    "format:backend": "cd src-tauri && cargo fmt",
     "clean": "cargo clean --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
@@ -31,6 +35,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
+    "prettier": "^3.5.3",
     "repomix": "1.18.0",
     "typescript": "7.1.0-dev.20260813.1",
     "vite": "8.2.1"

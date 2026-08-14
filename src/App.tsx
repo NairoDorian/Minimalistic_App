@@ -1,15 +1,15 @@
-import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Settings, Info, AppWindow, Shield, type LucideIcon } from "lucide-react";
-import { PreferencesTab } from "./components/PreferencesTab";
-import { AboutTab, type AppInfo, WEB_PREVIEW_APP_INFO } from "./components/AboutTab";
-import { UpdateChecker } from "./components/UpdateChecker";
-import { isTauri } from "./lib/tauri";
+import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { Settings, Info, AppWindow, Shield, type LucideIcon } from 'lucide-react';
+import { PreferencesTab } from './components/PreferencesTab';
+import { AboutTab, type AppInfo, WEB_PREVIEW_APP_INFO } from './components/AboutTab';
+import { UpdateChecker } from './components/UpdateChecker';
+import { isTauri } from './lib/tauri';
 
-type TabType = "preferences" | "about";
+type TabType = 'preferences' | 'about';
 
 /** Tab order used for roving-tabindex keyboard navigation (Home / End). */
-const TAB_ORDER: readonly TabType[] = ["preferences", "about"];
+const TAB_ORDER: readonly TabType[] = ['preferences', 'about'];
 
 /**
  * Single source of truth for the tab bar: id (drives DOM ids + state), label,
@@ -17,8 +17,8 @@ const TAB_ORDER: readonly TabType[] = ["preferences", "about"];
  * from each other in markup or accessibility attributes.
  */
 const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
-  { id: "preferences", label: "Preferences", icon: Settings },
-  { id: "about", label: "System & About", icon: Info },
+  { id: 'preferences', label: 'Preferences', icon: Settings },
+  { id: 'about', label: 'System & About', icon: Info },
 ];
 
 /**
@@ -37,8 +37,8 @@ const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
  * - `AboutTab`      — purely presentational metadata view.
  */
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabType>("preferences");
-  const [statusMessage, setStatusMessage] = useState<string>("Ready");
+  const [activeTab, setActiveTab] = useState<TabType>('preferences');
+  const [statusMessage, setStatusMessage] = useState<string>('Ready');
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   // Timeout handle for the auto-clearing footer status message.
@@ -60,10 +60,10 @@ export default function App() {
       return;
     }
 
-    invoke<AppInfo>("get_app_info")
+    invoke<AppInfo>('get_app_info')
       .then(setAppInfo)
       .catch((err: unknown) => {
-        console.warn("App info IPC query failed:", err);
+        console.warn('App info IPC query failed:', err);
       });
   }, []);
 
@@ -74,7 +74,7 @@ export default function App() {
   const updateStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
-    statusTimeoutRef.current = setTimeout(() => setStatusMessage("Ready"), 4000);
+    statusTimeoutRef.current = setTimeout(() => setStatusMessage('Ready'), 4000);
   }, []);
 
   /**
@@ -87,19 +87,19 @@ export default function App() {
     let next: TabType | null = null;
 
     switch (e.key) {
-      case "ArrowRight":
+      case 'ArrowRight':
         e.preventDefault();
         next = TAB_ORDER[(index + 1) % TAB_ORDER.length] ?? null;
         break;
-      case "ArrowLeft":
+      case 'ArrowLeft':
         e.preventDefault();
         next = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length] ?? null;
         break;
-      case "Home":
+      case 'Home':
         e.preventDefault();
         next = TAB_ORDER[0] ?? null;
         break;
-      case "End":
+      case 'End':
         e.preventDefault();
         next = TAB_ORDER[TAB_ORDER.length - 1] ?? null;
         break;
@@ -122,9 +122,9 @@ export default function App() {
           </div>
           <span className="brand-title">Minimalistic App</span>
         </div>
-        <div className={`tray-status-badge ${isTauri ? "tray-active" : "web-preview"}`}>
+        <div className={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
           <span className="status-dot"></span>
-          <span>{isTauri ? "System Tray Active" : "Web Preview"}</span>
+          <span>{isTauri ? 'System Tray Active' : 'Web Preview'}</span>
         </div>
       </header>
 
@@ -137,7 +137,7 @@ export default function App() {
               key={id}
               type="button"
               id={`tab-${id}`}
-              className={`tab-btn ${activeTab === id ? "active" : ""}`}
+              className={`tab-btn ${activeTab === id ? 'active' : ''}`}
               onClick={() => setActiveTab(id)}
               onKeyDown={(e) => handleTabKeyDown(e, id)}
               aria-selected={activeTab === id}
@@ -152,7 +152,7 @@ export default function App() {
         </nav>
 
         {/* Active Tab Panel (ternary so the inactive panel unmounts) */}
-        {activeTab === "preferences" ? (
+        {activeTab === 'preferences' ? (
           <PreferencesTab onStatusChange={updateStatus} />
         ) : (
           <AboutTab appInfo={appInfo} onStatusChange={updateStatus} />

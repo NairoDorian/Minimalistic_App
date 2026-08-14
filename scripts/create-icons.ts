@@ -30,10 +30,10 @@ function createValidPngBuffer(width: number, height: number): Buffer {
     rawData[offset] = 0; // Filter 0 (None)
     for (let x = 0; x < width; x++) {
       const px = offset + 1 + x * 4;
-      rawData[px] = BRAND[0];       // R
-      rawData[px + 1] = BRAND[1];   // G
-      rawData[px + 2] = BRAND[2];   // B
-      rawData[px + 3] = 255;        // A
+      rawData[px] = BRAND[0]; // R
+      rawData[px + 1] = BRAND[1]; // G
+      rawData[px + 2] = BRAND[2]; // B
+      rawData[px + 3] = 255; // A
     }
   }
 
@@ -53,8 +53,8 @@ function createValidPngBuffer(width: number, height: number): Buffer {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
-  ihdr.writeUInt8(8, 8);  // bit depth 8
-  ihdr.writeUInt8(6, 9);  // color type 6 (RGBA)
+  ihdr.writeUInt8(8, 8); // bit depth 8
+  ihdr.writeUInt8(6, 9); // color type 6 (RGBA)
   ihdr.writeUInt8(0, 10); // compression
   ihdr.writeUInt8(0, 11); // filter
   ihdr.writeUInt8(0, 12); // interlace
@@ -86,9 +86,9 @@ function createIco(entries: readonly { size: number; png: Buffer }[]): Buffer {
   const headerSize = 6 + entries.length * 16;
   const header = Buffer.alloc(headerSize);
 
-  header.writeUInt16LE(0, 0);                       // Reserved
-  header.writeUInt16LE(1, 2);                       // Type 1 = ICO
-  header.writeUInt16LE(entries.length, 4);          // Image count
+  header.writeUInt16LE(0, 0); // Reserved
+  header.writeUInt16LE(1, 2); // Type 1 = ICO
+  header.writeUInt16LE(entries.length, 4); // Image count
 
   let offset = headerSize;
   entries.forEach((entry, i) => {
@@ -96,12 +96,12 @@ function createIco(entries: readonly { size: number; png: Buffer }[]): Buffer {
     // 0 means 256px in the ICO dimension byte; any 16-255 size fits in one byte.
     header.writeUInt8(entry.size >= 256 ? 0 : entry.size, base + 0); // Width
     header.writeUInt8(entry.size >= 256 ? 0 : entry.size, base + 1); // Height
-    header.writeUInt8(0, base + 2);                 // Color count
-    header.writeUInt8(0, base + 3);                 // Reserved
-    header.writeUInt16LE(1, base + 4);              // Planes
-    header.writeUInt16LE(32, base + 6);             // Bits per pixel
+    header.writeUInt8(0, base + 2); // Color count
+    header.writeUInt8(0, base + 3); // Reserved
+    header.writeUInt16LE(1, base + 4); // Planes
+    header.writeUInt16LE(32, base + 6); // Bits per pixel
     header.writeUInt32LE(entry.png.length, base + 8); // Size of PNG data
-    header.writeUInt32LE(offset, base + 12);        // Offset to PNG data
+    header.writeUInt32LE(offset, base + 12); // Offset to PNG data
     offset += entry.png.length;
   });
 
@@ -134,24 +134,22 @@ const sizes = [16, 32, 48, 64, 128, 256, 512, 1024] as const;
 const pngs = new Map<number, Buffer>(sizes.map((s) => [s, getPng(s)]));
 
 // --- Multi-resolution Windows ICO (16 / 32 / 48 / 64 / 128 / 256) ---
-const ico = createIco(
-  [16, 32, 48, 64, 128, 256].map((size) => ({ size, png: pngs.get(size)! }))
-);
+const ico = createIco([16, 32, 48, 64, 128, 256].map((size) => ({ size, png: pngs.get(size)! })));
 
 // --- Multi-resolution macOS ICNS (base + retina variants) ---
 const icns = createIcns([
-  { type: 'icp4', png: pngs.get(16)! },    // 16x16
-  { type: 'icp5', png: pngs.get(32)! },    // 32x32
-  { type: 'icp6', png: pngs.get(64)! },    // 64x64
-  { type: 'ic07', png: pngs.get(128)! },   // 128x128
-  { type: 'ic08', png: pngs.get(256)! },   // 256x256
-  { type: 'ic09', png: pngs.get(512)! },   // 512x512
-  { type: 'ic10', png: pngs.get(1024)! },  // 1024x1024
-  { type: 'ic11', png: pngs.get(32)! },    // 16x16 @2x
-  { type: 'ic12', png: pngs.get(64)! },    // 32x32 @2x
-  { type: 'ic13', png: pngs.get(256)! },   // 128x128 @2x
-  { type: 'ic14', png: pngs.get(512)! },   // 256x256 @2x
-  { type: 'ic15', png: pngs.get(1024)! },  // 512x512 @2x
+  { type: 'icp4', png: pngs.get(16)! }, // 16x16
+  { type: 'icp5', png: pngs.get(32)! }, // 32x32
+  { type: 'icp6', png: pngs.get(64)! }, // 64x64
+  { type: 'ic07', png: pngs.get(128)! }, // 128x128
+  { type: 'ic08', png: pngs.get(256)! }, // 256x256
+  { type: 'ic09', png: pngs.get(512)! }, // 512x512
+  { type: 'ic10', png: pngs.get(1024)! }, // 1024x1024
+  { type: 'ic11', png: pngs.get(32)! }, // 16x16 @2x
+  { type: 'ic12', png: pngs.get(64)! }, // 32x32 @2x
+  { type: 'ic13', png: pngs.get(256)! }, // 128x128 @2x
+  { type: 'ic14', png: pngs.get(512)! }, // 256x256 @2x
+  { type: 'ic15', png: pngs.get(1024)! }, // 512x512 @2x
 ]);
 
 const iconsDir = path.resolve('src-tauri/icons');

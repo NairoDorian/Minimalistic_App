@@ -1,6 +1,6 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { APP_VERSION } from "./scripts/version.ts";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { APP_VERSION } from './scripts/version.ts';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -23,7 +23,7 @@ export default defineConfig({
     // Target the embedded webview baseline (Chromium 105 / WebView2 on Windows,
     // modern WKWebView & WebKitGTK on macOS/Linux) — avoids unnecessary
     // transpilation of ES features the embedded browser already supports natively.
-    target: ["chrome105"],
+    target: ['chrome105'],
   },
 
   server: {
@@ -32,13 +32,13 @@ export default defineConfig({
     host: host || false,
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: 'ws',
           host,
           port: 1421,
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: ['**/src-tauri/**'],
     },
   },
 });
