@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Minimalistic App",
         "width": 440,
         "height": 560,

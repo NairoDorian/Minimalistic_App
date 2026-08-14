@@ -312,6 +312,9 @@ pub fn run() {
             // Store tray handle in app state to prevent garbage collection / drop
             app.manage(tray);
 
+            // Ensure window is shown, unminimized, and focused in the foreground on initial launch
+            show_and_focus_window(app.handle());
+
             Ok(())
         })
         // Register IPC command handlers callable from React frontend
