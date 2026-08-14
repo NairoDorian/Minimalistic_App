@@ -14,6 +14,10 @@ import {
 const fileDescriptions: Record<string, string> = {
   '.gitignore':
     'Git ignore configuration excluding build artifacts, node_modules, and OS metadata.',
+  '.gitattributes':
+    'Git line-ending normalization (LF for code, CRLF for Windows scripts) and binary asset protection rules.',
+  '.editorconfig':
+    'Cross-editor workspace configuration for indentation, charset, and whitespace trimming.',
   '.prettierrc':
     'Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas.',
   '.prettierignore':
@@ -41,6 +45,8 @@ const fileDescriptions: Record<string, string> = {
     "User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command.",
   'BUILD.md':
     'Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides.',
+  'TESTING.md':
+    'Testing & QA guide detailing the 5-step automated validation gates and manual desktop verification matrix.',
   'CONTRIBUTING.md':
     'Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and React 19.',
   'SECURITY.md':
@@ -48,6 +54,9 @@ const fileDescriptions: Record<string, string> = {
   'CRUSH.md':
     'Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, React 19 patterns, and design tokens.',
   'CHANGELOG.md': 'Version history tracking releases and features starting with v0.1.0.',
+  LICENSE: 'Standard MIT open-source license.',
+  'THIRD_PARTY_LICENSES.md':
+    'Third-party software, font (Inter OFL-1.1), icon (Lucide MIT), and runtime license attributions.',
   'AGENTS.md':
     'Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository.',
   'AUTO-UPDATE.md':

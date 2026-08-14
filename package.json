@@ -9,6 +9,7 @@
     "build": "bun run tauri build",
     "tauri": "tauri",
     "typecheck": "bun x tsc -b",
+    "test": "bun scripts/before-commit.ts --full",
     "before-commit": "bun scripts/before-commit.ts",
     "validate": "bun scripts/before-commit.ts --full",
     "arch": "bun scripts/generate-arch.ts",

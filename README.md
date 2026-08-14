@@ -388,10 +388,13 @@ Turning this template into your own application, in order:
 ## 📄 Documentation Links
 
 - [`BUILD.md`](BUILD.md) — Cross-platform build instructions, prerequisites & troubleshooting.
+- [`TESTING.md`](TESTING.md) — Testing & QA guide: 5-step automated gates and manual desktop verification matrix.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contribution guidelines, Conventional Commits & code quality standards.
 - [`SECURITY.md`](SECURITY.md) — Security policy, DPAPI/keychain storage & vulnerability disclosure.
 - [`CRUSH.md`](CRUSH.md) — Developer & AI agent rapid reference cheat sheet.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — Project directory tree & file inventory (auto-generated).
 - [`AUTO-UPDATE.md`](AUTO-UPDATE.md) — Auto-updater and GitHub Releases setup.
 - [`CHANGELOG.md`](CHANGELOG.md) — Release history.
+- [`LICENSE`](LICENSE) — Standard MIT License.
+- [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) — Third-party licenses for bundled fonts, icons, and libraries.
 - [`AGENTS.md`](AGENTS.md) — Agent guidelines, SOP & best practices.

@@ -1,0 +1,120 @@
+# ==============================================================================
+# Git Attributes - Line Ending Normalization & Binary Asset Protection
+# ==============================================================================
+# This file ensures consistent line endings across Windows, macOS, and Linux.
+# All text files are normalized to LF on commit.
+# Binary files are explicitly marked to prevent corruption during checkouts.
+# ==============================================================================
+
+# Default: auto-detect text files, normalize to LF
+* text=auto eol=lf
+
+# ==============================================================================
+# TEXT FILES - Force LF
+# ==============================================================================
+
+# Source code & scripts
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.rs text eol=lf
+*.sh text eol=lf
+
+# Configuration & data
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+
+# Web assets
+*.html text eol=lf
+*.htm text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.svg text eol=lf
+
+# Git & editor configs
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.prettierrc text eol=lf
+.prettierignore text eol=lf
+.editorconfig text eol=lf
+
+# ==============================================================================
+# WINDOWS-SPECIFIC - Preserve CRLF for native Windows batch & PowerShell scripts
+# ==============================================================================
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.wxs text eol=crlf
+*.wxi text eol=crlf
+
+# ==============================================================================
+# BINARY FILES - Prevent line-ending manipulation and file corruption
+# ==============================================================================
+
+# Icons & Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.bmp binary
+*.tiff binary
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# Compiled Binaries & Libraries
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.lib binary
+*.a binary
+*.o binary
+*.rlib binary
+*.rmeta binary
+
+# Installers & Packages
+*.msi binary
+*.msix binary
+*.appx binary
+*.dmg binary
+*.pkg binary
+*.deb binary
+*.rpm binary
+*.AppImage binary
+
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.rar binary
+
+# Certificates & Keys
+*.cer binary
+*.crt binary
+*.der binary
+*.p12 binary
+*.pfx binary
+*.pem text eol=lf
+*.pub text eol=lf
+*.sig binary

@@ -1,0 +1,30 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# Top-most EditorConfig file
+root = true
+
+# Unix-style newlines with a newline ending every file
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Rust source files use 4-space indentation standard
+[*.rs]
+indent_style = space
+indent_size = 4
+
+# Windows batch and PowerShell scripts
+[*.{bat,cmd,ps1,psm1}]
+end_of_line = crlf
+
+# Makefiles require hard tabs
+[Makefile]
+indent_style = tab
+
+# Markdown files can use trailing whitespace for line breaks
+[*.md]
+trim_trailing_whitespace = false

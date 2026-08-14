@@ -45,12 +45,17 @@ Full architectural audit and enhancement elevating this starter template to prod
 #### 📚 Comprehensive Documentation Suite (`.md` Files)
 
 - **Cross-platform build guide (`BUILD.md`)**: Full multi-platform build instructions across Windows, macOS, and Linux covering toolchains, live dev mode, production packaging, and deep troubleshooting (e.g. Windows `MAX_PATH` path limits, Linux WebKit2GTK dependencies, macOS Gatekeeper).
+- **Testing & QA guide (`TESTING.md`)**: Detailed documentation of the 5-step automated pre-commit validation suite (`bun test` / `bun run validate`) and a complete manual desktop testing matrix covering tray actions, window lifecycle, and update simulation.
 - **Contributor guide & standards (`CONTRIBUTING.md`)**: Detailed contribution guidelines, Git branching strategy (`feature/*`, `fix/*`, `refactor/*`, `docs/*`), Conventional Commits specification, and coding rules for Rust and React 19 / TypeScript 7.
 - **Security architecture & policy (`SECURITY.md`)**: Comprehensive documentation of Tauri v2 capability scoping, atomic persistence guarantees, credential protection patterns (Windows DPAPI / macOS Keychain), and responsible vulnerability disclosure process.
 - **Developer & AI agent cheat sheet (`CRUSH.md`)**: Rapid reference cheat sheet with copy-paste code patterns for Tauri IPC, React 19 component skeletons, Rust error handling contracts, and Bun CLI scripts.
+- **Licensing & attribution (`LICENSE`, `THIRD_PARTY_LICENSES.md`)**: Standard MIT project license and complete open-source attribution for bundled assets (Inter font OFL-1.1, Lucide icons MIT, Tauri 2, React 19, Bun).
 
-#### 🛠️ Developer Tooling, Formatting & CI/CD Pipeline
+#### 🛠️ Repository Standards, Tooling & Build Optimization
 
+- **Line-ending & binary protection (`.gitattributes`)**: Normalized text files to LF (`* text=auto eol=lf`), preserved CRLF for Windows scripts, and declared explicit binary protection for icons, fonts, and binaries.
+- **Cross-editor configuration (`.editorconfig`)**: Multi-editor configuration standardizing indentation (2 spaces for JS/TS/CSS/JSON/MD, 4 spaces for Rust), UTF-8 encoding, and whitespace trimming.
+- **Cargo dev build speed optimization (`src-tauri/Cargo.toml`)**: Added `[profile.dev] incremental = true` and `[profile.dev.package."*"] debug = false` to skip dependency debuginfo generation for faster live dev reload.
 - **Prettier formatting pipeline**: Added `.prettierrc` and `.prettierignore` with automated formatting scripts (`bun run format`, `bun run format:check`, `bun run format:frontend`, `bun run format:backend`).
 - **VS Code workspace integration**: Added `.vscode/extensions.json` and `.vscode/settings.json` configuring format-on-save, Prettier default formatter, and `rust-analyzer` integration.
 - **Automated multi-platform release workflow (`.github/workflows/release.yml`)**: Automated Tauri 2 GitHub Actions release pipeline building Windows, macOS (Universal/ARM/Intel), and Linux bundles, extracting release notes from `CHANGELOG.md`, creating GitHub Draft Releases, and publishing signed updater bundles (`latest.json`).

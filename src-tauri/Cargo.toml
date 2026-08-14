@@ -21,3 +21,10 @@ serde_json = "^1.0.151"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.dev]
+incremental = true
+
+[profile.dev.package."*"]
+debug = false
+

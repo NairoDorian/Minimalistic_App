@@ -239,6 +239,7 @@ rtk git push origin main
 | Check formatting without modifying files | `bun run format:check`                                                                          |
 | Format frontend only (Prettier)          | `bun run format:frontend`                                                                       |
 | Format backend only (cargo fmt)          | `bun run format:backend`                                                                        |
+| Run full pre-commit test suite           | `bun test` (or `bun run validate`)                                                              |
 | Type-check the whole workspace           | `bun run typecheck`                                                                             |
 | Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
 | Regenerate all app icons                 | `bun run create-icons`                                                                          |
@@ -287,7 +288,7 @@ rtk git push origin main
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
 7. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`BUILD.md`](BUILD.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+   - Maintain [`README.md`](README.md), [`BUILD.md`](BUILD.md), [`TESTING.md`](TESTING.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`LICENSE`](LICENSE), [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
    - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining _why_, not just _what_.
    - After any file add/remove/rename, regenerate the architecture map (`bun run arch`).
    - Each changelog version header may appear exactly once; keep the exact `## [X.Y.Z] - YYYY-MM-DD` format.
