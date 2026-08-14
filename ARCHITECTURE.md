@@ -77,7 +77,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **44 files · 263.4 KB · 67,323 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **44 files · 264.3 KB · 67,581 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -90,14 +90,14 @@ Repomix metrics: **44 files · 263.4 KB · 67,323 tokens** (text files; binary a
 | `.prettierrc` | 200 B | 11 | 74 | 199 | Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas. |
 | `AGENTS.md` | 21.4 KB | 294 | 4550 | 21834 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 11.3 KB | 245 | 2636 | 11530 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
-| `BUILD.md` | 5.4 KB | 219 | 1516 | 5523 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
+| `BUILD.md` | 6.1 KB | 247 | 1698 | 6243 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
 | `CHANGELOG.md` | 50.6 KB | 533 | 12978 | 51413 | Version history tracking releases and features starting with v0.1.0. |
 | `CONTRIBUTING.md` | 5.0 KB | 123 | 1277 | 5154 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and React 19. |
 | `CRUSH.md` | 4.2 KB | 134 | 1068 | 4275 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, React 19 patterns, and design tokens. |
 | `index.html` | 912 B | 25 | 208 | 722 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
 | `LICENSE` | 1.1 KB | 21 | 223 | 1085 | Standard MIT open-source license. |
-| `package.json` | 1.5 KB | 44 | 529 | 1499 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
-| `README.md` | 28.8 KB | 400 | 6409 | 29002 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
+| `package.json` | 1.5 KB | 45 | 553 | 1567 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
+| `README.md` | 29.0 KB | 401 | 6461 | 29196 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 576 B | 26 | 163 | 575 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
 | `scripts/before-commit.ts` | 15.5 KB | 339 | 3420 | 12918 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.5 KB | 114 | 1529 | 4615 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |

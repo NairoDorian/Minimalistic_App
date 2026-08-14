@@ -204,6 +204,34 @@ If building on Windows fails due to deeply nested path errors:
    git config --system core.longpaths true
    ```
 
+### Windows: `Access is denied. (os error 5)` on `target\debug\minimalistic-app.exe`
+
+If `bun run tauri dev` or `cargo build` fails with:
+
+```
+error: failed to remove file `...target\debug\minimalistic-app.exe`
+Caused by:
+  Access is denied. (os error 5)
+```
+
+This occurs on Windows because an existing instance of `minimalistic-app.exe` is still running in the background or system tray, locking the executable file.
+
+**Fix:** Terminate the running background instance:
+
+```powershell
+# PowerShell:
+Stop-Process -Name "minimalistic-app" -Force -ErrorAction SilentlyContinue
+
+# Or via Command Prompt / cross-platform:
+taskkill /F /IM minimalistic-app.exe
+```
+
+Or run the dedicated Bun script:
+
+```bash
+bun run kill
+```
+
 ### Linux: `webkit2gtk-4.0` vs `webkit2gtk-4.1`
 
 Tauri 2 defaults to `webkit2gtk-4.1` (built against libsoup3). If you receive missing package errors on older Ubuntu versions (e.g. 20.04), install `libwebkit2gtk-4.0-dev` or upgrade to Ubuntu 22.04 LTS+.

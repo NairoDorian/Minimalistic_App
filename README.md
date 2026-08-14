@@ -382,6 +382,7 @@ Turning this template into your own application, in order:
 | Version mismatch between files                       | Run `bun run before-commit` (sync) or `--check` (diagnose). CI blocks drifted pushes.                                                  |
 | White flash on app start                             | Shouldn't happen — `index.html` paints `#000` inline. If it returns, verify the inline `<style>` survived bundling.                    |
 | `cargo` commands fail after edits                    | Run `bun run before-commit` (refreshes `Cargo.lock` root entry) or `cargo check` inside `src-tauri/`.                                  |
+| `Access is denied. (os error 5)` on `.exe`           | The app is still running in the background/tray. Run `bun run kill` or `Stop-Process -Name "minimalistic-app" -Force`.                 |
 
 ---
 
