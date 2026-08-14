@@ -205,6 +205,7 @@ Preferences serialize to JSON inside the OS config directory, **scoped by the ap
 | **macOS** | `~/Library/Application Support/com.minimalistic.app/settings.json` |
 
 - Corrupt or unreadable files log a `[settings]` warning and fall back to defaults (missing file = quiet defaults).
+- **Atomic persistence**: Writes serialize to an adjacent `.tmp` file and atomically rename over the destination, preventing 0-byte corrupt files on power loss or abrupt exit.
 - The Rust `Mutex` is held only for the in-memory mutation; disk I/O happens after the lock is dropped (never blocking IPC).
 - Poisoned-mutex panics are recovered transparently via the `lock_guard()` helper.
 
@@ -212,13 +213,13 @@ Preferences serialize to JSON inside the OS config directory, **scoped by the ap
 
 - Integrated GitHub Releases auto-updater powered by `tauri-plugin-updater` and `tauri-plugin-process`.
 - **Dual-variant component**: embedded **card** (Preferences tab, primary instance — auto-checks on mount and listens for tray events) and compact **footer** indicator (`autoCheckOnMount={false}`, `listenForEvents={false}` — never fires duplicate network requests).
-- **Stable event-listener pattern**: ref-based concurrency guards (`isCheckingRef`, `isInstallingRef`) keep the tray listener's `checkForUpdates` closure stable with an empty dep array.
+- **Stable event-listener pattern**: ref-based concurrency guards (`isCheckingRef`, `isInstallingRef`) and mount tracking keep the tray listener's `checkForUpdates` closure stable with an empty dep array.
 - Streamed download progress percentages (`Started` / `Progress` / `Finished` events), one-click app relaunch, collapsible release notes drawer, and descriptive error handling (404 → "Update endpoint not found").
 
 ### 🔢 Single-Source Version Management
 
 ```
-scripts/version.ts  (APP_VERSION = "0.9.0")  ← THE ONLY PLACE THE VERSION IS DEFINED
+scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS DEFINED
    │
    ├── package.json                (synced by before-commit.ts)
    ├── src-tauri/Cargo.toml        (synced by before-commit.ts)
@@ -233,19 +234,19 @@ scripts/version.ts  (APP_VERSION = "0.9.0")  ← THE ONLY PLACE THE VERSION IS D
 
 ### ⚙️ Preferences GUI & Modular Multi-Tab Layout
 
-- **Componentized tabs** (Round 8):
+- **Componentized tabs**:
   - `src/components/PreferencesTab.tsx` — owns the autostart / minimize-to-tray toggle state, their IPC initialization, and the embedded update-checker card.
-  - `src/components/AboutTab.tsx` — purely presentational System & About metadata view (also exports the shared `AppInfo` type and the browser-preview fallback).
+  - `src/components/AboutTab.tsx` — purely presentational System & About metadata view (also exports the shared `AppInfo` type, browser-preview fallback, and 1-click **Copy Diagnostics** markdown utility).
 - **Start at OS Launch Toggle** (Default: `OFF`): Managed via `@tauri-apps/plugin-autostart` (macOS AppleScript launcher, `--autostart` arg).
-- **Minimize to Taskbar on Close Toggle** (Default: `OFF`): When OFF, closing the window quits the app. When ON, closing hides to taskbar tray. Persisted to disk.
-- **Accessibility & Keyboard Control**: Full WAI-ARIA tabs pattern — roving `tabIndex`, `ArrowLeft` / `ArrowRight` cycling, `Home` / `End` jumps. Toggle switches use `role="switch"`, `aria-checked`, `tabIndex`, `onKeyDown` handlers (`Space` / `Enter` toggles), and `:focus-visible` focus ring styles.
+- **Minimize to Taskbar on Close Toggle** (Default: `OFF`): When OFF, closing the window quits the app. When ON, closing hides to taskbar tray. Persisted to disk atomically.
+- **Accessibility & Keyboard Control**: Full WAI-ARIA tabs pattern — roving `tabIndex`, `ArrowLeft` / `ArrowRight` cycling, `Home` / `End` jumps, and `tabIndex={0}` on `role="tabpanel"` cards for direct keyboard entry. Toggle switches use `role="switch"`, `aria-checked`, `aria-disabled`, `tabIndex`, `onKeyDown` handlers (`Space` / `Enter` toggles), and `:focus-visible` focus ring styles.
 - **React `<StrictMode>`**: enabled in `main.tsx` (dev-only double-invocation guard; all mount effects are idempotent).
-- **Native Window Drag Region**: Header bar supports `data-tauri-drag-region` for smooth custom window repositioning.
+- **Native Window Drag Region**: Header bar supports `data-tauri-drag-region` for smooth custom window repositioning with environment-aware tray/web badge.
 
 ### 🎨 100% AMOLED Pitch Black Aesthetic
 
 - True pitch black (`#000000`) AMOLED base background — painted inline in `index.html` to prevent any white flash before CSS loads.
-- Translucent frosted glass cards (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, and responsive custom toggle switches.
+- Translucent frosted glass cards (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, tactile `:active` micro-interactions, and responsive custom toggle switches.
 - Inter font with full antialiasing (`-webkit-font-smoothing` + `-moz-osx-font-smoothing`), `color-scheme: dark` for native dark scrollbars/controls, thin AMOLED scrollbars, and `prefers-reduced-motion` support.
 
 ### 🔒 Security, CI/CD & TypeScript Rigor
@@ -267,7 +268,7 @@ scripts/version.ts  (APP_VERSION = "0.9.0")  ← THE ONLY PLACE THE VERSION IS D
 | **Tauri** | `^2.11.5` | Lightweight cross-platform native desktop shell |
 | **React** | `19.3.0-canary-*` (exact-pinned canary build) | Frontend component framework |
 | **TypeScript** | `7.1.0-dev.*` (nightly, `next` channel) | Strict static type checking (TypeScript 7) |
-| **Vite** | `^8.2.0` | Frontend dev server & production bundler (Vite 8) |
+| **Vite** | `^8.2.1` | Frontend dev server & production bundler (Vite 8) |
 | **Cargo / Rust** | `2024 edition` | Native system tray & background process backend |
 
 ### Tauri Plugins

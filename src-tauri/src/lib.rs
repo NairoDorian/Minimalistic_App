@@ -90,6 +90,9 @@ fn load_settings_from_disk(path: &Path) -> AppSettings {
 }
 
 /// Helper function to persist settings to disk, creating parent directories as needed.
+/// Uses atomic write-and-rename (writing to an adjacent temporary file first)
+/// so that sudden OS power loss or process crashes can never leave a corrupt, truncated,
+/// or zero-byte settings file.
 /// Returns a descriptive error message so IPC callers can surface failures to the UI.
 fn save_settings_to_disk(path: &Path, settings: &AppSettings) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -98,7 +101,19 @@ fn save_settings_to_disk(path: &Path, settings: &AppSettings) -> Result<(), Stri
     }
     let json = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("Failed to serialize settings: {e}"))?;
-    fs::write(path, json).map_err(|e| format!("Failed to write settings file: {e}"))
+
+    // Atomic persistence: write to an adjacent temporary file first, then atomically rename.
+    let tmp_path = path.with_extension("tmp");
+    fs::write(&tmp_path, json.as_bytes())
+        .map_err(|e| format!("Failed to write temporary settings file: {e}"))?;
+
+    fs::rename(&tmp_path, path)
+        .or_else(|_| {
+            // Fallback for filesystem targets where atomic replace requires removing the target first
+            let _ = fs::remove_file(path);
+            fs::rename(&tmp_path, path)
+        })
+        .map_err(|e| format!("Failed to commit settings file: {e}"))
 }
 
 /// Tauri IPC command: Retrieves current minimize-to-tray preference.

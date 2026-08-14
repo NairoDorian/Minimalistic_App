@@ -29,6 +29,7 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
   // because the IPC reads are idempotent.
   useEffect(() => {
     if (!isTauri) return;
+    let isMounted = true;
 
     Promise.all([
       isEnabled().catch((err: unknown) => {
@@ -40,9 +41,14 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
         return false;
       }),
     ]).then(([autostartEnabled, minimizeEnabled]) => {
+      if (!isMounted) return;
       setAutostart(autostartEnabled);
       setMinimizeToTray(minimizeEnabled);
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   /**
@@ -107,6 +113,7 @@ export function PreferencesTab({ onStatusChange }: PreferencesTabProps) {
       className="settings-card"
       id="panel-preferences"
       role="tabpanel"
+      tabIndex={0}
       aria-labelledby="tab-preferences"
     >
       <div className="settings-card-header">

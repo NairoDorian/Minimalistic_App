@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.11.0] - 2026-08-14
+
+### Deep Audit Round 12 — Template Excellence, Accessibility & Hardened Persistence
+
+Full architectural audit and enhancement elevating this starter template to production gold standard.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+- **Copy Diagnostics utility**: `AboutTab` now includes a 1-click "Copy Diagnostics" button that copies formatted markdown diagnostic data (app version, Tauri core version, OS, CPU architecture, runtime stack) to the clipboard with animated confirmation feedback.
+- **WAI-ARIA tabpanel navigation**: Added `tabIndex={0}` to both `PreferencesTab` and `AboutTab` `role="tabpanel"` containers, completing the WAI-ARIA authoring practices pattern by allowing keyboard users to Tab directly into active panel content.
+- **Disabled toggle support**: `ToggleSwitch` now accepts an optional `disabled` prop with full `aria-disabled`, `tabIndex={disabled ? -1 : 0}`, Space/Enter keyboard guards, and `:disabled` visual styling.
+- **Environment-aware header badge**: The header tray badge dynamically detects whether the app is running in native Tauri desktop mode (`isTauri === true`, rendering "System Tray Active" with cyan pulsing indicator) or in browser dev preview (`isTauri === false`, rendering "Web Preview").
+- **Listener cleanup lifecycle**: Hardened `UpdateChecker` event listener registration and teardown using an `isMounted` ref guard to eliminate potential listener leaks during fast unmount cycles.
+- **Download progress clamping**: Bounded update download percentage calculation with `Math.min(Math.max(pct, 0), 100)`.
+- **Nullish coalescing consistency**: Replaced all remaining `||` fallbacks in `AboutTab` with `??` (`appInfo?.os ?? "unknown"`, `appInfo?.arch ?? "unknown"`).
+
+#### 🦀 Rust Backend (`src-tauri`)
+- **Atomic disk settings persistence**: `save_settings_to_disk` now implements atomic write-and-rename (writing to `settings.json.tmp` before atomically replacing `settings.json`), ensuring unexpected power loss or process crashes can never result in a corrupt or 0-byte configuration file.
+
+#### 🎨 CSS (`src/index.css`)
+- **Tactile button micro-interactions**: Added active state transforms (`transform: scale(0.97)`) across all interactive button classes (`.tab-btn`, `.btn-update-primary`, `.btn-update-secondary`, `.btn-copy-diagnostics`, `.btn-footer-check`, `.btn-update-footer`).
+- **Environment badge styles**: Added dedicated styling for `.tray-status-badge.tray-active` (neon cyan pulse) and `.tray-status-badge.web-preview` (subtle border and amber indicator).
+- **Copy diagnostics UI**: Added frosted glass button styling with emerald confirmation state (`.btn-copy-diagnostics.copied`).
+- **Disabled switch styling**: Added disabled cursor and muted opacity rules for `.setting-item.disabled` and `.switch.disabled`.
+
+#### 📦 Dependencies & Ecosystem
+- **React**: Updated exact-pinned canary build to `19.3.0-canary-beef6d60-20260813`.
+- **TypeScript**: Updated compiler nightly to `7.1.0-dev.20260813.1`.
+- **Vite & Tooling**: Upgraded `vite` to `^8.2.1`, `@types/node` to `26.2.0`, `lucide-react` to `^1.31.0`, and `repomix` to `^1.18.0`.
+- **Transitive dependencies**: Refreshed all 788 NPM sub-packages and Cargo sub-crates to their latest stable releases.
+
 ## [0.10.4] - 2026-08-03
 
 ### Deep Audit Round 11 — Correctness, Type-Safety & Polish

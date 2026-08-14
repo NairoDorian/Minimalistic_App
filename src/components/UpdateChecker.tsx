@@ -106,6 +106,8 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
 
   useEffect(() => {
     if (!isTauri) return;
+    let isMounted = true;
+    let unlistenFn: (() => void) | undefined;
 
     if (autoCheckOnMount) {
       checkForUpdates(false);
@@ -113,21 +115,27 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
 
     // Only the primary (card) instance responds to tray-triggered checks;
     // multiple instances listening would fire duplicate network requests.
-    let unlistenPromise: Promise<() => void> | undefined;
     if (listenForEvents) {
-      unlistenPromise = listen("check-for-updates", () => {
-        checkForUpdates(true);
-      });
+      listen("check-for-updates", () => {
+        if (isMounted) checkForUpdates(true);
+      })
+        .then((fn) => {
+          if (!isMounted) {
+            fn();
+          } else {
+            unlistenFn = fn;
+          }
+        })
+        .catch(() => {});
     }
 
     return () => {
+      isMounted = false;
       if (upToDateTimeoutRef.current) {
         clearTimeout(upToDateTimeoutRef.current);
         upToDateTimeoutRef.current = null;
       }
-      // `.catch` prevents an unhandled promise rejection if `listen` fails
-      // after the component has already unmounted.
-      unlistenPromise?.then((unlisten) => unlisten()).catch(() => {});
+      unlistenFn?.();
     };
   }, [autoCheckOnMount, checkForUpdates, listenForEvents]);
 
@@ -178,8 +186,8 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
           case "Progress":
             downloadedBytes += event.data.chunkLength;
             if (contentLength > 0) {
-              const pct = Math.round((downloadedBytes / contentLength) * 100);
-              setDownloadProgress(Math.min(pct, 100));
+              const pct = Math.min(Math.max(Math.round((downloadedBytes / contentLength) * 100), 0), 100);
+              setDownloadProgress(pct);
               onStatusChange?.(`Downloading update... ${pct}%`);
             } else {
               onStatusChange?.("Downloading binary...");

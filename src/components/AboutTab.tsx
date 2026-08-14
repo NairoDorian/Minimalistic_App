@@ -1,4 +1,5 @@
-import { AppWindow, Cpu, HardDrive, Terminal } from "lucide-react";
+import { useState, useCallback } from "react";
+import { AppWindow, Cpu, HardDrive, Terminal, Copy, Check } from "lucide-react";
 
 /** Runtime platform and version metadata returned by the `get_app_info` IPC command. */
 export interface AppInfo {
@@ -28,28 +29,77 @@ export const WEB_PREVIEW_APP_INFO: AppInfo = {
 interface AboutTabProps {
   /** App + runtime metadata from the Rust backend, or null while loading. */
   appInfo: AppInfo | null;
+  /** Optional callback to notify the shared footer status bar. */
+  onStatusChange?: (status: string) => void;
 }
 
 /**
- * System & About tab panel — purely presentational.
+ * System & About tab panel — presentational with diagnostic utility.
  *
  * Displays application version, Tauri core version, platform/architecture,
  * and template key highlights. All data arrives via the `appInfo` prop:
  * `App.tsx` owns the IPC fetch and the `WEB_PREVIEW_APP_INFO` fallback.
+ *
+ * Includes a 1-click "Copy Diagnostics" feature for easy troubleshooting and bug reporting.
  */
-export function AboutTab({ appInfo }: AboutTabProps) {
+export function AboutTab({ appInfo, onStatusChange }: AboutTabProps) {
+  const [copied, setCopied] = useState<boolean>(false);
+
+  /**
+   * Copies formatted diagnostic markdown to the clipboard for support / bug reporting.
+   */
+  const handleCopyDiagnostics = useCallback(async () => {
+    const version = appInfo?.version ?? __APP_VERSION__;
+    const tauriVer = appInfo?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version;
+    const os = appInfo?.os ?? "unknown";
+    const arch = appInfo?.arch ?? "unknown";
+
+    const diagText = [
+      "```markdown",
+      `- Application: ${appInfo?.name ?? "Minimalistic App"} v${version}`,
+      `- Tauri Engine: v${tauriVer}`,
+      `- OS / Architecture: ${os} (${arch})`,
+      `- Runtime Stack: Bun 1.3+ | React 19 | Cargo Rust 2024`,
+      "```",
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(diagText);
+      setCopied(true);
+      onStatusChange?.("Diagnostic info copied to clipboard");
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      onStatusChange?.("Failed to copy diagnostic info");
+    }
+  }, [appInfo, onStatusChange]);
+
   return (
     <div
       className="settings-card"
       id="panel-about"
       role="tabpanel"
+      tabIndex={0}
       aria-labelledby="tab-about"
     >
       <div className="settings-card-header">
-        <h2 className="settings-card-title">System & Architecture Metadata</h2>
-        <p className="settings-card-desc">
-          Production details and runtime environmental specifications of this starter template.
-        </p>
+        <div className="card-header-row">
+          <div>
+            <h2 className="settings-card-title">System & Architecture Metadata</h2>
+            <p className="settings-card-desc">
+              Production details and runtime environmental specifications of this starter template.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={`btn-copy-diagnostics ${copied ? "copied" : ""}`}
+            onClick={handleCopyDiagnostics}
+            aria-label="Copy system diagnostic info to clipboard"
+            title="Copy system diagnostics"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            <span>{copied ? "Copied!" : "Copy Diagnostics"}</span>
+          </button>
+        </div>
       </div>
 
       <div className="system-info-grid">
@@ -75,7 +125,7 @@ export function AboutTab({ appInfo }: AboutTabProps) {
             <span className="tile-title">Target Platform / Arch</span>
           </div>
           <span className="tile-value">
-            {appInfo?.os || "unknown"} ({appInfo?.arch || "unknown"})
+            {appInfo?.os ?? "unknown"} ({appInfo?.arch ?? "unknown"})
           </span>
         </div>
 

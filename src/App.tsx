@@ -122,9 +122,9 @@ export default function App() {
           </div>
           <span className="brand-title">Minimalistic App</span>
         </div>
-        <div className="tray-status-badge">
+        <div className={`tray-status-badge ${isTauri ? "tray-active" : "web-preview"}`}>
           <span className="status-dot"></span>
-          <span>System Tray Active</span>
+          <span>{isTauri ? "System Tray Active" : "Web Preview"}</span>
         </div>
       </header>
 
@@ -155,7 +155,7 @@ export default function App() {
         {activeTab === "preferences" ? (
           <PreferencesTab onStatusChange={updateStatus} />
         ) : (
-          <AboutTab appInfo={appInfo} />
+          <AboutTab appInfo={appInfo} onStatusChange={updateStatus} />
         )}
       </main>
 

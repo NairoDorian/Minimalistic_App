@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.10.4",
+  "version": "0.11.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
@@ -20,18 +20,18 @@
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
-    "lucide-react": "^1.28.0",
-    "react": "19.3.0-canary-cbb046ab-20260731",
-    "react-dom": "19.3.0-canary-cbb046ab-20260731"
+    "lucide-react": "1.31.0",
+    "react": "19.3.0-canary-beef6d60-20260813",
+    "react-dom": "19.3.0-canary-beef6d60-20260813"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
-    "@types/node": "^26.1.2",
+    "@types/node": "26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
-    "repomix": "^1.17.0",
-    "typescript": "7.1.0-dev.20260801.1",
-    "vite": "^8.2.0"
+    "repomix": "1.18.0",
+    "typescript": "7.1.0-dev.20260813.1",
+    "vite": "8.2.1"
   }
 }

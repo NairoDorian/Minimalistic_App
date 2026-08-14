@@ -106,20 +106,40 @@ body, html {
   gap: 6px;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  background: rgba(0, 242, 254, 0.08);
-  border: 1px solid rgba(0, 242, 254, 0.2);
   font-size: 11px;
   font-weight: 500;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.tray-status-badge.tray-active {
+  background: rgba(0, 242, 254, 0.08);
+  border: 1px solid rgba(0, 242, 254, 0.2);
   color: var(--accent-cyan);
+}
+
+.tray-status-badge.tray-active .status-dot {
+  background-color: var(--accent-cyan);
+  box-shadow: 0 0 8px var(--accent-cyan);
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.tray-status-badge.web-preview {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+
+.tray-status-badge.web-preview .status-dot {
+  background-color: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  animation: none;
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--accent-cyan);
-  box-shadow: 0 0 8px var(--accent-cyan);
-  animation: pulse 2s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {
@@ -195,6 +215,42 @@ body, html {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.card-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.btn-copy-diagnostics {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.btn-copy-diagnostics:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.btn-copy-diagnostics.copied {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
 .settings-card-title {
   font-size: 16px;
   font-weight: 600;
@@ -218,9 +274,14 @@ body, html {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.setting-item:hover {
+.setting-item:hover:not(.disabled) {
   background: rgba(255, 255, 255, 0.04);
   border-color: var(--card-border-hover);
+}
+
+.setting-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .setting-info {
@@ -270,10 +331,19 @@ body, html {
   flex-shrink: 0;
 }
 
+.switch.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .switch input {
   opacity: 0;
   width: 0;
   height: 0;
+}
+
+.switch input:disabled {
+  cursor: not-allowed;
 }
 
 .slider {
@@ -287,6 +357,11 @@ body, html {
   transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: var(--radius-full);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.switch.disabled .slider,
+input:disabled + .slider {
+  cursor: not-allowed;
 }
 
 .slider:before {
@@ -528,6 +603,16 @@ input:checked + .slider:before {
 [data-tauri-drag-region] input,
 [data-tauri-drag-region] .switch {
   -webkit-app-region: no-drag;
+}
+
+/* Tactile button active states across all interactive buttons */
+.tab-btn:active,
+.btn-update-primary:active,
+.btn-update-secondary:active,
+.btn-copy-diagnostics:active,
+.btn-footer-check:active,
+.btn-update-footer:active {
+  transform: scale(0.97);
 }
 
 /* Accessibility Focus Ring Styles */
