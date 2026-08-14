@@ -162,19 +162,22 @@ rtk git push origin main
 
 | Command | What it does | Writes? |
 | :--- | :--- | :--- |
-| `bun run before-commit` | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo update` when stale. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes |
-| `bun run before-commit --check` | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift (the report names the file and shows expected vs. actual). Safe for CI and pre-commit hooks. | No |
-| `bun run before-commit --bump patch` | Increments the patch digit in `scripts/version.ts` (`0.9.0 → 0.9.1`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump minor` | Increments the minor digit and zeroes patch (`0.9.0 → 0.10.0`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump major` | Increments the major digit and zeroes minor + patch (`0.9.0 → 1.0.0`), then runs the sync. | Yes (incl. `version.ts`) |
-| `bun run before-commit --install-hook` | Installs `.git/hooks/pre-commit`, which runs `--check` before every commit and blocks drifted commits. Refuses to overwrite an existing hook (error explains how to chain manually). Remove with `rm .git/hooks/pre-commit`. | Yes (hook file) |
+| `bun run before-commit` | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes |
+| `bun run before-commit --check` | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks. | No |
+| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 5 quality gates sequentially: version check, TS typecheck (`tsc -b`), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown. | Yes (`arch`) |
+| `bun run before-commit --bump patch` | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump minor` | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump major` | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync. | Yes (incl. `version.ts`) |
+| `bun run before-commit --set <version>` | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors. | Yes (incl. `version.ts`) |
+| `bun run before-commit --stage` | Automatically stages updated mirror files with `git add`. | Git index |
+| `bun run before-commit --install-hook` | Installs `.git/hooks/pre-commit` (runs `--check` + `typecheck` before every commit). | Yes (hook file) |
+| `bun run before-commit --uninstall-hook` | Removes the `.git/hooks/pre-commit` hook cleanly. | Yes (removes hook) |
 | `bun run before-commit --help` | Prints the usage summary and exits `0`. | No |
 
 **Behavioral details:**
-- **Changelog advisory**: after any bump, if `CHANGELOG.md` has no `## [<new version>]` header yet, the script prints a non-blocking `⚠️` reminder (step 2 of this procedure resolves it).
+- **Changelog advisory**: after any bump, if `CHANGELOG.md` has no `## [<new version>]` header yet, the script prints a non-blocking `⚠️` reminder.
 - **Exit codes**: `0` = all mirrors in sync / success; `1` = drift (`--check`), invalid usage, missing mirror files, or non-git repo (`--install-hook`).
-- **Rejected combinations** (exit `1` with a descriptive message): `--bump` without a part, an unknown bump part (`--bump bogus`), and `--check --bump` together.
-- **Cargo.lock refresh**: only runs `cargo update` when the root crate entry is stale; when cargo is unavailable it warns and suggests `cargo check` (the lock regenerates on the next cargo invocation anyway).
+- **Rejected combinations**: `--bump` without a part, unknown bump part, `--set` with invalid semver, and combining `--check` with `--bump`/`--set`.
 
 ---
 
@@ -189,8 +192,12 @@ rtk git push origin main
 | Preview upgrades (no changes) | `bun run update-deps --dry-run` |
 | Upgrade with pre-releases | `bun run update-deps --prerelease` (beta/alpha/RC for direct deps; strictly-newer targets only) |
 | Bump version (then sync mirrors) | `bun run before-commit --bump <major\|minor\|patch>` |
+| Set exact custom version | `bun run before-commit --set <semver>` |
 | Check version drift (read-only) | `bun run before-commit --check` |
-| Install version-check git hook | `bun run before-commit --install-hook` |
+| Full pre-commit test suite | `bun run validate` (or `bun run before-commit --full`) |
+| Auto-stage synced mirrors | `bun run before-commit --stage` |
+| Install pre-commit git hook | `bun run before-commit --install-hook` |
+| Uninstall pre-commit git hook | `bun run before-commit --uninstall-hook` |
 | Type-check the whole workspace | `bun run typecheck` |
 | Regenerate `ARCHITECTURE.md` | `bun run arch` |
 | Regenerate all app icons | `bun run create-icons` |

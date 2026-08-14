@@ -32,6 +32,12 @@ Full architectural audit and enhancement elevating this starter template to prod
 - **Copy diagnostics UI**: Added frosted glass button styling with emerald confirmation state (`.btn-copy-diagnostics.copied`).
 - **Disabled switch styling**: Added disabled cursor and muted opacity rules for `.setting-item.disabled` and `.switch.disabled`.
 
+#### 🛠️ Pro Developer Workflow & Pre-Commit Pipeline (`scripts/before-commit.ts`)
+- **Full Verification Suite (`bun run validate` / `bun run before-commit --full`)**: Runs all 5 quality gates sequentially (Version Check → TypeScript `tsc -b` → Production `vite build` → Native `cargo check` → Architecture Map generation) in ~2s with per-step timing metrics.
+- **Custom Version Setter (`--set <semver>`)**: Allows setting custom SemVer strings directly and propagating them across all mirrors.
+- **Auto-Staging (`--stage`)**: Automatically stages updated mirror files with `git add`.
+- **Pre-Commit Hook Quality Gates (`--install-hook` / `--uninstall-hook`)**: Installs a `.git/hooks/pre-commit` hook enforcing version sync and strict TypeScript type checking on every commit attempt.
+
 #### 📦 Dependencies & Ecosystem
 - **React**: Updated exact-pinned canary build to `19.3.0-canary-beef6d60-20260813`.
 - **TypeScript**: Updated compiler nightly to `7.1.0-dev.20260813.1`.

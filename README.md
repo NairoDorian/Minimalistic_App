@@ -229,7 +229,11 @@ scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS 
 ```
 
 - `bun run before-commit` (`scripts/before-commit.ts`) propagates `APP_VERSION` to all mirrors, preventing silent version drift.
+- `bun run validate` (or `bun run before-commit --full`): **Pro Developer Pre-Commit Suite** running version check, TypeScript static typecheck (`tsc -b`), production Vite bundling, native Cargo check, and architecture map refresh in ~2 seconds.
 - `--check` mode exits 1 on drift for CI/pre-commit hooks; `.github/workflows/ci.yml` runs it on every push/PR.
+- `--install-hook`: Installs a git pre-commit hook enforcing version sync and TypeScript typechecks before every commit.
+- `--stage`: Automatically stages updated mirror files with `git add`.
+- `--set <semver>`: Set custom exact SemVer strings directly.
 - The frontend receives the version at build time via Vite `define` (`__APP_VERSION__`) — no hardcoded version strings anywhere in `src/`.
 
 ### ⚙️ Preferences GUI & Modular Multi-Tab Layout
