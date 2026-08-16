@@ -44,6 +44,10 @@ bun --version
 cargo --version
 ```
 
+> [!TIP]
+> Move to the bleeding edge: `bun upgrade --canary` bumps Bun to the latest
+> canary channel build (used to validate new TypeScript/JS runtime features).
+
 ### Step 2: Dependency Installation & Automated @latest Upgrades
 
 Install project dependencies using Bun:
@@ -229,6 +233,7 @@ rtk git push origin main
 | Upgrade everything to @latest            | `bun run update-deps`                                                                           |
 | Preview upgrades (no changes)            | `bun run update-deps --dry-run`                                                                 |
 | Upgrade with pre-releases                | `bun run update-deps --prerelease` (beta/alpha/RC for direct deps; strictly-newer targets only) |
+| Update the RTK CLI to the latest tag     | `bun run update:rtk` (queries the `rtk-ai/rtk` GitHub tags API for the newest tag)              |
 | Bump version (then sync mirrors)         | `bun run before-commit --bump <major\|minor\|patch>`                                            |
 | Set exact custom version                 | `bun run before-commit --set <semver>`                                                          |
 | Check version drift (read-only)          | `bun run before-commit --check`                                                                 |

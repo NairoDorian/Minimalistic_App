@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.13.0] - 2026-08-16
+
+### Round 13 Part 2 — S2B2S Tooling Borrowings & Lint Hardening
+
+#### 🛠️ Tooling
+
+- **oxlint Lint Pipeline**: Replaced the ESLint-on-TypeScript-7 setup (its parser breaks under TS 7) with **oxlint** (`@oxlint/cli`), adding `lint`/`lint:fix` scripts, `.oxlintrc.json` (correctness/suspicious/perf categories plus react/unicorn/import/typescript plugins), oxlint integrated into the 6-step `before-commit --full` suite and the pre-commit git hook, and the `oxc-vscode` extension in `.vscode/extensions.json`.
+
+- **RTK Auto-Updater (`scripts/update-rtk.ts`)**: New `update:rtk` script that queries the GitHub tags API for `rtk-ai/rtk`'s latest tag and runs `cargo install --git https://github.com/rtk-ai/rtk --tag <tag> --force` — no manual tag pin required (`--check` / `--tag <t>` / `--help` flags available).
+- **CI Hardening** (`.github/workflows/ci.yml`, S2B2S-inspired): concurrency groups with `cancel-in-progress`, `bun install --frozen-lockfile` for reproducible builds, `swatinem/rust-cache@v2` for fast Cargo caching, a dedicated `cargo test` step to exercise the embedded Rust unit tests, `workflow_dispatch` manual trigger, and `actions/checkout@v4`.
+
 ## [0.12.0] - 2026-08-14
 
 ### Deep Audit Round 13 — Ultimate Desktop Starter Template Overhaul

@@ -29,11 +29,11 @@ const fileDescriptions: Record<string, string> = {
   '.vscode/settings.json':
     'VS Code workspace editor settings for format-on-save, Prettier default formatter, rust-analyzer, and oxlint on-type linting.',
   '.github/workflows/ci.yml':
-    'Cross-platform GitHub Actions CI validating formatting, lint, TypeScript, Vite bundling, and Cargo check on Linux, macOS, and Windows.',
+    'Cross-platform GitHub Actions CI validating formatting, oxlint, TypeScript types, Vite bundling, vite:lint, Rust unit tests (cargo test), and Cargo check across Linux, macOS, and Windows.',
   '.github/workflows/release.yml':
     'Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles.',
   'package.json':
-    'Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling.',
+    'Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (React 19, Tauri v2), and TypeScript tooling.',
   'repomix.config.json':
     'Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents).',
   'tsconfig.json':
@@ -123,6 +123,8 @@ const fileDescriptions: Record<string, string> = {
     'Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2.',
   'scripts/update-deps.ts':
     'End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates.',
+  'scripts/update-rtk.ts':
+    'RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`.',
   'scripts/version.ts':
     'Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.',
   'scripts/before-commit.ts':

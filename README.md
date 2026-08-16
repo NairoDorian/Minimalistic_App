@@ -249,7 +249,7 @@ Preferences serialize to JSON inside the OS config directory, **scoped by the ap
 ### 🔢 Single-Source Version Management
 
 ```
-scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS DEFINED
+scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
    │
    ├── package.json                (synced by before-commit.ts)
    ├── src-tauri/Cargo.toml        (synced by before-commit.ts)

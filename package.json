@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.13.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
@@ -19,6 +19,7 @@
     "arch": "bun scripts/generate-arch.ts",
     "create-icons": "bun scripts/create-icons.ts",
     "update-deps": "bun scripts/update-deps.ts",
+    "update:rtk": "bun scripts/update-rtk.ts",
     "format": "prettier --write . && cd src-tauri && cargo fmt",
     "format:check": "prettier --check . && cd src-tauri && cargo fmt -- --check",
     "format:frontend": "prettier --write .",

@@ -24,6 +24,7 @@ Minimalistic_App/
 │   ├── generate-arch.ts
 │   ├── rename-project.ts
 │   ├── update-deps.ts
+│   ├── update-rtk.ts
 │   └── version.ts
 ├── src/
 │   ├── components/
@@ -92,35 +93,36 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **56 files · 322.8 KB · 83,144 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **57 files · 327.2 KB · 84,438 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `.commandcode/taste/taste.md` | 333 B | 2 | 84 | 330 | Source or configuration file for the application. |
 | `.editorconfig` | 627 B | 30 | 168 | 626 | Cross-editor workspace configuration for indentation, charset, and whitespace trimming. |
 | `.gitattributes` | 2.6 KB | 120 | 678 | 2698 | Git line-ending normalization (LF for code, CRLF for Windows scripts) and binary asset protection rules. |
-| `.github/workflows/ci.yml` | 1.5 KB | 42 | 386 | 1485 | Cross-platform GitHub Actions CI validating formatting, lint, TypeScript, Vite bundling, and Cargo check on Linux, macOS, and Windows. |
+| `.github/workflows/ci.yml` | 1.9 KB | 53 | 483 | 1883 | Cross-platform GitHub Actions CI validating formatting, oxlint, TypeScript types, Vite bundling, vite:lint, Rust unit tests (cargo test), and Cargo check across Linux, macOS, and Windows. |
 | `.github/workflows/release.yml` | 4.6 KB | 124 | 1154 | 4659 | Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles. |
 | `.gitignore` | 474 B | 39 | 138 | 473 | Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata. |
 | `.oxlintrc.json` | 783 B | 30 | 239 | 782 | oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and React plugin rules. |
 | `.prettierignore` | 266 B | 23 | 81 | 265 | Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles. |
 | `.prettierrc` | 200 B | 11 | 74 | 199 | Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas. |
-| `AGENTS.md` | 21.9 KB | 298 | 4642 | 22327 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
+| `AGENTS.md` | 22.2 KB | 303 | 4726 | 22634 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 11.3 KB | 245 | 2636 | 11530 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
 | `BUILD.md` | 6.1 KB | 247 | 1698 | 6243 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
-| `CHANGELOG.md` | 54.0 KB | 562 | 13807 | 54828 | Version history tracking releases and features starting with v0.1.0. |
+| `CHANGELOG.md` | 55.1 KB | 573 | 14161 | 56017 | Version history tracking releases and features starting with v0.1.0. |
 | `CONTRIBUTING.md` | 5.0 KB | 123 | 1277 | 5154 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and React 19. |
 | `CRUSH.md` | 4.5 KB | 138 | 1127 | 4560 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, React 19 patterns, and design tokens. |
 | `index.html` | 912 B | 25 | 208 | 722 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
 | `LICENSE` | 1.1 KB | 21 | 223 | 1085 | Standard MIT open-source license. |
-| `package.json` | 1.7 KB | 50 | 617 | 1776 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
-| `README.md` | 30.0 KB | 406 | 6654 | 30252 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
+| `package.json` | 1.8 KB | 51 | 633 | 1823 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (React 19, Tauri v2), and TypeScript tooling. |
+| `README.md` | 30.0 KB | 406 | 6647 | 30241 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 576 B | 26 | 163 | 575 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
 | `scripts/before-commit.ts` | 15.9 KB | 351 | 3534 | 13264 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, --full (6-step suite incl. lint), and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.6 KB | 114 | 1527 | 4597 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |
-| `scripts/generate-arch.ts` | 16.0 KB | 261 | 3727 | 15169 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
+| `scripts/generate-arch.ts` | 16.2 KB | 263 | 3789 | 15383 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
 | `scripts/rename-project.ts` | 6.1 KB | 180 | 1572 | 5776 | 1-command project customizer & renamer CLI script to rebrand the starter kit for new applications. |
 | `scripts/update-deps.ts` | 32.5 KB | 638 | 6932 | 26299 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
+| `scripts/update-rtk.ts` | 3.1 KB | 85 | 688 | 2430 | RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`. |
 | `scripts/version.ts` | 1.2 KB | 1 | 12 | 36 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
 | `SECURITY.md` | 3.4 KB | 66 | 727 | 3423 | Security policy, Tauri v2 capability scoping, atomic persistence guarantees, and vulnerability reporting procedures. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
