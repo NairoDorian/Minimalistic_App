@@ -93,7 +93,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **57 files · 327.2 KB · 84,438 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **57 files · 331.2 KB · 85,550 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -122,7 +122,7 @@ Repomix metrics: **57 files · 327.2 KB · 84,438 tokens** (text files; binary a
 | `scripts/generate-arch.ts` | 16.2 KB | 263 | 3789 | 15383 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
 | `scripts/rename-project.ts` | 6.1 KB | 180 | 1572 | 5776 | 1-command project customizer & renamer CLI script to rebrand the starter kit for new applications. |
 | `scripts/update-deps.ts` | 32.5 KB | 638 | 6932 | 26299 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
-| `scripts/update-rtk.ts` | 3.1 KB | 85 | 688 | 2430 | RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`. |
+| `scripts/update-rtk.ts` | 8.0 KB | 175 | 1800 | 6476 | RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`. |
 | `scripts/version.ts` | 1.2 KB | 1 | 12 | 36 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
 | `SECURITY.md` | 3.4 KB | 66 | 727 | 3423 | Security policy, Tauri v2 capability scoping, atomic persistence guarantees, and vulnerability reporting procedures. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
