@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.12.0] - 2026-08-14
+
+### Deep Audit Round 13 — Ultimate Desktop Starter Template Overhaul
+
+Major architectural expansion transforming the template into the definitive cross-platform starter kit for desktop development.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **Theme Accent Customization Engine (`src/lib/theme.ts`)**: 5 curated neon accent palettes (**Cyan Glow**, **Emerald Matrix**, **Violet Neon**, **Amber Gold**, **Rose Pink**) with dynamic CSS custom property injection and disk persistence.
+- **Reactive Toast Notification System (`src/components/Toast.tsx`, `src/lib/toast.ts`)**: Decoupled toast event bus (`toast.success()`, `toast.error()`, `toast.warning()`, `toast.info()`) with animated auto-dismiss timers and accessible ARIA live regions.
+- **Developer Hub & IPC Playground (`src/components/DeveloperTab.tsx`)**: Dedicated interactive developer tab with a live IPC command inspector (`get_app_info`, `get_app_settings`, `get_system_stats`), toast test bench, and quick factory reset tools.
+- **Global Keyboard Shortcuts & Modal (`src/components/KeyboardShortcutsModal.tsx`, `src/lib/shortcuts.ts`)**: Global hotkeys (`Ctrl+1..3`, `Ctrl+,`, `Ctrl+/`, `?`, `Esc`) with a glassmorphic cheat sheet dialog.
+- **Top-Level Error Boundary (`src/components/ErrorBoundary.tsx`)**: React 19 class Error Boundary providing a graceful frosted glass crash card with stack trace details, log copy, and app reload actions.
+- **Config Directory Quick Opener**: Added a 1-click button in `AboutTab` to open the native OS `%APPDATA%` / configuration folder in File Explorer / Finder.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Multi-Field `AppSettings` Persistence**: Expanded settings struct with `theme_accent`, `start_minimized`, `check_updates_on_launch`, and `minimize_to_tray`.
+- **New Tauri IPC Commands**: Added `get_app_settings`, `update_app_settings`, `reset_app_settings`, `get_system_stats`, and `open_app_data_dir`.
+- **Background Launch Support**: If `start_minimized` is enabled, the app launches directly into the system tray without surfacing the main window.
+- **Embedded Rust Unit Tests**: Added unit tests in `src-tauri/src/lib.rs` verifying JSON serialization, atomic save/load, default values, and mutex poison recovery.
+
+#### 🛠️ Developer CLI & Testing Suite (`scripts` & `test`)
+
+- **1-Command Project Customizer (`scripts/rename-project.ts`)**: `bun run rename-project` CLI script to automatically rebrand and rename the entire starter template (package name, Rust crate, bundle identifier, window titles, repo URLs) in one second.
+- **Automated Bun Unit Test Suite (`test/version.test.ts`, `test/theme.test.ts`)**: Unit tests executing via `bun test` in <250ms.
+- **Pre-commit Regex Tolerance**: Fixed `scripts/before-commit.ts` to support both single and double quotes in `scripts/version.ts`.
+- **oxlint Linting Pipeline (TS7-compatible)**: Replaced ESLint with **oxlint** (`.oxlintrc.json`) — correctness/suspicious/perf categories plus React, unicorn, import, and typescript plugins. New `bun run lint` / `bun run lint:fix` scripts; the `--full` pre-commit suite is now a **6-step gate** (lint inserted as step 3), the git pre-commit hook enforces lint, and CI runs `bun run lint` on all three OS runners. Codebase lint-clean with zero findings; `tsconfig.scripts.json` bumped to ES2023 for `toSorted()`. VSCode now recommends the oxlint extension with on-type linting.
+
 ## [0.11.0] - 2026-08-14
 
 ### Deep Audit Round 12 — Template Excellence, Accessibility & Hardened Persistence

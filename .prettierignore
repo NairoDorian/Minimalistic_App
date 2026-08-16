@@ -11,6 +11,12 @@ bun.lock
 src-tauri/Cargo.lock
 tsconfig.tsbuildinfo
 
+# Generated files
+ARCHITECTURE.md
+
+# Logs
+*.log
+
 # Binary files & icons
 *.png
 *.ico

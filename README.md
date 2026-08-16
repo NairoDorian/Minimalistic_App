@@ -215,7 +215,12 @@ UpdateChecker card (listenForEvents=true) → check() → GitHub Releases API
 | :--------------------- | :-------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
 | `get_minimize_to_tray` | Rust → UI | `bool`                                             | Current tray-on-close preference.                                                                     |
 | `set_minimize_to_tray` | UI → Rust | `{ enabled: bool }` → `Result<(), String>`         | Persists to disk first, then commits memory; error string surfaces to the UI for optimistic rollback. |
+| `get_app_settings`     | Rust → UI | `AppSettings`                                      | Returns the full persisted application preferences struct.                                            |
+| `update_app_settings`  | UI → Rust | `{ settings: AppSettings }` → `Result<(), String>` | Persists full settings struct atomically to disk and memory.                                          |
+| `reset_app_settings`   | UI → Rust | `Result<(), String>`                               | Restores settings to clean factory defaults.                                                          |
 | `get_app_info`         | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch) | Reads `AppHandle::package_info()` — single source of truth, never hardcoded.                          |
+| `get_system_stats`     | Rust → UI | `SystemStats` (process_id, os, arch, tauri_ver)    | Returns runtime process and platform diagnostic telemetry.                                            |
+| `open_app_data_dir`    | UI → Rust | `Result<(), String>`                               | Opens the OS application data directory in the native file explorer.                                  |
 
 All handlers are registered via `tauri::generate_handler!` in `src-tauri/src/lib.rs` and callable from React through `@tauri-apps/api/core` `invoke()`.
 
@@ -254,9 +259,9 @@ scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS 
 ```
 
 - `bun run before-commit` (`scripts/before-commit.ts`) propagates `APP_VERSION` to all mirrors, preventing silent version drift.
-- `bun run validate` (or `bun run before-commit --full`): **Pro Developer Pre-Commit Suite** running version check, TypeScript static typecheck (`tsc -b`), production Vite bundling, native Cargo check, and architecture map refresh in ~2 seconds.
+- `bun run validate` (or `bun run before-commit --full`): **Pro Developer Pre-Commit Suite** running version check, TypeScript static typecheck (`tsc -b`), code lint (oxlint), production Vite bundling, native Cargo check, and architecture map refresh in ~2 seconds.
 - `--check` mode exits 1 on drift for CI/pre-commit hooks; `.github/workflows/ci.yml` runs it on every push/PR.
-- `--install-hook`: Installs a git pre-commit hook enforcing version sync and TypeScript typechecks before every commit.
+- `--install-hook`: Installs a git pre-commit hook enforcing version sync, lint, and TypeScript typechecks before every commit.
 - `--stage`: Automatically stages updated mirror files with `git add`.
 - `--set <semver>`: Set custom exact SemVer strings directly.
 - The frontend receives the version at build time via Vite `define` (`__APP_VERSION__`) — no hardcoded version strings anywhere in `src/`.
@@ -280,7 +285,7 @@ scripts/version.ts  (APP_VERSION = "0.11.0")  ← THE ONLY PLACE THE VERSION IS 
 
 ### 🔒 Security, CI/CD & TypeScript Rigor
 
-- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — TypeScript types (`bun x tsc -b`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, and `cargo check` — on every push and PR.
+- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun x tsc -b`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, and `cargo check` — on every push and PR.
 - Strict **Content Security Policy** in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
 - Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
 - Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.
@@ -389,7 +394,7 @@ Turning this template into your own application, in order:
 ## 📄 Documentation Links
 
 - [`BUILD.md`](BUILD.md) — Cross-platform build instructions, prerequisites & troubleshooting.
-- [`TESTING.md`](TESTING.md) — Testing & QA guide: 5-step automated gates and manual desktop verification matrix.
+- [`TESTING.md`](TESTING.md) — Testing & QA guide: 6-step automated gates and manual desktop verification matrix.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contribution guidelines, Conventional Commits & code quality standards.
 - [`SECURITY.md`](SECURITY.md) — Security policy, DPAPI/keychain storage & vulnerability disclosure.
 - [`CRUSH.md`](CRUSH.md) — Developer & AI agent rapid reference cheat sheet.

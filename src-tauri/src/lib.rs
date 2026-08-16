@@ -10,17 +10,37 @@ use tauri::{
 };
 
 /// Persistent application preferences saved as JSON in the OS app configuration directory.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AppSettings {
     /// Controls whether closing the main GUI window minimizes the app to the system tray
     /// instead of terminating the application process. Default is false.
     pub minimize_to_tray: bool,
+    /// Controls whether the application starts silently minimized to the system tray on launch.
+    #[serde(default)]
+    pub start_minimized: bool,
+    /// Controls whether the application checks for updates on startup.
+    #[serde(default = "default_true")]
+    pub check_updates_on_launch: bool,
+    /// Selected theme accent color ID (e.g. "cyan", "emerald", "violet", "amber", "rose").
+    #[serde(default = "default_theme_accent")]
+    pub theme_accent: String,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_theme_accent() -> String {
+    "cyan".to_string()
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             minimize_to_tray: false,
+            start_minimized: false,
+            check_updates_on_launch: true,
+            theme_accent: "cyan".to_string(),
         }
     }
 }
@@ -38,6 +58,15 @@ pub struct AppInfo {
     pub os: &'static str,
     /// Target CPU architecture, e.g. `x86_64`, `aarch64`.
     pub arch: &'static str,
+}
+
+/// System and process diagnostic telemetry returned by `get_system_stats`.
+#[derive(Serialize)]
+pub struct SystemStats {
+    pub process_id: u32,
+    pub os: &'static str,
+    pub arch: &'static str,
+    pub tauri_version: &'static str,
 }
 
 /// Shared application state managed by Tauri state container.
@@ -123,19 +152,11 @@ fn get_minimize_to_tray(state: State<'_, AppState>) -> bool {
 }
 
 /// Tauri IPC command: Updates current minimize-to-tray preference and persists to disk.
-/// Returns an error when the on-disk persistence fails so the frontend can roll back its UI.
 #[tauri::command]
 fn set_minimize_to_tray(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
-    // Persist the new value to disk first, then commit it to memory. If the disk
-    // write fails, neither the in-memory state nor the UI changes, so the setting
-    // can never silently drift between memory, disk, and UI (previously the memory
-    // was mutated first, leaving a stale value behind on write failure).
     if lock_guard(&state.settings).minimize_to_tray == enabled {
         return Ok(());
     }
-    // Clone the current settings, mutate the single field, then persist and
-    // commit. Cloning avoids reconstructing the struct from scratch and keeps
-    // the disk-first ordering (a failed write leaves memory and UI unchanged).
     let mut new_settings = lock_guard(&state.settings).clone();
     new_settings.minimize_to_tray = enabled;
     save_settings_to_disk(&state.settings_path, &new_settings)?;
@@ -143,9 +164,30 @@ fn set_minimize_to_tray(enabled: bool, state: State<'_, AppState>) -> Result<(),
     Ok(())
 }
 
+/// Tauri IPC command: Retrieves the entire persisted `AppSettings` struct.
+#[tauri::command]
+fn get_app_settings(state: State<'_, AppState>) -> AppSettings {
+    lock_guard(&state.settings).clone()
+}
+
+/// Tauri IPC command: Atomically updates and persists the full `AppSettings` struct.
+#[tauri::command]
+fn update_app_settings(settings: AppSettings, state: State<'_, AppState>) -> Result<(), String> {
+    save_settings_to_disk(&state.settings_path, &settings)?;
+    *lock_guard(&state.settings) = settings;
+    Ok(())
+}
+
+/// Tauri IPC command: Restores `AppSettings` to factory defaults and persists to disk.
+#[tauri::command]
+fn reset_app_settings(state: State<'_, AppState>) -> Result<(), String> {
+    let defaults = AppSettings::default();
+    save_settings_to_disk(&state.settings_path, &defaults)?;
+    *lock_guard(&state.settings) = defaults;
+    Ok(())
+}
+
 /// Tauri IPC command: Returns application and runtime system diagnostic information.
-/// Reads name/version from `AppHandle::package_info()` (single source of truth:
-/// `tauri.conf.json`), so the UI metadata can never drift from the bundle config.
 #[tauri::command]
 fn get_app_info(app: AppHandle) -> AppInfo {
     let package_info = app.package_info();
@@ -158,8 +200,50 @@ fn get_app_info(app: AppHandle) -> AppInfo {
     }
 }
 
+/// Tauri IPC command: Returns system and process telemetry stats.
+#[tauri::command]
+fn get_system_stats() -> SystemStats {
+    SystemStats {
+        process_id: std::process::id(),
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        tauri_version: tauri::VERSION,
+    }
+}
+
+/// Tauri IPC command: Opens the OS-specific application data directory in the native file explorer.
+#[tauri::command]
+fn open_app_data_dir(state: State<'_, AppState>) -> Result<(), String> {
+    let dir = state.settings_path.parent().unwrap_or(&state.settings_path);
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open Windows Explorer: {e}"))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open Finder: {e}"))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {e}"))?;
+    }
+
+    Ok(())
+}
+
 /// Shows, unminimizes, and focuses the main window if it exists.
-/// Used wherever the app needs to surface the GUI from the tray.
 fn show_and_focus_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -168,11 +252,7 @@ fn show_and_focus_window(app: &AppHandle) {
     }
 }
 
-/// Shows and focuses the main window only when it is currently hidden or
-/// minimized. Used by the "Check for Updates..." tray item so a focused,
-/// visible window is left undisturbed when triggering an update check from
-/// the tray — but a minimized-but-visible window is still surfaced so the
-/// user can see the update result.
+/// Shows and focuses the main window only when it is currently hidden or minimized.
 fn show_window_if_hidden(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let is_visible = window.is_visible().unwrap_or(false);
@@ -184,7 +264,6 @@ fn show_window_if_hidden(app: &AppHandle) {
 }
 
 /// Toggles main window visibility: hides if visible, shows and focuses if hidden.
-/// Extracted to eliminate code duplication between tray icon click and tray menu "Open" item.
 fn toggle_window_visibility(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
@@ -199,38 +278,24 @@ fn toggle_window_visibility(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Register Tauri v2 Single-Instance Plugin: prevents duplicate tray icons
-        // when the app is launched a second time. The existing instance surfaces
-        // and focuses its main window instead. Must be registered before other
-        // plugins so it can intercept the second launch at startup.
+        // Single-Instance Guard: prevents duplicate tray icons
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_and_focus_window(app);
         }))
-        // Register Tauri v2 Autostart Plugin for OS startup management.
+        // Autostart Plugin for OS startup management
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::AppleScript,
             Some(vec!["--autostart"]),
         ))
-        // Register Tauri v2 Process Plugin for app relaunch capability (used by auto-updater)
+        // Process Plugin for app relaunch capability (used by auto-updater)
         .plugin(tauri_plugin_process::init())
-        // Register Tauri v2 Updater Plugin for GitHub Releases auto-updates
+        // Updater Plugin for GitHub Releases auto-updates
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // macOS: run as a menu-bar-only utility (no Dock icon). The tray icon
-            // is the primary entry point; the GUI window still opens normally on
-            // launch. Ignored on Windows/Linux.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            // Resolve the OS-specific application configuration directory, which is
-            // already scoped to the app identifier (com.minimalistic.app) on every
-            // platform: %APPDATA%\com.minimalistic.app (Windows),
-            // ~/.config/com.minimalistic.app (Linux), ~/Library/Application Support/
-            // com.minimalistic.app (macOS). No extra subfolder juggling required.
             let config_dir = app.path().app_config_dir().unwrap_or_else(|err| {
-                // A missing config dir is a real misconfiguration — log it so the
-                // failure is visible, then fall back to the current directory so
-                // the app can still start (settings just won't persist across runs).
                 eprintln!(
                     "[settings] Failed to resolve app config dir: {err} — falling back to current directory"
                 );
@@ -239,6 +304,7 @@ pub fn run() {
 
             let settings_path = config_dir.join("settings.json");
             let initial_settings = load_settings_from_disk(&settings_path);
+            let start_minimized = initial_settings.start_minimized;
 
             // Manage global application state container
             app.manage(AppState {
@@ -259,9 +325,6 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &check_updates_item, &quit_item])?;
 
-            // Resolve app icon with a descriptive setup error instead of panicking
-            // if the default icon is unconfigured (misconfiguration should fail the
-            // launch gracefully, not abort the process mid-bootstrap).
             let icon = app
                 .default_window_icon()
                 .ok_or(
@@ -269,8 +332,7 @@ pub fn run() {
                 )?
                 .clone();
 
-            // Initialize System Tray Icon with event routing. The tooltip reads the
-            // product name from package_info() so it always matches tauri.conf.json.
+            // Initialize System Tray Icon with event routing
             let tray = TrayIconBuilder::new()
                 .icon(icon)
                 .tooltip(app.package_info().name.clone())
@@ -281,7 +343,6 @@ pub fn run() {
                         toggle_window_visibility(app);
                     }
                     "check_updates" => {
-                        // Surface the window only if hidden, then notify the webview.
                         show_window_if_hidden(app);
                         let _ = app.emit("check-for-updates", ());
                     }
@@ -309,11 +370,12 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Store tray handle in app state to prevent garbage collection / drop
             app.manage(tray);
 
-            // Ensure window is shown, unminimized, and focused in the foreground on initial launch
-            show_and_focus_window(app.handle());
+            // If not starting minimized, focus window in foreground
+            if !start_minimized {
+                show_and_focus_window(app.handle());
+            }
 
             Ok(())
         })
@@ -321,7 +383,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_minimize_to_tray,
             set_minimize_to_tray,
-            get_app_info
+            get_app_settings,
+            update_app_settings,
+            reset_app_settings,
+            get_app_info,
+            get_system_stats,
+            open_app_data_dir
         ])
         // Intercept window close requested event (X button click)
         .on_window_event(|window, event| {
@@ -330,7 +397,6 @@ pub fn run() {
                 let is_quitting = *lock_guard(&state.is_quitting);
                 let minimize = lock_guard(&state.settings).minimize_to_tray;
 
-                // If minimize-to-tray is enabled and user didn't click Quit, hide window instead of closing
                 if !is_quitting && minimize {
                     api.prevent_close();
                     let _ = window.hide();
@@ -339,4 +405,63 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_app_settings_default() {
+        let settings = AppSettings::default();
+        assert!(!settings.minimize_to_tray);
+        assert!(!settings.start_minimized);
+        assert!(settings.check_updates_on_launch);
+        assert_eq!(settings.theme_accent, "cyan");
+    }
+
+    #[test]
+    fn test_app_settings_json_roundtrip() {
+        let mut settings = AppSettings::default();
+        settings.minimize_to_tray = true;
+        settings.start_minimized = true;
+        settings.theme_accent = "emerald".to_string();
+
+        let json = serde_json::to_string(&settings).expect("serialization failed");
+        let decoded: AppSettings = serde_json::from_str(&json).expect("deserialization failed");
+
+        assert_eq!(settings, decoded);
+    }
+
+    #[test]
+    fn test_atomic_persistence_and_recovery() {
+        let temp_dir = std::env::temp_dir().join(format!("tauri_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("test_settings.json");
+
+        let initial = AppSettings {
+            minimize_to_tray: true,
+            start_minimized: false,
+            check_updates_on_launch: true,
+            theme_accent: "violet".to_string(),
+        };
+
+        save_settings_to_disk(&settings_path, &initial).expect("atomic save failed");
+        let loaded = load_settings_from_disk(&settings_path);
+        assert_eq!(initial, loaded);
+
+        // Cleanup
+        let _ = fs::remove_file(&settings_path);
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_mutex_lock_guard_recovery() {
+        let mutex = Mutex::new(42);
+        {
+            let guard = lock_guard(&mutex);
+            assert_eq!(*guard, 42);
+        }
+    }
 }

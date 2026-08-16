@@ -38,6 +38,9 @@ jobs:
       - name: Validate code formatting (Prettier & cargo fmt)
         run: bun run format:check
 
+      - name: Validate code lint (oxlint)
+        run: bun run lint
+
       - name: Validate TypeScript static types (tsc -b)
         run: bun x tsc -b
 

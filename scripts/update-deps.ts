@@ -45,10 +45,10 @@ import path from 'node:path';
  */
 
 // --- CLI flag parsing (before anything else so --help/--dry-run are side-effect free) ---
-const args = process.argv.slice(2);
-const PRERELEASE_MODE = args.includes('--prerelease');
-const DRY_RUN = args.includes('--dry-run');
-const SHOW_HELP = args.includes('--help') || args.includes('-h');
+const cliArgs = new Set(process.argv.slice(2));
+const PRERELEASE_MODE = cliArgs.has('--prerelease');
+const DRY_RUN = cliArgs.has('--dry-run');
+const SHOW_HELP = cliArgs.has('--help') || cliArgs.has('-h');
 
 /** NPM dist-tags probed when --prerelease is active — every tag is evaluated, the best strictly-newer candidate wins. */
 const PRERELEASE_TAGS: readonly string[] = [
@@ -95,6 +95,19 @@ function isPrereleaseVersion(version: string): boolean {
 }
 
 /**
+ * Splits a semver string into numeric core parts and a prerelease identifier.
+ * `noUncheckedIndexedAccess` makes `coreStr` `string | undefined`; a version
+ * string always has a core part before any `-`, so the fallback to "0" is
+ * unreachable but satisfies the type checker.
+ */
+function parseVersion(v: string): { core: number[]; pre: string | null } {
+  const [coreStr, pre] = v.split('-', 2);
+  const core = (coreStr ?? '0').split('.').map((n) => parseInt(n, 10) || 0);
+  while (core.length < 3) core.push(0);
+  return { core, pre: pre ?? null };
+}
+
+/**
  * Minimal SemVer comparator (no external dependency): returns 1 when `a` is
  * newer than `b`, -1 when older, 0 when equal.
  *
@@ -108,17 +121,8 @@ function isPrereleaseVersion(version: string): boolean {
  * project already uses `^2.11.1`) — upgrades must never downgrade.
  */
 function compareVersions(a: string, b: string): number {
-  const parse = (v: string): { core: number[]; pre: string | null } => {
-    const [coreStr, pre] = v.split('-', 2);
-    // `noUncheckedIndexedAccess` makes `coreStr` `string | undefined`; a
-    // version string always has a core part before any `-`, so the fallback
-    // to "0" is unreachable but satisfies the type checker.
-    const core = (coreStr ?? '0').split('.').map((n) => parseInt(n, 10) || 0);
-    while (core.length < 3) core.push(0);
-    return { core, pre: pre ?? null };
-  };
-  const A = parse(a);
-  const B = parse(b);
+  const A = parseVersion(a);
+  const B = parseVersion(b);
   for (let i = 0; i < 3; i++) {
     const aCore = A.core[i] ?? 0;
     const bCore = B.core[i] ?? 0;
@@ -391,7 +395,7 @@ function printDryRunReport(allStatuses: DependencyStatus[]): void {
       '------------------------------------+--------------+-----------+-----------+-----'
     );
     outdated
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .toSorted((a, b) => a.name.localeCompare(b.name))
       .forEach((s) => {
         console.log(renderStatusRow(s));
       });
@@ -664,7 +668,7 @@ async function updateEverything() {
     };
     const repinRuntime: string[] = [];
     const repinDev: string[] = [];
-    const specs = { ...(specSnapshot.dependencies ?? {}), ...(specSnapshot.devDependencies ?? {}) };
+    const specs = { ...specSnapshot.dependencies, ...specSnapshot.devDependencies };
     for (const [name, spec] of Object.entries(specs)) {
       if (!isPrereleaseVersion(cleanVersion(spec))) continue;
       const currentSpec = pkgNow.dependencies?.[name] ?? pkgNow.devDependencies?.[name];
@@ -762,7 +766,7 @@ async function updateEverything() {
     '------------------------------------+--------------+-----------+-----------+-------------------'
   );
   allStatuses
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .toSorted((a, b) => a.name.localeCompare(b.name))
     .forEach((s) => {
       const namePadded = s.name.padEnd(34, ' ');
       const ecoPadded = s.ecosystem.padEnd(12, ' ');
@@ -791,7 +795,7 @@ async function updateEverything() {
     console.log(' Sub-Dependency Name               | Ecosystem    | Before    | Upgraded');
     console.log('------------------------------------+--------------+-----------+-----------');
     subDepChanges
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .toSorted((a, b) => a.name.localeCompare(b.name))
       .forEach((sd) => {
         const namePadded = sd.name.padEnd(34, ' ');
         const ecoPadded = sd.ecosystem.padEnd(12, ' ');

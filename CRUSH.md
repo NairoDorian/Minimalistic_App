@@ -12,13 +12,17 @@ bun run tauri dev              # Full Tauri desktop app in live dev mode
 bun run vite                   # Web-only preview in browser
 
 # Quality Gates & Verification
+bun test                       # Run automated Bun unit test suite
 bun run typecheck              # Static TypeScript typecheck (tsc -b)
+bun run lint                   # Code lint (oxlint — TS7-compatible)
+bun run lint:fix               # Auto-fix lint issues
 bun run format                 # Format all files (Prettier + cargo fmt)
 bun run format:check           # Verify formatting without modifying files
 bun run before-commit --check  # Verify version mirrors are in sync
-bun run validate               # Run full 5-step pre-commit validation suite
+bun run validate               # Run full 6-step pre-commit validation suite
 
-# Production & Maintenance
+# Production, Scaffolding & Maintenance
+bun run rename-project         # 1-command project rebranding & customization CLI
 bun run build                  # Compile production native desktop bundles
 bun run arch                   # Regenerate ARCHITECTURE.md map
 bun run create-icons           # Regenerate multi-platform app icons

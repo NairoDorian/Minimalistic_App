@@ -13,7 +13,7 @@ import {
 // the Repomix-generated inventory (paths are POSIX-style, relative to the repo root).
 const fileDescriptions: Record<string, string> = {
   '.gitignore':
-    'Git ignore configuration excluding build artifacts, node_modules, and OS metadata.',
+    'Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata.',
   '.gitattributes':
     'Git line-ending normalization (LF for code, CRLF for Windows scripts) and binary asset protection rules.',
   '.editorconfig':
@@ -21,13 +21,15 @@ const fileDescriptions: Record<string, string> = {
   '.prettierrc':
     'Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas.',
   '.prettierignore':
-    'Prettier ignore configuration excluding dist, target, node_modules, and lockfiles.',
+    'Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles.',
+  '.oxlintrc.json':
+    'oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and React plugin rules.',
   '.vscode/extensions.json':
-    'VS Code workspace extension recommendations (rust-analyzer, tauri-vscode, prettier, eslint).',
+    'VS Code workspace extension recommendations (rust-analyzer, tauri-vscode, prettier, oxlint).',
   '.vscode/settings.json':
-    'VS Code workspace editor settings for format-on-save, Prettier default formatter, and rust-analyzer.',
+    'VS Code workspace editor settings for format-on-save, Prettier default formatter, rust-analyzer, and oxlint on-type linting.',
   '.github/workflows/ci.yml':
-    'Cross-platform GitHub Actions CI validating formatting, TypeScript, Vite bundling, and Cargo check on Linux, macOS, and Windows.',
+    'Cross-platform GitHub Actions CI validating formatting, lint, TypeScript, Vite bundling, and Cargo check on Linux, macOS, and Windows.',
   '.github/workflows/release.yml':
     'Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles.',
   'package.json':
@@ -68,16 +70,36 @@ const fileDescriptions: Record<string, string> = {
   'src/vite-env.d.ts':
     'Vite client type references and declaration of the build-time __APP_VERSION__ constant.',
   'src/lib/tauri.ts': 'Shared Tauri v2 runtime detection utility exporting the isTauri constant.',
+  'src/lib/theme.ts':
+    'Theme accent customization engine with 5 curated neon color palettes and dynamic CSS variable injection.',
+  'src/lib/toast.ts':
+    'Reactive toast notification event bus and helper methods for triggering toasts across the app.',
+  'src/lib/shortcuts.ts':
+    'Global keyboard shortcuts definitions, category mapping, and event helper utilities.',
   'src/components/ToggleSwitch.tsx':
     'Reusable accessible ARIA toggle switch (role=switch, Space/Enter keys, visually-hidden checkbox) used by the Preferences tab.',
   'src/components/UpdateChecker.tsx':
     'Auto-update checker component handling release checks, streamed progress, and app relaunch.',
   'src/components/PreferencesTab.tsx':
-    'Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, and the embedded update checker card.',
+    'Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, theme picker, and update checker card.',
   'src/components/AboutTab.tsx':
-    'Presentational System & About tab panel; exports the AppInfo interface and WEB_PREVIEW_APP_INFO fallback.',
+    'Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener.',
+  'src/components/DeveloperTab.tsx':
+    'Developer Hub tab providing live IPC command execution, toast benchmarks, memory telemetry, and factory reset actions.',
+  'src/components/Toast.tsx':
+    'Toast notification container and animated item components with auto-dismiss timers and ARIA live regions.',
+  'src/components/ErrorBoundary.tsx':
+    'Top-level React 19 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action.',
+  'src/components/KeyboardShortcutsModal.tsx':
+    'Keyboard shortcuts cheat sheet modal dialog with accessible ARIA dialog markup.',
   'src/index.css':
     '100% AMOLED deep black theme (#000000) with glassmorphism, glowing toggle switches, and reduced-motion support.',
+  'scripts/rename-project.ts':
+    '1-command project customizer & renamer CLI script to rebrand the starter kit for new applications.',
+  'test/version.test.ts':
+    'Automated Bun unit tests validating SemVer format and version consistency.',
+  'test/theme.test.ts':
+    'Automated Bun unit tests validating theme preset definitions and color tokens.',
   'src-tauri/Cargo.toml':
     'Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, serde, and serde_json.',
   'src-tauri/tauri.conf.json':
@@ -104,7 +126,7 @@ const fileDescriptions: Record<string, string> = {
   'scripts/version.ts':
     'Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.',
   'scripts/before-commit.ts':
-    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, and --install-hook modes.',
+    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, --full (6-step suite incl. lint), and --install-hook modes.',
   'src-tauri/Cargo.lock':
     'Rust dependency lockfile, committed to track exact crate versions for reproducible builds.',
 };
@@ -132,7 +154,7 @@ function toBoxDrawingTree(treeString: string): string {
   });
 
   // isLast[i]: entry i has no following sibling at the same depth.
-  const isLast = new Array<boolean>(entries.length).fill(true);
+  const isLast = Array.from({ length: entries.length }, () => true);
   for (let i = entries.length - 2; i >= 0; i--) {
     const current = entries[i];
     if (current === undefined) continue;
@@ -200,7 +222,7 @@ async function generateArchitectureMarkdown() {
       ...result.safeFilePaths,
       ...result.skippedFiles.map((f) => f.path),
     ]),
-  ].sort((a, b) => toPosix(a).localeCompare(toPosix(b)));
+  ].toSorted((a, b) => toPosix(a).localeCompare(toPosix(b)));
 
   // 5. Box-drawing directory tree with the dynamic repository root label.
   const emptyDirs = config.output.includeEmptyDirectories ? search.emptyDirPaths : [];

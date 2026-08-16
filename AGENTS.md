@@ -162,10 +162,11 @@ bun run arch
 
 - `ARCHITECTURE.md` embeds per-file metrics (sizes, lines, tokens) — the changelog edit and any new files change these, so regeneration MUST happen after steps 1–3.
 
-### 5. Validate Everything (order: check, then typecheck)
+### 5. Validate Everything (order: check, lint, then typecheck)
 
 ```bash
 bun run before-commit --check   # all mirrors at X.Y.Z — exit 1 on drift
+bun run lint                    # oxlint src test scripts
 bun run typecheck               # bun x tsc -b
 ```
 
@@ -200,13 +201,13 @@ rtk git push origin main
 | :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
 | `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes                      |
 | `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                  | No                       |
-| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 5 quality gates sequentially: version check, TS typecheck (`tsc -b`), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown.                                   | Yes (`arch`)             |
+| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 6 quality gates sequentially: version check, TS typecheck (`tsc -b`), code lint (oxlint), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown.               | Yes (`arch`)             |
 | `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
 | `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                             | Yes (incl. `version.ts`) |
 | `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
 | `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                         | Yes (incl. `version.ts`) |
 | `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                        | Git index                |
-| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `typecheck` before every commit).                                                                                                                                                                             | Yes (hook file)          |
+| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `lint` + `typecheck` before every commit).                                                                                                                                                                    | Yes (hook file)          |
 | `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                | Yes (removes hook)       |
 | `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                          | No                       |
 
@@ -239,8 +240,11 @@ rtk git push origin main
 | Check formatting without modifying files | `bun run format:check`                                                                          |
 | Format frontend only (Prettier)          | `bun run format:frontend`                                                                       |
 | Format backend only (cargo fmt)          | `bun run format:backend`                                                                        |
+| Lint codebase (oxlint, TS7-compatible)   | `bun run lint`                                                                                  |
+| Auto-fix lint issues                     | `bun run lint:fix`                                                                              |
 | Run full pre-commit test suite           | `bun test` (or `bun run validate`)                                                              |
 | Type-check the whole workspace           | `bun run typecheck`                                                                             |
+| Rebrand & rename project starter kit     | `bun run rename-project --name "App Name" --identifier "com.id"`                                |
 | Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
 | Regenerate all app icons                 | `bun run create-icons`                                                                          |
 | Purge Rust build artifacts               | `bun run clean`                                                                                 |

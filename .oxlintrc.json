@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "unicorn", "import", "typescript"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "style": "off",
+    "pedantic": "off",
+    "nursery": "off",
+    "restriction": "off"
+  },
+  "rules": {
+    "no-unused-vars": "error",
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-underscore-dangle": ["warn", { "allow": ["__APP_VERSION__"] }],
+    "import/no-unassigned-import": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-no-useless-fragment": "error",
+    "react/jsx-key": "error"
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**/*", "test/**/*"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}

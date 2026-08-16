@@ -1,5 +1,8 @@
 import { useState, useCallback } from 'react';
-import { AppWindow, Cpu, HardDrive, Terminal, Copy, Check } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { AppWindow, Cpu, HardDrive, Terminal, Copy, Check, FolderOpen } from 'lucide-react';
+import { toast } from '../lib/toast';
+import { isTauri } from '../lib/tauri';
 
 /** Runtime platform and version metadata returned by the `get_app_info` IPC command. */
 export interface AppInfo {
@@ -15,9 +18,6 @@ export interface AppInfo {
   arch: string;
 }
 
-// Fallback metadata used only when running in a plain browser (non-Tauri preview).
-// `__APP_VERSION__` is injected by Vite `define` (see vite.config.ts); the
-// platform fields are neutral ("Web Browser" / "unknown") — never assumed.
 export const WEB_PREVIEW_APP_INFO: AppInfo = {
   name: 'Minimalistic App',
   version: __APP_VERSION__,
@@ -27,27 +27,14 @@ export const WEB_PREVIEW_APP_INFO: AppInfo = {
 };
 
 interface AboutTabProps {
-  /** App + runtime metadata from the Rust backend, or null while loading. */
   appInfo: AppInfo | null;
-  /** Optional callback to notify the shared footer status bar. */
   onStatusChange?: (status: string) => void;
+  onOpenShortcuts?: () => void;
 }
 
-/**
- * System & About tab panel — presentational with diagnostic utility.
- *
- * Displays application version, Tauri core version, platform/architecture,
- * and template key highlights. All data arrives via the `appInfo` prop:
- * `App.tsx` owns the IPC fetch and the `WEB_PREVIEW_APP_INFO` fallback.
- *
- * Includes a 1-click "Copy Diagnostics" feature for easy troubleshooting and bug reporting.
- */
-export function AboutTab({ appInfo, onStatusChange }: AboutTabProps) {
+export function AboutTab({ appInfo, onStatusChange, onOpenShortcuts }: AboutTabProps) {
   const [copied, setCopied] = useState<boolean>(false);
 
-  /**
-   * Copies formatted diagnostic markdown to the clipboard for support / bug reporting.
-   */
   const handleCopyDiagnostics = useCallback(async () => {
     const version = appInfo?.version ?? __APP_VERSION__;
     const tauriVer = appInfo?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version;
@@ -66,12 +53,27 @@ export function AboutTab({ appInfo, onStatusChange }: AboutTabProps) {
     try {
       await navigator.clipboard.writeText(diagText);
       setCopied(true);
+      toast.success('Diagnostics copied to clipboard');
       onStatusChange?.('Diagnostic info copied to clipboard');
       setTimeout(() => setCopied(false), 2500);
     } catch {
+      toast.error('Failed to copy diagnostic info');
       onStatusChange?.('Failed to copy diagnostic info');
     }
   }, [appInfo, onStatusChange]);
+
+  const handleOpenConfigDir = useCallback(async () => {
+    if (!isTauri) {
+      toast.info('[Web Preview] Simulated opening %APPDATA%\\com.minimalistic.app');
+      return;
+    }
+    try {
+      await invoke('open_app_data_dir');
+      toast.success('Opened App Configuration Directory');
+    } catch (err: unknown) {
+      toast.error(`Could not open directory: ${String(err)}`);
+    }
+  }, []);
 
   return (
     <div
@@ -89,16 +91,28 @@ export function AboutTab({ appInfo, onStatusChange }: AboutTabProps) {
               Production details and runtime environmental specifications of this starter template.
             </p>
           </div>
-          <button
-            type="button"
-            className={`btn-copy-diagnostics ${copied ? 'copied' : ''}`}
-            onClick={handleCopyDiagnostics}
-            aria-label="Copy system diagnostic info to clipboard"
-            title="Copy system diagnostics"
-          >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copied ? 'Copied!' : 'Copy Diagnostics'}</span>
-          </button>
+          <div className="header-actions-group">
+            <button
+              type="button"
+              className="btn-copy-diagnostics"
+              onClick={handleOpenConfigDir}
+              aria-label="Open application configuration directory"
+              title="Open config directory in file explorer"
+            >
+              <FolderOpen size={13} />
+              <span>Config Dir</span>
+            </button>
+            <button
+              type="button"
+              className={`btn-copy-diagnostics ${copied ? 'copied' : ''}`}
+              onClick={handleCopyDiagnostics}
+              aria-label="Copy system diagnostic info to clipboard"
+              title="Copy system diagnostics"
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              <span>{copied ? 'Copied!' : 'Copy Diags'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -141,12 +155,24 @@ export function AboutTab({ appInfo, onStatusChange }: AboutTabProps) {
       </div>
 
       <div className="about-notes-box">
-        <span className="notes-heading">Template Key Highlights</span>
+        <div className="notes-header-row">
+          <span className="notes-heading">Template Key Highlights</span>
+          <button
+            type="button"
+            className="btn-shortcuts-hint"
+            onClick={onOpenShortcuts}
+            title="Press ? or Ctrl+/ for shortcut list"
+          >
+            Shortcuts (Ctrl+/)
+          </button>
+        </div>
         <ul className="notes-list">
           <li>100% AMOLED pitch black (#000000) glassmorphic dark mode styling.</li>
+          <li>Custom theme accent palette with instant live switching and disk persistence.</li>
           <li>Native system tray left-click toggle & context menu teardown integration.</li>
           <li>
-            Disk-backed JSON settings persistence in <code>$APP_DATA_DIR/settings.json</code>.
+            Atomic disk-backed JSON settings persistence in <code>$APP_DATA_DIR/settings.json</code>
+            .
           </li>
           <li>
             GitHub Release auto-updates with streamed progress & Minisign security verification.

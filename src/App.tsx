@@ -1,59 +1,40 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Info, AppWindow, Shield, type LucideIcon } from 'lucide-react';
+import { Settings, Info, AppWindow, Shield, Code2, type LucideIcon } from 'lucide-react';
 import { PreferencesTab } from './components/PreferencesTab';
 import { AboutTab, type AppInfo, WEB_PREVIEW_APP_INFO } from './components/AboutTab';
+import { DeveloperTab } from './components/DeveloperTab';
 import { UpdateChecker } from './components/UpdateChecker';
+import { ToastContainer } from './components/Toast';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { isTauri } from './lib/tauri';
+import { applyThemeAccent, type ThemeAccent } from './lib/theme';
 
-type TabType = 'preferences' | 'about';
+type TabType = 'preferences' | 'about' | 'developer';
 
-/** Tab order used for roving-tabindex keyboard navigation (Home / End). */
-const TAB_ORDER: readonly TabType[] = ['preferences', 'about'];
+const TAB_ORDER: readonly TabType[] = ['preferences', 'about', 'developer'];
 
-/**
- * Single source of truth for the tab bar: id (drives DOM ids + state), label,
- * and icon. Rendered data-driven below so the two tab buttons can never drift
- * from each other in markup or accessibility attributes.
- */
 const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
   { id: 'preferences', label: 'Preferences', icon: Settings },
   { id: 'about', label: 'System & About', icon: Info },
+  { id: 'developer', label: 'Developer Hub', icon: Code2 },
 ];
 
-/**
- * Main Application GUI Component (React 19) — the application shell.
- *
- * Responsibilities:
- * 1. Modular Tab Navigation (Preferences, System Info & About) with full
- *    WAI-ARIA tabs keyboard pattern (arrows + Home / End, roving tabIndex).
- * 2. Loads app/runtime metadata via IPC (passes it to <AboutTab/>).
- * 3. Shared footer status message with auto-clear, fed by tab components
- *    via `onStatusChange` and by the footer's compact UpdateChecker.
- * 4. Native Window Drag Region (`data-tauri-drag-region`).
- *
- * The two tab panels live in their own components:
- * - `PreferencesTab` — owns the autostart / minimize-to-tray toggles.
- * - `AboutTab`      — purely presentational metadata view.
- */
-export default function App() {
+export function AppContent() {
   const [activeTab, setActiveTab] = useState<TabType>('preferences');
   const [statusMessage, setStatusMessage] = useState<string>('Ready');
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState<boolean>(false);
 
-  // Timeout handle for the auto-clearing footer status message.
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear any pending status auto-clear timer on unmount.
   useEffect(() => {
     return () => {
       if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     };
   }, []);
 
-  // Load platform metadata asynchronously (browser preview falls back to
-  // WEB_PREVIEW_APP_INFO). StrictMode dev double-mounting is harmless — the
-  // IPC read is idempotent.
   useEffect(() => {
     if (!isTauri) {
       setAppInfo(WEB_PREVIEW_APP_INFO);
@@ -67,21 +48,45 @@ export default function App() {
       });
   }, []);
 
-  /**
-   * Helper to set the footer status message with an auto-clear timeout.
-   * Resets the countdown on every call so rapid updates don't flicker early.
-   */
   const updateStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     statusTimeoutRef.current = setTimeout(() => setStatusMessage('Ready'), 4000);
   }, []);
 
-  /**
-   * Roving-tabindex keyboard navigation for the tablist (complete WAI-ARIA
-   * tabs pattern): ArrowLeft / ArrowRight cycle tabs, Home / End jump to the
-   * first / last tab. Focus moves to the newly active tab.
-   */
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: globalThis.KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+
+      if (mod && e.key === '1') {
+        e.preventDefault();
+        setActiveTab('preferences');
+      } else if (mod && e.key === '2') {
+        e.preventDefault();
+        setActiveTab('about');
+      } else if (mod && e.key === '3') {
+        e.preventDefault();
+        setActiveTab('developer');
+      } else if (mod && e.key === ',') {
+        e.preventDefault();
+        setActiveTab('preferences');
+      } else if (
+        (mod && e.key === '/') ||
+        (!mod &&
+          e.key === '?' &&
+          !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement))
+      ) {
+        e.preventDefault();
+        setShortcutsModalOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   const handleTabKeyDown = useCallback((e: KeyboardEvent<HTMLButtonElement>, tab: TabType) => {
     const index = TAB_ORDER.indexOf(tab);
     let next: TabType | null = null;
@@ -112,9 +117,23 @@ export default function App() {
     document.getElementById(`tab-${next}`)?.focus();
   }, []);
 
+  const handleSettingsReset = useCallback(() => {
+    applyThemeAccent('cyan');
+    updateStatus('Settings reset to defaults');
+  }, [updateStatus]);
+
   return (
     <div className="app-container">
-      {/* Sleek Native Window Header Bar with data-tauri-drag-region */}
+      {/* Toast Notification Container */}
+      <ToastContainer />
+
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Native Window Header Bar */}
       <header className="app-header" data-tauri-drag-region>
         <div className="brand-section" data-tauri-drag-region>
           <div className="brand-icon">
@@ -151,11 +170,22 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Active Tab Panel (ternary so the inactive panel unmounts) */}
-        {activeTab === 'preferences' ? (
-          <PreferencesTab onStatusChange={updateStatus} />
-        ) : (
-          <AboutTab appInfo={appInfo} onStatusChange={updateStatus} />
+        {/* Active Tab Panel */}
+        {activeTab === 'preferences' && (
+          <PreferencesTab
+            onStatusChange={updateStatus}
+            onAccentChange={(_accent: ThemeAccent) => {}}
+          />
+        )}
+        {activeTab === 'about' && (
+          <AboutTab
+            appInfo={appInfo}
+            onStatusChange={updateStatus}
+            onOpenShortcuts={() => setShortcutsModalOpen(true)}
+          />
+        )}
+        {activeTab === 'developer' && (
+          <DeveloperTab onStatusChange={updateStatus} onSettingsReset={handleSettingsReset} />
         )}
       </main>
 
@@ -168,5 +198,13 @@ export default function App() {
         <UpdateChecker variant="footer" autoCheckOnMount={false} listenForEvents={false} />
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }

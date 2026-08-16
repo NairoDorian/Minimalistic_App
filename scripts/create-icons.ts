@@ -17,6 +17,17 @@ import zlib from 'node:zlib';
 /** Cyan brand color used for every generated pixel. */
 const BRAND: readonly [number, number, number] = [0, 242, 254];
 
+/** Wraps a PNG chunk payload with length, type, and CRC32 fields per the PNG spec. */
+function makeChunk(type: string, data: Buffer): Buffer {
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(data.length, 0);
+  const typeBuf = Buffer.from(type, 'ascii');
+  const crcBuf = Buffer.alloc(4);
+  const crc = zlib.crc32(Buffer.concat([typeBuf, data]));
+  crcBuf.writeUInt32BE(crc, 0);
+  return Buffer.concat([lenBuf, typeBuf, data, crcBuf]);
+}
+
 /**
  * Builds a valid PNG buffer for the given dimensions filled with the brand color.
  * Each RGBA scanline is prefixed with filter byte 0 (None), matching the PNG spec.
@@ -38,16 +49,6 @@ function createValidPngBuffer(width: number, height: number): Buffer {
   }
 
   const idatData = zlib.deflateSync(rawData);
-
-  function makeChunk(type: string, data: Buffer): Buffer {
-    const lenBuf = Buffer.alloc(4);
-    lenBuf.writeUInt32BE(data.length, 0);
-    const typeBuf = Buffer.from(type, 'ascii');
-    const crcBuf = Buffer.alloc(4);
-    const crc = zlib.crc32(Buffer.concat([typeBuf, data]));
-    crcBuf.writeUInt32BE(crc, 0);
-    return Buffer.concat([lenBuf, typeBuf, data, crcBuf]);
-  }
 
   // Header chunk (IHDR)
   const ihdr = Buffer.alloc(13);

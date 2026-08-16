@@ -1,6 +1,11 @@
 # Node / Bun dependencies
 node_modules/
 
+# Lockfiles from other package managers (Bun is the standard)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
 # Rust build artifacts
 target/
 src-tauri/target/
@@ -14,8 +19,19 @@ dist/
 Thumbs.db
 *.tmp
 
+# Editor noise
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
 # TypeScript build cache
 *.tsbuildinfo
+
+# Logs
+*.log
 
 # Environment variables (never commit secrets)
 .env
