@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Tauri (Full) — Rust backend + webview",
+      "type": "tauri",
+      "request": "launch",
+      "$tauri": {
+        "src-tauri": {
+          "targets": ["dev"]
+        }
+      }
+    },
+    {
+      "name": "Web Preview — Vite dev server only",
+      "url": "http://localhost:1420",
+      "type": "chromium",
+      "request": "launch",
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": {
+        "webpack:///./~/*": "${webRoot}/*",
+        "webpack:///*": "${webRoot}/*",
+        "vite:///*": "${webRoot}/*"
+      }
+    }
+  ]
+}

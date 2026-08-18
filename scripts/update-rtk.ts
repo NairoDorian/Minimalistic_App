@@ -114,7 +114,9 @@ function absoluteLatestOf(tags: string[]): string | null {
 async function fetchAllPages(url: string): Promise<Array<Record<string, unknown>>> {
   const res = await fetch(url, { headers: API_HEADERS });
   if (!res.ok) {
-    throw new Error(`GitHub API request for ${REPO} failed with ${res.status} ${res.statusText} (${url}).`);
+    throw new Error(
+      `GitHub API request for ${REPO} failed with ${res.status} ${res.statusText} (${url}).`
+    );
   }
   const items = (await res.json()) as Array<Record<string, unknown>>;
   const link = res.headers.get('link');

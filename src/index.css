@@ -952,6 +952,345 @@ input:checked + .slider:before {
   padding-top: 4px;
 }
 
+/* Visually hidden but still accessible to screen readers and focus. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Activity Console */
+.dev-console-box {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.dev-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dev-console-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.dev-console-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-full);
+  padding: 1px 7px;
+}
+
+.dev-console-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.dev-console-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.dev-console-btn:hover,
+.dev-console-btn.active {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-main);
+}
+
+.dev-console-btn.active {
+  border-color: rgba(0, 242, 254, 0.35);
+  color: var(--accent-cyan);
+}
+
+/* Controls Bar */
+.dev-console-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dev-console-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dev-console-control {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.dev-console-control:focus {
+  outline: none;
+  border-color: rgba(0, 242, 254, 0.5);
+}
+
+.dev-console-search {
+  width: 150px;
+  cursor: text;
+}
+
+.dev-console-live-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.dev-console-live-sep {
+  color: var(--text-dim);
+}
+
+.dev-console-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.dev-console-live-dot.live {
+  background: #10b981;
+  animation: dev-console-pulse 1.6s ease-in-out infinite;
+}
+
+.dev-console-live-dot.paused {
+  background: var(--text-dim);
+}
+
+@keyframes dev-console-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.dev-console-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.dev-console-action:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-main);
+}
+
+.dev-console-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dev-console-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dev-console-checkbox input {
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.dev-console-spin {
+  animation: dev-console-pulse 1s linear infinite;
+}
+
+/* Log Stream Terminal */
+.dev-console-terminal {
+  height: 300px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: #000;
+  font-family: 'Fira Code', monospace, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.55;
+  user-select: text;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dev-console-terminal:focus {
+  outline: 1px solid rgba(0, 242, 254, 0.25);
+  outline-offset: -1px;
+}
+
+.dev-console-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.dev-console-line {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  word-break: break-all;
+  white-space: pre-wrap;
+  padding: 1px 3px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.dev-console-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dev-console-time {
+  flex-shrink: 0;
+  color: #71717a;
+  user-select: none;
+}
+
+.dev-console-message {
+  color: #d4d4d8;
+}
+
+.dev-console-badge {
+  flex-shrink: 0;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.badge-error {
+  color: #f87171;
+  background: rgba(127, 29, 29, 0.5);
+  border-color: rgba(127, 29, 29, 0.6);
+}
+
+.badge-warn {
+  color: #fbbf24;
+  background: rgba(113, 63, 18, 0.5);
+  border-color: rgba(113, 63, 18, 0.6);
+}
+
+.badge-info {
+  color: #60a5fa;
+  background: rgba(30, 58, 138, 0.5);
+  border-color: rgba(30, 58, 138, 0.6);
+}
+
+.badge-debug {
+  color: #a1a1aa;
+  background: rgba(63, 63, 70, 0.5);
+  border-color: rgba(63, 63, 70, 0.6);
+}
+
+.badge-trace {
+  color: #71717a;
+  background: rgba(39, 39, 42, 0.5);
+  border-color: rgba(39, 39, 42, 0.6);
+}
+
+.badge-success {
+  color: #34d399;
+  background: rgba(6, 78, 59, 0.5);
+  border-color: rgba(6, 78, 59, 0.6);
+}
+
+.dev-console-line-error .dev-console-message {
+  color: #f87171;
+}
+
+.dev-console-line-warn .dev-console-message {
+  color: #fbbf24;
+}
+
+.dev-console-line-info .dev-console-message {
+  color: #d4d4d8;
+}
+
+.dev-console-line-debug .dev-console-message,
+.dev-console-line-trace .dev-console-message {
+  color: #71717a;
+}
+
+.dev-console-line-success .dev-console-message {
+  color: #34d399;
+}
+
+.dev-console-summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 10px;
+  font-size: 9.5px;
+  color: var(--text-dim);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
 /* =========================================================================
    Toast Notification System Styles
    ========================================================================= */
@@ -1189,7 +1528,7 @@ input:checked + .slider:before {
 }
 
 /* =========================================================================
-   React 19 Error Boundary Styles
+   SolidJS 2 Error Boundary Styles
    ========================================================================= */
 .error-boundary-screen {
   position: absolute;
@@ -1298,5 +1637,59 @@ input:checked + .slider:before {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* High-contrast mode: strengthen borders and toggle contrast so frosted
+   glass translucency never washes out interactive boundaries. */
+@media (prefers-contrast: more) {
+  :root {
+    --card-border: rgba(255, 255, 255, 0.3);
+    --card-border-hover: rgba(255, 255, 255, 0.5);
+    --toggle-off: rgba(255, 255, 255, 0.35);
+  }
+  .settings-card,
+  .modal-dialog,
+  .toast-item {
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
+/* Reduced-transparency mode: replace backdrop blur with near-solid surfaces
+   for users who disable desktop transparency effects. */
+@media (prefers-reduced-transparency: reduce) {
+  .app-header,
+  .settings-card,
+  .toast-item,
+  .modal-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .settings-card {
+    background: rgba(10, 10, 12, 0.98);
+  }
+  .toast-item {
+    background: rgba(18, 18, 20, 1);
+  }
+}
+
+/* Windows forced-colors mode: express selection/active state via borders so
+   state is never conveyed by color alone. */
+@media (forced-colors: active) {
+  .tab-btn.active,
+  .theme-swatch-btn.selected {
+    border: 1px solid Highlight;
+  }
+  .switch input:checked + .slider {
+    border: 1px solid Highlight;
+  }
+  .tray-status-badge.tray-active,
+  .btn-update-primary,
+  .btn-update-secondary,
+  .btn-update-footer,
+  .btn-copy-diagnostics,
+  .btn-shortcuts-hint,
+  .modal-close-btn {
+    border: 1px solid ButtonText;
   }
 }

@@ -23,7 +23,7 @@ const fileDescriptions: Record<string, string> = {
   '.prettierignore':
     'Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles.',
   '.oxlintrc.json':
-    'oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and React plugin rules.',
+    'oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and unicorn/import/typescript plugin rules.',
   '.vscode/extensions.json':
     'VS Code workspace extension recommendations (rust-analyzer, tauri-vscode, prettier, oxlint).',
   '.vscode/settings.json':
@@ -33,7 +33,7 @@ const fileDescriptions: Record<string, string> = {
   '.github/workflows/release.yml':
     'Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles.',
   'package.json':
-    'Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (React 19, Tauri v2), and TypeScript tooling.',
+    'Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling.',
   'repomix.config.json':
     'Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents).',
   'tsconfig.json':
@@ -41,7 +41,7 @@ const fileDescriptions: Record<string, string> = {
   'tsconfig.scripts.json':
     'Separate TypeScript config for Node.js scripts — uses ES2022 lib without DOM types to avoid type collisions.',
   'vite.config.ts':
-    'Vite bundler configuration optimized for React 19 and Tauri v2 dev server integration, injecting __APP_VERSION__ at build time.',
+    'Vite bundler configuration optimized for SolidJS 2 and Tauri v2 dev server integration, injecting __APP_VERSION__ at build time.',
   'index.html': 'Main HTML entry point featuring Google Fonts Inter and root mount target.',
   'README.md':
     "User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command.",
@@ -50,11 +50,11 @@ const fileDescriptions: Record<string, string> = {
   'TESTING.md':
     'Testing & QA guide detailing the 5-step automated validation gates and manual desktop verification matrix.',
   'CONTRIBUTING.md':
-    'Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and React 19.',
+    'Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2.',
   'SECURITY.md':
     'Security policy, Tauri v2 capability scoping, atomic persistence guarantees, and vulnerability reporting procedures.',
   'CRUSH.md':
-    'Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, React 19 patterns, and design tokens.',
+    'Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, SolidJS 2 patterns, and design tokens.',
   'CHANGELOG.md': 'Version history tracking releases and features starting with v0.1.0.',
   LICENSE: 'Standard MIT open-source license.',
   'THIRD_PARTY_LICENSES.md':
@@ -64,7 +64,7 @@ const fileDescriptions: Record<string, string> = {
   'AUTO-UPDATE.md':
     'Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow.',
   'src/main.tsx':
-    'React 19 application entry point rendering App root (no React import needed with JSX transform).',
+    'SolidJS 2 application entry point rendering App root (JSX transform handles element creation).',
   'src/App.tsx':
     'Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading.',
   'src/vite-env.d.ts':
@@ -89,7 +89,7 @@ const fileDescriptions: Record<string, string> = {
   'src/components/Toast.tsx':
     'Toast notification container and animated item components with auto-dismiss timers and ARIA live regions.',
   'src/components/ErrorBoundary.tsx':
-    'Top-level React 19 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action.',
+    'Top-level SolidJS 2 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action.',
   'src/components/KeyboardShortcutsModal.tsx':
     'Keyboard shortcuts cheat sheet modal dialog with accessible ARIA dialog markup.',
   'src/index.css':
@@ -291,7 +291,7 @@ ${fileRows.join('\n')}
 
 ## 3. Technology Stack & Data Flow
 
-- **Frontend Layer**: Built with **React 19** and **TypeScript**, styled using a 100% AMOLED deep black theme with glassmorphic cards.
+- **Frontend Layer**: Built with **SolidJS 2** and **TypeScript**, styled using a 100% AMOLED deep black theme with glassmorphic cards.
 - **Desktop Container**: Powered by **Tauri v2**, executing cross-platform GUI & native system tray integration.
 - **Backend & Native Integrations**: Written in **Rust (Cargo)**, handling taskbar tray context menus ("Open", "Check for Updates", "Quit"), window close intercept (\`CloseRequested\`), OS autostart via \`@tauri-apps/plugin-autostart\`, and auto-updater via \`@tauri-apps/plugin-updater\`.
 - **Architecture Map**: Generated by the **Repomix** \`pack()\` API (gitignore-aware file collection, per-file token/char metrics, directory tree) with descriptions merged by \`scripts/generate-arch.ts\`.

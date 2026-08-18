@@ -1,8 +1,11 @@
-import { useState, useEffect, type FC } from 'react';
-import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
+import { createSignal, onSettled, For, type Component } from 'solid-js';
+import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from '../lib/icons';
 import { subscribeToasts, removeToast, type ToastItem, type ToastType } from '../lib/toast';
 
-const TOAST_ICONS: Record<ToastType, FC<{ size?: number; color?: string; className?: string }>> = {
+const TOAST_ICONS: Record<
+  ToastType,
+  Component<{ size?: number; color?: string; class?: string }>
+> = {
   success: CheckCircle2,
   error: AlertCircle,
   warning: AlertTriangle,
@@ -10,46 +13,46 @@ const TOAST_ICONS: Record<ToastType, FC<{ size?: number; color?: string; classNa
 };
 
 /** Individual Toast Notification View with auto-dismiss progress timer */
-const ToastEntry: FC<{ item: ToastItem }> = ({ item }) => {
-  const [progress, setProgress] = useState(100);
-  const Icon = TOAST_ICONS[item.type];
+const ToastEntry: Component<{ item: ToastItem }> = (props) => {
+  const [progress, setProgress] = createSignal(100);
+  const Icon = TOAST_ICONS[props.item.type];
 
-  useEffect(() => {
+  onSettled(() => {
     const startTime = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      const remainingPct = Math.max(0, 100 - (elapsed / item.durationMs) * 100);
+      const remainingPct = Math.max(0, 100 - (elapsed / props.item.durationMs) * 100);
       setProgress(remainingPct);
 
-      if (elapsed >= item.durationMs) {
+      if (elapsed >= props.item.durationMs) {
         clearInterval(interval);
-        removeToast(item.id);
+        removeToast(props.item.id);
       }
     }, 50);
 
     return () => clearInterval(interval);
-  }, [item.id, item.durationMs]);
+  });
 
   return (
     <div
-      className={`toast-item toast-${item.type}`}
-      role={item.type === 'error' ? 'alert' : 'status'}
-      aria-live={item.type === 'error' ? 'assertive' : 'polite'}
+      class={`toast-item toast-${props.item.type}`}
+      role={props.item.type === 'error' ? 'alert' : 'status'}
+      aria-live={props.item.type === 'error' ? 'assertive' : 'polite'}
     >
-      <div className="toast-content">
-        <Icon size={16} className="toast-icon" />
-        <span className="toast-message">{item.message}</span>
+      <div class="toast-content">
+        <Icon size={16} class="toast-icon" />
+        <span class="toast-message">{props.item.message}</span>
         <button
           type="button"
-          className="toast-close"
-          onClick={() => removeToast(item.id)}
+          class="toast-close"
+          onClick={() => removeToast(props.item.id)}
           aria-label="Dismiss notification"
         >
           <X size={12} />
         </button>
       </div>
-      <div className="toast-progress-track">
-        <div className="toast-progress-fill" style={{ width: `${progress}%` }} />
+      <div class="toast-progress-track">
+        <div class="toast-progress-fill" style={{ width: `${progress()}%` }} />
       </div>
     </div>
   );
@@ -57,21 +60,24 @@ const ToastEntry: FC<{ item: ToastItem }> = ({ item }) => {
 
 /**
  * Toast Container component rendered near the root of the app.
+ * Subscribes to the module-level toast event bus (src/lib/toast.ts).
  */
 export function ToastContainer() {
-  const [items, setItems] = useState<ToastItem[]>([]);
+  const [items, setItems] = createSignal<ToastItem[]>([]);
 
-  useEffect(() => {
+  onSettled(() => {
     return subscribeToasts(setItems);
-  }, []);
-
-  if (items.length === 0) return null;
+  });
 
   return (
-    <div className="toast-container" aria-label="Notifications">
-      {items.map((item) => (
-        <ToastEntry key={item.id} item={item} />
-      ))}
-    </div>
+    <>
+      {items().length > 0 && (
+        <div class="toast-container" aria-label="Notifications">
+          <For each={items()} keyed>
+            {(item) => <ToastEntry item={item} />}
+          </For>
+        </div>
+      )}
+    </>
   );
 }

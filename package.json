@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.13.0",
+  "version": "0.19.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
@@ -28,24 +28,23 @@
     "clean": "cargo clean --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@solidjs/web": "^2.0.0-rc.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
-    "lucide-react": "1.31.0",
-    "react": "19.3.0-canary-beef6d60-20260813",
-    "react-dom": "19.3.0-canary-beef6d60-20260813"
+    "lucide-solid": "^1.32.0",
+    "solid-js": "2.0.0-rc.0"
   },
   "devDependencies": {
+    "@solidjs/vite-plugin": "^3.0.0-next.29",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "26.2.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.0.5",
-    "oxlint": "^1.78.0",
-    "prettier": "^3.5.3",
+    "oxlint": "1.79.0",
+    "prettier": "4.0.0-alpha.13",
     "repomix": "1.18.0",
-    "typescript": "7.1.0-dev.20260813.1",
+    "typescript": "7.1.0-dev.20260818.1",
     "vite": "8.2.1"
   }
 }

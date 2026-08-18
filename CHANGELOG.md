@@ -8,6 +8,146 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.19.0] - 2026-08-18
+
+### Round 19 — SolidJS 2.0 Migration
+
+#### ⚛️ SolidJS 2 / TypeScript Frontend (`src`)
+
+- **Framework migration**: Completed React 19 → SolidJS 2.0 (RC). Removed `react`, `react-dom`, `@types/react`, `@types/react-dom`, `@vitejs/plugin-react`, `vite-plugin-solid`, `lucide-react`; added `solid-js@2.0.0-rc.0`, `@solidjs/web`, `@solidjs/vite-plugin`, `lucide-solid`.
+- **Full component rewrites**: `UpdateChecker.tsx` and `DeveloperTab.tsx` migrated from React hooks (`useState`/`useEffect`/`useRef`/`useCallback`/`FC`) to SolidJS 2 primitives (`createSignal` / `createEffect` split-phase compute/apply / `onSettled` / `Component`). `className`→`class`, `lucide-react`→`../lib/icons`.
+- **Runtime crash fix**: `App.tsx` — SolidJS 2 `createEffect` requires both compute and apply functions. Converted single-argument `createEffect(() => { ... })` to `createEffect(() => activeTab(), (tab) => { ... })`.
+- **DevConsole scroll fix**: Replaced `consoleEnd.scrollIntoView()` with `consoleContainer.scrollTop = scrollHeight` so only the terminal container scrolls, not the entire tab. Removed unused `consoleEnd` ref and anchor `<div>`.
+- **Effect cleanup pattern**: Converted `onCleanup` calls inside `createEffect` apply functions to returned cleanup closures (`KeyboardShortcutsModal.tsx`, `Toast.tsx`). `createEffect(fn, depsArray)` → `onSettled` for one-shot side effects. `if (!cond) return null` → reactive `&&` JSX.
+- **Type imports**: `JSX` is owned by `@solidjs/web` in SolidJS 2, not `solid-js`. Added `import type { JSX } from '@solidjs/web'` to `ErrorBoundary.tsx` and `ToggleSwitch.tsx`.
+- **DOM attributes**: `tabIndex`→`tabindex`; ARIA booleans (`aria-selected`/`aria-checked`/`aria-disabled`/`aria-pressed`) → string `'true'`/`'false'`.
+- **SVG attributes**: `src/lib/icons.tsx` — camelCase→kebab-case (`strokeWidth`→`stroke-width` etc.)
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Plugin alignment**: Upgraded `tauri-plugin-log` from `^0.4.33` (Tauri 1.x) to `^2.9.0`; added `log` crate.
+
+#### 📦 Dependencies
+
+- **Pre-release upgrade**: All deps to latest prerelease via `bun run update-deps --prerelease` — `prettier` → 4.0.0-alpha.13, `typescript` → 7.1.0-dev.20260818.1, `oxlint` → 1.79.0; removed React deps, added SolidJS 2 deps.
+
+#### 🎨 Developer Experience
+
+- Updated `generate-arch.ts` descriptions (React→SolidJS), Cargo.toml description, `version.ts` docstring.
+- Added `.commandcode/` to `.prettierignore`.
+
+## [0.18.0] - 2026-08-17
+
+### Round 18 — Tauri Specta Type-Safe IPC Migration
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **Type-safe IPC**: Replaced all hand-written `invoke(command, args)` calls and hand-maintained DTO interfaces (`AppSettingsDto`, `AppInfo`) with auto-generated, type-safe `commands.*` wrappers from `src/bindings.ts`, produced by `tauri-specta` `Builder::export`. Eliminated the `AppSettingsDto` type alias; the frontend now imports `AppSettings` / `AppInfo` directly from the generated bindings.
+- **Error handling mode**: Configured `tauri_specta::Builder` with `ErrorHandlingMode::Throw` so `Result<T, E>` commands throw on error (matching the existing try/catch pattern) and return `T` on success — no `typedResult` wrapper in the generated bindings.
+- **Settings optionality**: Added `??` fallbacks at field-access sites in `sanitizeSettings` and `PreferencesTab` load path where the generated `AppSettings` has `#[serde(default)]` optional fields, satisfying `exactOptionalPropertyTypes` while preserving runtime correctness.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **`specta::Type` + `#[specta::specta]`**: Annotated all 10 IPC commands with `#[specta::specta]` and added `#[derive(specta::Type)]` to `AppSettings`, `AppInfo`, and `SystemStats` structs so `tauri-specta`'s `Builder::<tauri::Wry>::new().commands(collect_commands![...])` can collect and export them.
+- **Owned string fields**: Changed `AppInfo` and `SystemStats` from `&'static str` to `String` for `os`, `arch`, and `tauri_version` to match `specta::Type` conventions for owned serialization.
+- **Builder integration**: In `run()`, replaced `tauri::Builder::invoke_handler(generate_handler![...])` with `tauri_specta::Builder::<tauri::Wry>::new().commands(collect_commands![...])` + `builder.mount_events(app)` + `builder.invoke_handler()`, with `Builder::export(Typescript::default(), "../src/bindings.ts")` gated on `#[cfg(debug_assertions)]`.
+- **New dependencies**: Added `specta = "=2.0.0-rc.25"`, `specta-typescript = "0.0.12"`, `tauri-specta = "=2.0.0-rc.25"` (features `["typescript"]`), and enabled the `"specta"` Cargo feature on `tauri`.
+
+#### 🎨 Developer Experience
+
+- **Generated bindings**: `src/bindings.ts` (auto-generated, added to `.prettierignore` + oxlint `ignorePatterns`).
+- **DeveloperTab IPC playground**: Replaced dynamic `invoke(selectedCommand)` (string-based, untyped) with a type-safe `IPC_COMMAND_DISPATCH` record mapping command IDs to `commands.*` wrappers; moved to module scope to satisfy `react-hooks/exhaustive-deps`.
+
+#### 🛠️ CI / Release
+
+- **No version bump** — this is a feature addition (`0.17.0 → 0.18.0`).
+
+## [0.17.0] - 2026-08-17
+
+### Round 17 — Hardening & AIVORelay Reference Patterns
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **Window geometry persistence**: New `remember window size` / `remember window position` toggles in Preferences. The frontend preserves backend-managed `saved_window_*` fields across partial saves (via a settings snapshot) so toggling a preference never resets window geometry; corrupt geometry falls back through the settings sanitizer.
+- **Settings self-heal**: When the persisted `theme_accent` isn't a known preset, the corrected fallback is written back to disk on load so a corrupted value never lingers.
+- **Stricter CSP**: Appended `object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; frame-src 'none'` (directives borrowed from the AIVORelay reference app) onto the existing `script-src 'self'` policy — locks down the plugin/embed/framing/base-form attack surface without touching the dev HMR flow.
+- **Debug Console testability**: Extracted the pure reconciliation helpers (`severityFromText`, `mergeFileLines`, `LogLine`/`LineSeverity`, `MAX_LINES`) out of `DevConsole.tsx` into a testable `src/lib/logViewer.ts` with zero behavior change.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Window geometry persistence**: New `remember_window_size`, `remember_window_position`, `saved_window_{width,height,x,y}` fields on `AppSettings` (`i32::MIN` sentinel for unset position). Geometry is restored on startup (`set_size`/`set_position`) and persisted on `Resized`/`Moved` via `save_window_geometry` (dirty-checked, gated by the remember flags). Position safety mirrors AIVORelay (`is_windows_minimized_position` rejects Windows hottracked `(-32000,-32000)`; `saved_window_position_is_usable` rejects off-monitor coords).
+- **Log filename derivation**: `tauri-plugin-log` now derives the log file from `app.package_info().name` (`file_name: None`), and `get_recent_logs`/`clear_logs` mirror that via a shared `log_file_path` helper — the Dev Console stays valid after `rename-project` rebrands the app.
+
+#### 🎨 Developer Experience
+
+- **VS Code launch config (`.vscode/launch.json`)**: "Debug Tauri (Full)" via the recommended Tauri extension plus a "Web Preview" Chromium config for the Vite dev server, so the Dev Console and window lifecycle are debuggable.
+
+#### 🛠️ CI / Release
+
+- **Aligned `release.yml` runners** with `ci.yml`: `ubuntu-22.04`→`ubuntu-24.04`, `macos-13`→`macos-14` (native x86_64 Intel kept for the `x86_64-apple-darwin` bundle — `macos-latest` is ARM and can't build native Intel).
+
+#### 🎯 Testing (`test`)
+
+- **DevConsole reconciliation tests** (`test/logViewer.test.ts`): 11 cases for `severityFromText` + `mergeFileLines` (append, count-aware dedup, live/file supersession, severity mismatch, `MAX_LINES` clamp).
+- **Settings sanitizer** (`test/settings.test.ts`): expanded the `valid` fixture for the geometry schema + a case for corrupted window-geometry values falling back — 8 sanitizer cases.
+- **Rust settings/window tests** (`src-tauri/src/lib.rs`): `AppSettings::default` + round-trip + atomic persistence now cover the geometry fields; added `test_is_windows_minimized_position`.
+
+## [0.16.0] - 2026-08-16
+
+### Round 16 — S2B2S Debug Console Port
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Log plugin (`tauri-plugin-log`)**: Registered with three targets — stdout, the app log directory (`<product-name>.log`, 500 KB Keep-One rotation), and the webview — so every backend diagnostic streams to the Dev Console as `log://log` events in real time. Added `log` facade dependency and lifecycle `log::info!`/`log::error!` instrumentation (state init, tray menu actions, settings parse/read failures) so the console shows genuine backend activity.
+- **`get_recent_logs` / `clear_logs` IPC commands**: New commands mirroring S2B2S — read the last N lines of the backend log file (pure `tail_lines` helper, unit-tested) and truncate it — registered in the invoke handler.
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **Debug Console rewrite (`DevConsole.tsx`, S2B2S `LogViewer` port)**: The Activity Console is now a full log viewer fed by three sources — the frontend dev log bus, live `log://log` events from the Rust backend, and 2s auto-refresh polling of `get_recent_logs` (count-aware merge supersedes live lines with their on-disk counterparts, 2000-line hard cap). Adds severity filter (All/Error/Warn/Info/Debug/Trace), lines-limit selector (50–500), text search, pause/resume with buffering, live/paused pulsing indicator, auto-refresh checkbox, manual refresh with spinner, copy (filtered), and clear (native confirm, truncates the backend file too).
+- **Terminal-style rendering**: Black monospace terminal surface with color-coded severity badges (ERR/WRN/INF/DBG/TRC/SUC), timestamps, hover highlighting, near-bottom auto-scroll pinning, and a "showing X of Y" summary bar; backend log lines parsed from the `[date][time][module][LEVEL] message` file format.
+
+#### 🎨 Styling (`src/index.css`)
+
+- New console styles: controls toolbar (selects, search, action buttons, auto-refresh checkbox, live-status dot with pulse animation), terminal surface, severity badge palette, line color coding, and summary bar — all matching the existing glassmorphic dark aesthetic.
+
+## [0.15.0] - 2026-08-16
+
+### Round 15 — Settings Resilience & Developer Diagnostics (D3D_CURSOR-inspired)
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **Settings Backup & Restore (`DeveloperTab`, `src/lib/settingsBackup.ts`)**: Export the persisted settings to a versioned JSON backup file (Blob download) and restore from any backup via native file picker. Imports run through a strict sanitizer — unknown fields are dropped, wrong-typed values fall back to current settings, and the accent must be a known preset id — so corrupted or hand-edited backups can never break the settings engine.
+- **Activity Console (`DevConsole`, `src/lib/console.ts`)**: Replaces the static IPC output box with a live, timestamped, color-coded console feed (module-level event bus, mirroring the toast pattern). IPC invocations, settings import/export/reset, and config-dir actions all stream in with level markers (INFO/SUCCESS/WARN/ERROR), plus auto-scroll toggle, copy-to-clipboard, and clear controls (200-entry ring buffer).
+- **Settings load retry with exponential backoff (`PreferencesTab`)**: Initial settings load retries up to 3 times (300ms/600ms/1200ms) to survive transient IPC startup races instead of silently falling back to defaults.
+- **D3D_CURSOR inspiration**: The sanitizer + import/export flow and the diagnostics console are direct ports of CursorFX Studio's preset-sharing and DiagnosticsPanel patterns.
+
+#### 🛠️ Developer CLI & Testing Suite (`test`)
+
+- **Sanitizer unit tests (`test/settings.test.ts`)**: 7 new tests covering pass-through, unknown-field dropping, per-field type fallback, unknown-accent rejection, primitive/null payloads, fallback immutability, and serialization round-trip — 12 total `bun test` cases.
+
+## [0.14.0] - 2026-08-16
+
+### Round 14 — Tray Utility & Accessibility Hardening
+
+#### ⚛️ React 19 / TypeScript Frontend (`src`)
+
+- **"Check for updates on launch" toggle (`PreferencesTab`)**: The previously dead `check_updates_on_launch` setting (hardcoded `true` in every IPC call, no UI) is now a real preference toggle — the Update Checker card auto-checks on mount only when enabled, and all settings writes go through a shared `saveSettings` merge helper so no preference can be silently clobbered.
+- **Native update notification while hidden (`UpdateChecker`)**: When a new version is found while the window is hidden in the tray, a native OS notification (`tauri-plugin-notification`) surfaces it — the only channel that reaches the user without opening the GUI.
+- **Active tab persistence (`App.tsx`)**: The last active tab is remembered in `localStorage` and restored on next launch, so the app reopens on the same view it was closed on.
+- **Diagnostic report download (`AboutTab`)**: New "Save Report" button exports a timestamped diagnostics `.txt` via Blob download, sharing the same markdown builder as Copy Diagnostics.
+- **Keyboard Shortcuts modal accessibility**: Proper focus trap (Tab wraps at both ends, Shift+Tab backwards), focus restore on close, initial focus into the dialog, and `aria-describedby` wiring — no new shortcuts added.
+- **Removed dead prop**: `onAccentChange` (a no-op passed by `App.tsx`) removed from `PreferencesTab`.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Notification plugin**: Registered `tauri-plugin-notification` and granted `notification:default` capability for native OS notifications.
+
+#### ♿ Accessibility & CSS (`src/index.css`)
+
+- **`prefers-contrast: more`**: Strengthened borders, toggle contrast, and card outlines so frosted glass never washes out interactive boundaries.
+- **`prefers-reduced-transparency: reduce`**: Removes backdrop blur in favor of near-solid surfaces for users who disable desktop transparency.
+- **`forced-colors: active`**: Selection/active states (tabs, accent swatches, switches, badges, buttons) expressed via borders so state is never conveyed by color alone.
+
 ## [0.13.0] - 2026-08-16
 
 ### Round 13 Part 2 — S2B2S Tooling Borrowings & Lint Hardening

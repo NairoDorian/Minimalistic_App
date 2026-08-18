@@ -141,7 +141,7 @@ The `url` fields point at the exact installers uploaded to the GitHub Release; `
 
 ## 🤖 Continuous Integration & GitHub Actions Workflow
 
-Below is a complete, production-ready `.github/workflows/release.yml` file to automate building signed installers and publishing updates to GitHub Releases. **Commit it to your repo** when you're ready to ship (the template only ships `ci.yml` — the release workflow is intentionally opt-in):
+Below is the production-ready `.github/workflows/release.yml` workflow that automates building signed installers and publishing updates to GitHub Releases. It is **committed to the repo** and runs on every `v*` tag push (`workflow_dispatch` also available) — no separate commit required. When you fork this template, customize the `TAURI_SIGNING_PRIVATE_KEY` secrets and repo links as described in the steps below.
 
 ```yaml
 name: 'Release Build & Auto-Update Dispatch'
@@ -216,8 +216,8 @@ jobs:
    Execute `bun tauri signer generate` and paste the **public key** into `tauri.conf.json` under `plugins.updater.pubkey`.
 3. **Set Repository Secrets**:
    Add `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to your GitHub Repository Secrets (`Settings > Secrets & Variables > Actions`).
-4. **Commit the Release Workflow**:
-   Copy the `release.yml` above into `.github/workflows/release.yml` and commit it.
+4. **Configure the Release Workflow**:
+   The committed `.github/workflows/release.yml` triggers on `v*` tag pushes (or manually via `workflow_dispatch`). Add your signing secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) to **Settings → Secrets & Variables → Actions** and point `endpoints`/`pubkey` at your repo.
 5. **Bump & Validate** (exact order — see `AGENTS.md`):
    ```bash
    bun run before-commit --bump <major|minor|patch>

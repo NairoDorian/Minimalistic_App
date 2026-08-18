@@ -2,7 +2,7 @@
  * Reactive Toast Notification Event Bus.
  *
  * Provides a decoupled, lightweight notification mechanism usable from any
- * React component or async IPC handler without prop drilling.
+ * SolidJS component or async IPC handler without prop drilling.
  */
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';

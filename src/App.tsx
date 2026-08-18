@@ -1,19 +1,28 @@
-import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { Settings, Info, AppWindow, Shield, Code2, type LucideIcon } from 'lucide-react';
+import { createSignal, createEffect, onCleanup, onSettled, For } from 'solid-js';
+import { Settings, Info, AppWindow, Shield, Code2, type LucideIcon } from './lib/icons';
+import { commands } from './bindings';
+import type { AppInfo } from './bindings';
 import { PreferencesTab } from './components/PreferencesTab';
-import { AboutTab, type AppInfo, WEB_PREVIEW_APP_INFO } from './components/AboutTab';
+import { AboutTab, WEB_PREVIEW_APP_INFO } from './components/AboutTab';
 import { DeveloperTab } from './components/DeveloperTab';
 import { UpdateChecker } from './components/UpdateChecker';
 import { ToastContainer } from './components/Toast';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isTauri } from './lib/tauri';
-import { applyThemeAccent, type ThemeAccent } from './lib/theme';
+import { applyThemeAccent } from './lib/theme';
 
-type TabType = 'preferences' | 'about' | 'developer';
+export type TabType = 'preferences' | 'about' | 'developer';
 
 const TAB_ORDER: readonly TabType[] = ['preferences', 'about', 'developer'];
+
+const ACTIVE_TAB_KEY = 'minimalistic_app.active_tab';
+
+function loadInitialTab(): TabType {
+  const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+  if (TAB_ORDER.includes(saved as TabType)) return saved as TabType;
+  return 'preferences';
+}
 
 const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
   { id: 'preferences', label: 'Preferences', icon: Settings },
@@ -22,41 +31,50 @@ const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
 ];
 
 export function AppContent() {
-  const [activeTab, setActiveTab] = useState<TabType>('preferences');
-  const [statusMessage, setStatusMessage] = useState<string>('Ready');
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [shortcutsModalOpen, setShortcutsModalOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = createSignal<TabType>(loadInitialTab);
+  const [statusMessage, setStatusMessage] = createSignal<string>('Ready');
+  const [appInfo, setAppInfo] = createSignal<AppInfo | null>(null);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = createSignal<boolean>(false);
 
-  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  useEffect(() => {
-    return () => {
-      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
-    };
-  }, []);
+  onCleanup(() => {
+    if (statusTimeout) clearTimeout(statusTimeout);
+  });
 
-  useEffect(() => {
+  // Persist the active tab so the app reopens on the same view it was closed on.
+  createEffect(
+    () => activeTab(),
+    (tab) => {
+      localStorage.setItem(ACTIVE_TAB_KEY, tab);
+    }
+  );
+
+  // Load app metadata on mount (one-time, not reactive).
+  onSettled(() => {
     if (!isTauri) {
       setAppInfo(WEB_PREVIEW_APP_INFO);
       return;
     }
 
-    invoke<AppInfo>('get_app_info')
+    commands
+      .getAppInfo()
       .then(setAppInfo)
       .catch((err: unknown) => {
         console.warn('App info IPC query failed:', err);
       });
-  }, []);
+  });
 
-  const updateStatus = useCallback((msg: string) => {
+  /** Sets a temporary status message that auto-clears to 'Ready' after 4 seconds. */
+  const updateStatus = (msg: string) => {
     setStatusMessage(msg);
-    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
-    statusTimeoutRef.current = setTimeout(() => setStatusMessage('Ready'), 4000);
-  }, []);
+    if (statusTimeout) clearTimeout(statusTimeout);
+    statusTimeout = setTimeout(() => setStatusMessage('Ready'), 4000);
+  };
 
-  // Global Keyboard Shortcuts Listener
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: globalThis.KeyboardEvent) => {
+  // Global keyboard shortcuts listener (Ctrl/Cmd + number, ?, Ctrl+/, Cmd+,)
+  onSettled(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const mod = isMac ? e.metaKey : e.ctrlKey;
 
@@ -85,18 +103,21 @@ export function AppContent() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  });
 
-  const handleTabKeyDown = useCallback((e: KeyboardEvent<HTMLButtonElement>, tab: TabType) => {
+  /** Arrow / Home / End navigation between tabs — follows ARIA roving-tabindex. */
+  const handleTabKeyDown = (e: KeyboardEvent, tab: TabType) => {
     const index = TAB_ORDER.indexOf(tab);
     let next: TabType | null = null;
 
     switch (e.key) {
       case 'ArrowRight':
+      case 'ArrowDown':
         e.preventDefault();
         next = TAB_ORDER[(index + 1) % TAB_ORDER.length] ?? null;
         break;
       case 'ArrowLeft':
+      case 'ArrowUp':
         e.preventDefault();
         next = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length] ?? null;
         break;
@@ -115,87 +136,84 @@ export function AppContent() {
     if (next === null) return;
     setActiveTab(next);
     document.getElementById(`tab-${next}`)?.focus();
-  }, []);
+  };
 
-  const handleSettingsReset = useCallback(() => {
+  const handleSettingsReset = () => {
     applyThemeAccent('cyan');
     updateStatus('Settings reset to defaults');
-  }, [updateStatus]);
+  };
 
   return (
-    <div className="app-container">
-      {/* Toast Notification Container */}
+    <div class="app-container">
       <ToastContainer />
-
-      {/* Keyboard Shortcuts Cheat Sheet Modal */}
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}
         onClose={() => setShortcutsModalOpen(false)}
       />
 
-      {/* Native Window Header Bar */}
-      <header className="app-header" data-tauri-drag-region>
-        <div className="brand-section" data-tauri-drag-region>
-          <div className="brand-icon">
+      <header class="app-header" data-tauri-drag-region>
+        <div class="brand-section" data-tauri-drag-region>
+          <div class="brand-icon">
             <AppWindow size={18} />
           </div>
-          <span className="brand-title">Minimalistic App</span>
+          <span class="brand-title">Minimalistic App</span>
         </div>
-        <div className={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
-          <span className="status-dot"></span>
+        <div class={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
+          <span class="status-dot"></span>
           <span>{isTauri ? 'System Tray Active' : 'Web Preview'}</span>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="app-content">
-        {/* Modular Tab Navigation Header */}
-        <nav className="navigation-tab" role="tablist" aria-label="Main Navigation">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              id={`tab-${id}`}
-              className={`tab-btn ${activeTab === id ? 'active' : ''}`}
-              onClick={() => setActiveTab(id)}
-              onKeyDown={(e) => handleTabKeyDown(e, id)}
-              aria-selected={activeTab === id}
-              aria-controls={`panel-${id}`}
-              role="tab"
-              tabIndex={activeTab === id ? 0 : -1}
-            >
-              <Icon size={14} />
-              <span>{label}</span>
-            </button>
-          ))}
+      <main class="app-content">
+        <nav class="navigation-tab" role="tablist" aria-label="Main Navigation">
+          <For each={TABS} keyed>
+            {(tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  id={`tab-${tab.id}`}
+                  type="button"
+                  class={`tab-btn ${activeTab() === tab.id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(e) => handleTabKeyDown(e, tab.id)}
+                  aria-selected={activeTab() === tab.id ? 'true' : 'false'}
+                  aria-controls={`panel-${tab.id}`}
+                  role="tab"
+                  tabindex={activeTab() === tab.id ? 0 : -1}
+                >
+                  <Icon size={14} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            }}
+          </For>
         </nav>
 
-        {/* Active Tab Panel */}
-        {activeTab === 'preferences' && (
-          <PreferencesTab
-            onStatusChange={updateStatus}
-            onAccentChange={(_accent: ThemeAccent) => {}}
-          />
-        )}
-        {activeTab === 'about' && (
-          <AboutTab
-            appInfo={appInfo}
-            onStatusChange={updateStatus}
-            onOpenShortcuts={() => setShortcutsModalOpen(true)}
-          />
-        )}
-        {activeTab === 'developer' && (
-          <DeveloperTab onStatusChange={updateStatus} onSettingsReset={handleSettingsReset} />
-        )}
+        <div class="app-content-tabs">
+          {activeTab() === 'preferences' && <PreferencesTab onStatusChange={updateStatus} />}
+          {activeTab() === 'about' && (
+            <AboutTab
+              appInfo={appInfo}
+              onStatusChange={updateStatus}
+              onOpenShortcuts={() => setShortcutsModalOpen(true)}
+            />
+          )}
+          {activeTab() === 'developer' && (
+            <DeveloperTab onStatusChange={updateStatus} onSettingsReset={handleSettingsReset} />
+          )}
+        </div>
       </main>
 
-      {/* Status Footer */}
-      <footer className="app-footer">
-        <div className="footer-status" aria-live="polite">
+      <footer class="app-footer">
+        <div class="footer-status" aria-live="polite">
           <Shield size={12} color="var(--accent-cyan)" />
-          <span>Status: {statusMessage}</span>
+          <span>Status: {statusMessage()}</span>
         </div>
-        <UpdateChecker variant="footer" autoCheckOnMount={false} listenForEvents={false} />
+        <UpdateChecker
+          variant="footer"
+          autoCheckOnMount={() => false}
+          listenForEvents={() => false}
+        />
       </footer>
     </div>
   );

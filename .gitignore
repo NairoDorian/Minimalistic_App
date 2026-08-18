@@ -33,6 +33,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Command Code agent tooling (auto-managed — never commit)
+.commandcode/
+
 # Environment variables (never commit secrets)
 .env
 .env.local

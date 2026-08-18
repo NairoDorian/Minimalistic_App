@@ -1,109 +1,76 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertOctagon, RotateCcw, Copy, Check } from 'lucide-react';
+import { Errored } from '@solidjs/web';
+import type { JSX } from '@solidjs/web';
+import { createSignal } from 'solid-js';
+import { AlertOctagon, RotateCcw, Copy, Check } from '../lib/icons';
 
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: ReactNode;
-}
+const handleReload = () => {
+  window.location.reload();
+};
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
-  copied: boolean;
-}
+function ErrorFallback(props: { error: unknown }) {
+  const error = props.error instanceof Error ? props.error : new Error(String(props.error));
+  const [copied, setCopied] = createSignal(false);
 
-/**
- * Top-level React 19 Error Boundary with a sleek glassmorphic crash card.
- */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-      copied: false,
-    };
-  }
-
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { hasError: true, error };
-  }
-
-  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    this.setState({ errorInfo });
-    console.error('Unhandled Application Error:', error, errorInfo);
-  }
-
-  handleCopy = async () => {
-    const { error, errorInfo } = this.state;
+  const handleCopy = async () => {
     const text = [
       '```markdown',
       '# Application Crash Report',
-      `- Error: ${error?.name}: ${error?.message}`,
-      `- Stack: ${error?.stack ?? 'N/A'}`,
-      `- Component Stack: ${errorInfo?.componentStack ?? 'N/A'}`,
+      `- Error: ${error.name}: ${error.message}`,
+      `- Stack: ${error.stack ?? 'N/A'}`,
       '```',
     ].join('\n');
 
     try {
       await navigator.clipboard.writeText(text);
-      this.setState({ copied: true });
-      setTimeout(() => this.setState({ copied: false }), 2500);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     } catch {
       // ignore
     }
   };
 
-  handleReload = () => {
-    window.location.reload();
-  };
-
-  override render() {
-    const { hasError, error, copied } = this.state;
-    const { children, fallback } = this.props;
-
-    if (hasError) {
-      if (fallback) return fallback;
-
-      return (
-        <div className="error-boundary-screen" role="alert">
-          <div className="error-card">
-            <div className="error-header">
-              <div className="error-icon">
-                <AlertOctagon size={24} color="#f43f5e" />
-              </div>
-              <div>
-                <h1 className="error-title">Application Encountered an Error</h1>
-                <p className="error-subtitle">
-                  An unhandled exception occurred in the React rendering tree.
-                </p>
-              </div>
-            </div>
-
-            <div className="error-details">
-              <span className="error-message">
-                {error?.name}: {error?.message}
-              </span>
-              {error?.stack && <pre className="error-stack">{error.stack}</pre>}
-            </div>
-
-            <div className="error-actions">
-              <button type="button" className="btn-update-secondary" onClick={this.handleCopy}>
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copied ? 'Copied Details' : 'Copy Crash Log'}</span>
-              </button>
-              <button type="button" className="btn-update-primary" onClick={this.handleReload}>
-                <RotateCcw size={14} />
-                <span>Reload Application</span>
-              </button>
-            </div>
+  return (
+    <div class="error-boundary-screen" role="alert">
+      <div class="error-card">
+        <div class="error-header">
+          <div class="error-icon">
+            <AlertOctagon size={24} color="#f43f5e" />
+          </div>
+          <div>
+            <h1 class="error-title">Application Encountered an Error</h1>
+            <p class="error-subtitle">
+              An unhandled exception occurred in the SolidJS rendering tree.
+            </p>
           </div>
         </div>
-      );
-    }
 
-    return children;
-  }
+        <div class="error-details">
+          <span class="error-message">
+            {error.name}: {error.message}
+          </span>
+          {error.stack && <pre class="error-stack">{error.stack}</pre>}
+        </div>
+
+        <div class="error-actions">
+          <button type="button" class="btn-update-secondary" onClick={handleCopy}>
+            {copied() ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copied() ? 'Copied Details' : 'Copy Crash Log'}</span>
+          </button>
+          <button type="button" class="btn-update-primary" onClick={handleReload}>
+            <RotateCcw size={14} />
+            <span>Reload Application</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Top-level error boundary wrapping the application.
+ * Uses SolidJS 2.0's <Errored> boundary which replaces React's class-based ErrorBoundary.
+ * The fallback receives an error accessor: (err) => err().
+ */
+export function ErrorBoundary(props: { children: JSX.Element }) {
+  return <Errored fallback={(err) => <ErrorFallback error={err()} />}>{props.children}</Errored>;
 }

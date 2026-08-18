@@ -1,14 +1,15 @@
-import type { KeyboardEvent, ReactNode } from 'react';
+import { type Component } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 
-interface ToggleSwitchProps {
+export interface ToggleSwitchProps {
   /** Icon rendered in the setting row's leading tile. */
-  icon: ReactNode;
+  icon: JSX.Element;
   /** Bold title label, e.g. "Start at OS launch". */
   title: string;
   /** Muted helper text explaining the setting. */
   subtitle: string;
-  /** Current on/off state. */
-  checked: boolean;
+  /** Current on/off state — passed as a signal getter for reactivity. */
+  checked: () => boolean;
   /** Accessible name announced by screen readers (same as the visual title). */
   ariaLabel: string;
   /** Whether the switch is disabled / non-interactive. */
@@ -27,57 +28,46 @@ interface ToggleSwitchProps {
  * - The native checkbox stays in the DOM (visually hidden) to drive click
  *   handling and state semantics for assistive tech and form tooling.
  */
-export function ToggleSwitch({
-  icon,
-  title,
-  subtitle,
-  checked,
-  ariaLabel,
-  disabled = false,
-  onToggle,
-}: ToggleSwitchProps) {
+export const ToggleSwitch: Component<ToggleSwitchProps> = (props) => {
   /** Keyboard activation handler for Space / Enter keys. */
-  const handleKeyDown = (e: KeyboardEvent<HTMLLabelElement>) => {
-    if (disabled) return;
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (props.disabled) return;
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      onToggle(!checked);
+      props.onToggle(!props.checked());
     }
   };
 
   return (
-    <div className={`setting-item ${disabled ? 'disabled' : ''}`}>
-      <div className="setting-info">
-        <div className="setting-icon">{icon}</div>
-        <div className="setting-text">
-          <span className="setting-title">{title}</span>
-          <span className="setting-subtitle">{subtitle}</span>
+    <div class={`setting-item ${props.disabled ? 'disabled' : ''}`}>
+      <div class="setting-info">
+        <div class="setting-icon">{props.icon}</div>
+        <div class="setting-text">
+          <span class="setting-title">{props.title}</span>
+          <span class="setting-subtitle">{props.subtitle}</span>
         </div>
       </div>
       <label
-        className={`switch ${disabled ? 'disabled' : ''}`}
-        tabIndex={disabled ? -1 : 0}
+        class={`switch ${props.disabled ? 'disabled' : ''}`}
+        tabindex={props.disabled ? -1 : 0}
         role="switch"
-        aria-checked={checked}
-        aria-disabled={disabled}
-        aria-label={ariaLabel}
+        aria-checked={props.checked() ? 'true' : 'false'}
+        aria-disabled={props.disabled ? 'true' : 'false'}
+        aria-label={props.ariaLabel}
         onKeyDown={handleKeyDown}
       >
         <input
           type="checkbox"
-          checked={checked}
-          disabled={disabled}
+          checked={props.checked()}
+          disabled={props.disabled}
           onChange={(e) => {
-            if (!disabled) onToggle(e.target.checked);
+            if (!props.disabled) props.onToggle(e.currentTarget.checked);
           }}
-          tabIndex={-1}
-          // Hidden from assistive tech: the label's role="switch" + aria-checked
-          // already expose the on/off semantics — without this, screen readers
-          // announce the control twice (once as switch, once as checkbox).
+          tabindex={-1}
           aria-hidden="true"
         />
-        <span className="slider"></span>
+        <span class="slider"></span>
       </label>
     </div>
   );
-}
+};

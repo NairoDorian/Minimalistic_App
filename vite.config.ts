@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import solid from '@solidjs/vite-plugin';
 import { APP_VERSION } from './scripts/version.ts';
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [solid()],
 
   // Vite options tailored for Tauri development
   clearScreen: false,

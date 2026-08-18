@@ -10,7 +10,7 @@
  *  - `src-tauri/Cargo.lock`      — refreshed by `cargo update` when Cargo.toml
  *                                  changes (run from before-commit.ts)
  *  - `__APP_VERSION__`           — injected into the frontend at build time by
- *                                  Vite's `define` (see vite.config.ts); React
+ *                                  Vite's `define` (see vite.config.ts); SolidJS
  *                                  code reads this constant and never hardcodes
  *                                  a version string
  *
@@ -19,4 +19,4 @@
  * script propagate it — this is what prevents silent version drift between the
  * package manager, the Cargo crate, and the Tauri bundle config.
  */
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.19.0';

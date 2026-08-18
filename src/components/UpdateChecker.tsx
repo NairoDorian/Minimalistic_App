@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef, useCallback, type FC } from 'react';
+import { createSignal, createEffect, type Component } from 'solid-js';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import {
+  sendNotification,
+  isPermissionGranted,
+  requestPermission,
+} from '@tauri-apps/plugin-notification';
 import {
   RefreshCw,
   Download,
@@ -10,175 +16,190 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-} from 'lucide-react';
+} from '../lib/icons';
 import { isTauri } from '../lib/tauri';
 
 interface UpdateCheckerProps {
-  autoCheckOnMount?: boolean;
-  listenForEvents?: boolean;
+  autoCheckOnMount?: () => boolean;
+  listenForEvents?: () => boolean;
   onStatusChange?: (status: string) => void;
   variant?: 'card' | 'footer';
 }
 
 /**
  * Module-level install guard shared by every UpdateChecker instance.
- *
- * The card (Preferences tab) and footer render as two separate component
- * instances, each with its own `isInstallingRef` — so per-instance guards
- * alone would allow a second `downloadAndInstall()` to start from the other
- * variant while one is already in flight. This shared flag makes the install
- * operation process-wide, preventing duplicate concurrent downloads.
+ * Prevents concurrent download-and-install cycles.
  */
 let installInFlight = false;
 
-export const UpdateChecker: FC<UpdateCheckerProps> = ({
-  autoCheckOnMount = true,
-  listenForEvents = true,
-  onStatusChange,
-  variant = 'card',
-}) => {
-  const [isChecking, setIsChecking] = useState<boolean>(false);
-  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
-  const [isInstalling, setIsInstalling] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [showUpToDate, setShowUpToDate] = useState<boolean>(false);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
-  const [showNotes, setShowNotes] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+/**
+ * Surfaces a native OS notification when a new version is found while the
+ * main window is hidden in the tray — the only channel that can reach the
+ * user without opening the GUI.
+ */
+const notifyIfHidden = async (version: string) => {
+  if (!isTauri) return;
+  try {
+    const visible = await getCurrentWindow().isVisible();
+    if (visible) return;
 
-  const pendingUpdateRef = useRef<Update | null>(null);
-  const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Guard refs to prevent stale closure calls in single-mounted event listeners
-  const isCheckingRef = useRef<boolean>(false);
-  const isInstallingRef = useRef<boolean>(false);
-
-  /**
-   * Checks GitHub Releases for a newer version.
-   */
-  const checkForUpdates = useCallback(
-    async (isManual = false) => {
-      if (!isTauri || isCheckingRef.current || isInstallingRef.current) return;
-
-      isCheckingRef.current = true;
-      setIsChecking(true);
-      setErrorMessage(null);
-      onStatusChange?.('Checking for updates...');
-
-      try {
-        const update = await check();
-
-        if (update?.available) {
-          pendingUpdateRef.current = update;
-          setLatestVersion(update.version);
-          setReleaseNotes(update.body || null);
-          setUpdateAvailable(true);
-          setShowUpToDate(false);
-          setShowNotes(false); // never leave a stale release-notes drawer open
-          onStatusChange?.(`New version v${update.version} available!`);
-        } else {
-          pendingUpdateRef.current = null;
-          setUpdateAvailable(false);
-          setReleaseNotes(null);
-          setShowNotes(false);
-
-          if (isManual) {
-            setShowUpToDate(true);
-            onStatusChange?.('Application is up to date');
-            if (upToDateTimeoutRef.current) clearTimeout(upToDateTimeoutRef.current);
-            upToDateTimeoutRef.current = setTimeout(() => {
-              setShowUpToDate(false);
-              upToDateTimeoutRef.current = null;
-            }, 4000);
-          } else {
-            onStatusChange?.('Up to date');
-          }
-        }
-      } catch (error: unknown) {
-        console.error('Failed to check for updates:', error);
-        // Drop any stale update handle so a previously offered update cannot be
-        // installed after the check itself has failed (e.g. network went down).
-        pendingUpdateRef.current = null;
-        const errStr = error instanceof Error ? error.message : String(error);
-        if (errStr.includes('404') || errStr.includes('Could not fetch')) {
-          setErrorMessage('Update endpoint not found (GitHub release pending)');
-        } else {
-          setErrorMessage('Unable to connect to update server');
-        }
-        onStatusChange?.('Update check failed');
-      } finally {
-        isCheckingRef.current = false;
-        setIsChecking(false);
-      }
-    },
-    [onStatusChange]
-  );
-
-  useEffect(() => {
-    if (!isTauri) return;
-    let isMounted = true;
-    let unlistenFn: (() => void) | undefined;
-
-    if (autoCheckOnMount) {
-      checkForUpdates(false);
+    let granted = await isPermissionGranted();
+    if (!granted) granted = (await requestPermission()) === 'granted';
+    if (granted) {
+      sendNotification({
+        title: 'Update available',
+        body: `v${version} is ready to install. Open the app to update.`,
+      });
     }
+  } catch (err: unknown) {
+    console.warn('Failed to send update notification:', err);
+  }
+};
 
-    // Only the primary (card) instance responds to tray-triggered checks;
-    // multiple instances listening would fire duplicate network requests.
-    if (listenForEvents) {
-      listen('check-for-updates', () => {
-        if (isMounted) checkForUpdates(true);
-      })
-        .then((fn) => {
-          if (!isMounted) {
-            fn();
-          } else {
-            unlistenFn = fn;
-          }
+export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
+  const [isChecking, setIsChecking] = createSignal<boolean>(false);
+  const [updateAvailable, setUpdateAvailable] = createSignal<boolean>(false);
+  const [isInstalling, setIsInstalling] = createSignal<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = createSignal<number>(0);
+  const [showUpToDate, setShowUpToDate] = createSignal<boolean>(false);
+  const [latestVersion, setLatestVersion] = createSignal<string | null>(null);
+  const [releaseNotes, setReleaseNotes] = createSignal<string | null>(null);
+  const [showNotes, setShowNotes] = createSignal<boolean>(false);
+  const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+
+  // Mutable scratch state (not signals — these are concurrency guards and
+  // caches that must not trigger reactivity on every read).
+  let pendingUpdate: Update | null = null;
+  let upToDateTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isCheckingGuard = false;
+  let isInstallingGuard = false;
+
+  /** Checks GitHub Releases for a newer version. */
+  const checkForUpdates = async (isManual = false) => {
+    if (!isTauri || isCheckingGuard || isInstallingGuard) return;
+
+    isCheckingGuard = true;
+    setIsChecking(true);
+    setErrorMessage(null);
+    props.onStatusChange?.('Checking for updates...');
+
+    try {
+      const update = await check();
+
+      if (update?.available) {
+        pendingUpdate = update;
+        setLatestVersion(update.version);
+        setReleaseNotes(update.body || null);
+        setUpdateAvailable(true);
+        setShowUpToDate(false);
+        setShowNotes(false);
+        props.onStatusChange?.(`New version v${update.version} available!`);
+        void notifyIfHidden(update.version);
+      } else {
+        pendingUpdate = null;
+        setUpdateAvailable(false);
+        setReleaseNotes(null);
+        setShowNotes(false);
+
+        if (isManual) {
+          setShowUpToDate(true);
+          props.onStatusChange?.('Application is up to date');
+          if (upToDateTimeout) clearTimeout(upToDateTimeout);
+          upToDateTimeout = setTimeout(() => {
+            setShowUpToDate(false);
+            upToDateTimeout = null;
+          }, 4000);
+        } else {
+          props.onStatusChange?.('Up to date');
+        }
+      }
+    } catch (error: unknown) {
+      console.error('Failed to check for updates:', error);
+      pendingUpdate = null;
+      const errStr = error instanceof Error ? error.message : String(error);
+      if (errStr.includes('404') || errStr.includes('Could not fetch')) {
+        setErrorMessage('Update endpoint not found (GitHub release pending)');
+      } else {
+        setErrorMessage('Unable to connect to update server');
+      }
+      props.onStatusChange?.('Update check failed');
+    } finally {
+      isCheckingGuard = false;
+      setIsChecking(false);
+    }
+  };
+
+  /** Mount effect: auto-check on mount + listen for tray-triggered checks.
+
+   * Uses SolidJS 2 split-phase createEffect — the compute tracks the reactive
+   * autoCheckOnMount / listenForEvents accessors; the apply phase performs the
+   * side effects (initial check + event listener) and returns a cleanup. */
+  createEffect(
+    () => ({
+      auto: props.autoCheckOnMount?.() ?? true,
+      listen: props.listenForEvents?.() ?? true,
+    }),
+    (state) => {
+      let isCancelled = false;
+      let unlistenFn: (() => void) | undefined;
+
+      if (!isTauri) return;
+
+      if (state.auto) {
+        void checkForUpdates(false);
+      }
+
+      if (state.listen) {
+        void listen('check-for-updates', () => {
+          if (!isCancelled) checkForUpdates(true);
         })
-        .catch(() => {});
-    }
-
-    return () => {
-      isMounted = false;
-      if (upToDateTimeoutRef.current) {
-        clearTimeout(upToDateTimeoutRef.current);
-        upToDateTimeoutRef.current = null;
+          .then((fn) => {
+            if (isCancelled) {
+              fn();
+            } else {
+              unlistenFn = fn;
+            }
+          })
+          .catch(() => {});
       }
-      unlistenFn?.();
-    };
-  }, [autoCheckOnMount, checkForUpdates, listenForEvents]);
+
+      return () => {
+        isCancelled = true;
+        if (upToDateTimeout) {
+          clearTimeout(upToDateTimeout);
+          upToDateTimeout = null;
+        }
+        unlistenFn?.();
+      };
+    }
+  );
 
   /**
    * Downloads and installs the pending update, then relaunches the app.
+   * Uses optimistic UI: sets isInstalling immediately and rolls back on failure.
    */
-  const installUpdate = useCallback(async () => {
-    if (!isTauri || isInstallingRef.current || installInFlight) return;
+  const installUpdate = async () => {
+    if (!isTauri || isInstallingGuard || installInFlight) return;
 
     installInFlight = true;
-    isInstallingRef.current = true;
+    isInstallingGuard = true;
     setIsInstalling(true);
     setDownloadProgress(0);
-    // Clear any stale error banner from a previous failed check so the install
-    // progress is the only visible state while the download is in flight.
     setErrorMessage(null);
-    onStatusChange?.('Starting update download...');
+    props.onStatusChange?.('Starting update download...');
 
     try {
-      let update = pendingUpdateRef.current;
+      let update = pendingUpdate;
       if (!update) {
         update = await check();
       }
 
       if (!update?.available) {
-        onStatusChange?.('No update found to install');
+        props.onStatusChange?.('No update found to install');
         return;
       }
 
-      // If the update was re-fetched (pendingUpdateRef was null), surface it in
-      // the UI so the card/footer reflect the newly discovered version.
-      pendingUpdateRef.current = update;
+      pendingUpdate = update;
       setLatestVersion(update.version);
       setReleaseNotes(update.body || null);
       setUpdateAvailable(true);
@@ -202,64 +223,64 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
                 100
               );
               setDownloadProgress(pct);
-              onStatusChange?.(`Downloading update... ${pct}%`);
+              props.onStatusChange?.(`Downloading update... ${pct}%`);
             } else {
-              onStatusChange?.('Downloading binary...');
+              props.onStatusChange?.('Downloading binary...');
             }
             break;
           case 'Finished':
-            onStatusChange?.('Download complete. Applying update...');
+            props.onStatusChange?.('Download complete. Applying update...');
             break;
         }
       });
 
-      onStatusChange?.('Relaunching application...');
+      props.onStatusChange?.('Relaunching application...');
       await relaunch();
     } catch (error: unknown) {
       console.error('Failed to install update:', error);
       const errMsg = error instanceof Error ? error.message : String(error);
       setErrorMessage('Installation failed: ' + errMsg);
-      onStatusChange?.('Update installation failed');
+      props.onStatusChange?.('Update installation failed');
     } finally {
       installInFlight = false;
-      isInstallingRef.current = false;
+      isInstallingGuard = false;
       setIsInstalling(false);
       setDownloadProgress(0);
     }
-  }, [onStatusChange]);
+  };
 
-  if (variant === 'footer') {
+  if (props.variant === 'footer') {
     return (
-      <div className="update-checker-footer" aria-live="polite">
-        {isChecking && (
-          <span className="update-status-label">
-            <RefreshCw size={12} className="spin-icon" /> Checking updates...
+      <div class="update-checker-footer" aria-live="polite">
+        {isChecking() && (
+          <span class="update-status-label">
+            <RefreshCw size={12} class="spin-icon" /> Checking updates...
           </span>
         )}
-        {showUpToDate && (
-          <span className="update-status-label text-success">
+        {showUpToDate() && (
+          <span class="update-status-label text-success">
             <CheckCircle2 size={12} /> App is up to date
           </span>
         )}
-        {errorMessage && (
-          <span className="update-status-label text-error">
-            <AlertCircle size={12} /> {errorMessage}
+        {errorMessage() && (
+          <span class="update-status-label text-error">
+            <AlertCircle size={12} /> {errorMessage()}
           </span>
         )}
-        {updateAvailable && !isInstalling && (
-          <button onClick={installUpdate} className="btn-update-footer">
-            <Download size={12} /> Update to v{latestVersion}
+        {updateAvailable() && !isInstalling() && (
+          <button onClick={() => void installUpdate()} class="btn-update-footer">
+            <Download size={12} /> Update to v{latestVersion()}
           </button>
         )}
-        {isInstalling && (
-          <span className="update-status-label text-accent">
-            <Download size={12} className="bounce-icon" /> Installing ({downloadProgress}%)
+        {isInstalling() && (
+          <span class="update-status-label text-accent">
+            <Download size={12} class="bounce-icon" /> Installing ({downloadProgress()}%)
           </span>
         )}
-        {!isChecking && !showUpToDate && !updateAvailable && !isInstalling && (
+        {!isChecking() && !showUpToDate() && !updateAvailable() && !isInstalling() && (
           <button
-            onClick={() => checkForUpdates(true)}
-            className="btn-footer-check"
+            onClick={() => void checkForUpdates(true)}
+            class="btn-footer-check"
             aria-label="Check for updates"
           >
             <RefreshCw size={12} /> Check Updates
@@ -270,108 +291,104 @@ export const UpdateChecker: FC<UpdateCheckerProps> = ({
   }
 
   return (
-    <div className="update-checker-card">
-      <div className="setting-item">
-        <div className="setting-info">
-          <div className={`setting-icon ${updateAvailable ? 'highlight' : ''}`}>
-            {isChecking ? (
-              <RefreshCw size={18} className="spin-icon" />
-            ) : updateAvailable ? (
+    <div class="update-checker-card">
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class={`setting-icon ${updateAvailable() ? 'highlight' : ''}`}>
+            {isChecking() ? (
+              <RefreshCw size={18} class="spin-icon" />
+            ) : updateAvailable() ? (
               <Download size={18} color="var(--accent-cyan)" />
-            ) : showUpToDate ? (
+            ) : showUpToDate() ? (
               <CheckCircle2 size={18} color="#10b981" />
             ) : (
               <RefreshCw size={18} />
             )}
           </div>
-          <div className="setting-text">
-            <span className="setting-title">Software Updates</span>
-            <span className="setting-subtitle">
-              {isChecking
+          <div class="setting-text">
+            <span class="setting-title">Software Updates</span>
+            <span class="setting-subtitle">
+              {isChecking()
                 ? 'Checking GitHub releases for newer version...'
-                : isInstalling
-                  ? `Downloading update binary (${downloadProgress}%)...`
-                  : updateAvailable
-                    ? `New update v${latestVersion} is ready to install!`
-                    : showUpToDate
+                : isInstalling()
+                  ? `Downloading update binary (${downloadProgress()}%)...`
+                  : updateAvailable()
+                    ? `New update v${latestVersion()} is ready to install!`
+                    : showUpToDate()
                       ? 'Your app is currently running the latest version.'
                       : 'Check for new releases, bug fixes, and feature updates.'}
             </span>
           </div>
         </div>
 
-        <div className="update-actions">
-          {updateAvailable && !isInstalling && (
+        <div class="update-actions">
+          {updateAvailable() && !isInstalling() && (
             <>
-              {releaseNotes && (
+              {releaseNotes() && (
                 <button
-                  onClick={() => setShowNotes(!showNotes)}
-                  className="btn-update-secondary"
+                  onClick={() => setShowNotes(!showNotes())}
+                  class="btn-update-secondary"
                   aria-label="Toggle release notes"
-                  aria-expanded={showNotes}
+                  aria-expanded={showNotes() ? 'true' : 'false'}
                 >
                   <FileText size={14} />
-                  {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  {showNotes() ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
               )}
-              <button onClick={installUpdate} className="btn-update-primary">
-                <Download size={14} /> Install v{latestVersion}
+              <button onClick={() => void installUpdate()} class="btn-update-primary">
+                <Download size={14} /> Install v{latestVersion()}
               </button>
             </>
           )}
 
-          {!updateAvailable && !isInstalling && (
+          {!updateAvailable() && !isInstalling() && (
             <button
-              onClick={() => checkForUpdates(true)}
-              disabled={isChecking}
-              className="btn-update-secondary"
+              onClick={() => void checkForUpdates(true)}
+              disabled={isChecking()}
+              class="btn-update-secondary"
             >
-              <RefreshCw size={14} className={isChecking ? 'spin-icon' : ''} />
-              {isChecking ? 'Checking...' : showUpToDate ? 'Up to Date' : 'Check for Updates'}
+              <RefreshCw size={14} class={isChecking() ? 'spin-icon' : ''} />
+              {isChecking() ? 'Checking...' : showUpToDate() ? 'Up to Date' : 'Check for Updates'}
             </button>
           )}
 
-          {isInstalling && (
-            <div className="install-badge">
-              <span>{downloadProgress}%</span>
+          {isInstalling() && (
+            <div class="install-badge">
+              <span>{downloadProgress()}%</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Release Notes Drawer */}
-      {updateAvailable && releaseNotes && showNotes && (
-        <div className="release-notes-box">
-          <span className="release-notes-heading">Release Notes for v{latestVersion}:</span>
-          <pre className="release-notes-content">{releaseNotes}</pre>
+      {updateAvailable() && releaseNotes() && showNotes() && (
+        <div class="release-notes-box">
+          <span class="release-notes-heading">Release Notes for v{latestVersion()}:</span>
+          <pre class="release-notes-content">{releaseNotes()}</pre>
         </div>
       )}
 
-      {/* Progress Bar during download */}
-      {isInstalling && (
-        <div className="update-progress-container">
+      {isInstalling() && (
+        <div class="update-progress-container">
           <div
-            className="update-progress-track"
+            class="update-progress-track"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={downloadProgress}
+            aria-valuenow={downloadProgress()}
             aria-label="Update download progress"
           >
             <div
-              className="update-progress-fill"
-              style={{ width: `${Math.max(downloadProgress, 5)}%` }}
+              class="update-progress-fill"
+              style={{ width: `${Math.max(downloadProgress(), 5)}%` }}
             ></div>
           </div>
         </div>
       )}
 
-      {/* Error notification banner — role="alert" so failures interrupt screen
-          readers immediately instead of waiting for a polite-live pass. */}
-      {errorMessage && (
-        <div className="update-error-banner" role="alert">
+      {errorMessage() && (
+        <div class="update-error-banner" role="alert">
           <AlertCircle size={14} />
-          <span>{errorMessage}</span>
+          <span>{errorMessage()}</span>
         </div>
       )}
     </div>
