@@ -11,9 +11,6 @@ This document provides a single-file summary of the **Minimalistic App** archite
 
 ```
 Minimalistic_App/
-├── .commandcode/
-│   └── taste/
-│       └── taste.md
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml
@@ -101,16 +98,15 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **65 files · 423.8 KB · 112,278 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **64 files · 417.2 KB · 110,632 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `.commandcode/taste/taste.md` | 6.7 KB | 34 | 1661 | 6817 | Source or configuration file for the application. |
 | `.editorconfig` | 627 B | 30 | 168 | 626 | Cross-editor workspace configuration for indentation, charset, and whitespace trimming. |
 | `.gitattributes` | 2.6 KB | 120 | 678 | 2698 | Git line-ending normalization (LF for code, CRLF for Windows scripts) and binary asset protection rules. |
 | `.github/workflows/ci.yml` | 1.9 KB | 53 | 483 | 1883 | Cross-platform GitHub Actions CI validating formatting, oxlint, TypeScript types, Vite bundling, vite:lint, Rust unit tests (cargo test), and Cargo check across Linux, macOS, and Windows. |
 | `.github/workflows/release.yml` | 4.6 KB | 124 | 1154 | 4659 | Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles. |
-| `.gitignore` | 474 B | 39 | 138 | 473 | Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata. |
+| `.gitignore` | 550 B | 42 | 153 | 547 | Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata. |
 | `.oxlintrc.json` | 700 B | 28 | 211 | 699 | oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and unicorn/import/typescript plugin rules. |
 | `.prettierignore` | 296 B | 25 | 90 | 295 | Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles. |
 | `.prettierrc` | 200 B | 11 | 74 | 199 | Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas. |
