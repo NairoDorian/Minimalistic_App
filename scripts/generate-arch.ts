@@ -29,7 +29,7 @@ const fileDescriptions: Record<string, string> = {
   '.vscode/settings.json':
     'VS Code workspace editor settings for format-on-save, Prettier default formatter, rust-analyzer, and oxlint on-type linting.',
   '.github/workflows/ci.yml':
-    'Cross-platform GitHub Actions CI validating formatting, oxlint, TypeScript types, Vite bundling, vite:lint, Rust unit tests (cargo test), and Cargo check across Linux, macOS, and Windows.',
+    'Cross-platform GitHub Actions CI validating Prettier formatting, oxlint lint, TypeScript types (tsc), Vite production bundle, Bun unit tests (bun test), Rust compilation check (cargo check), and Rust unit tests (cargo test) across Linux, macOS, and Windows.',
   '.github/workflows/release.yml':
     'Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles.',
   'package.json':
@@ -48,7 +48,7 @@ const fileDescriptions: Record<string, string> = {
   'BUILD.md':
     'Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides.',
   'TESTING.md':
-    'Testing & QA guide detailing the 5-step automated validation gates and manual desktop verification matrix.',
+    'Testing & QA guide detailing the 8-gate automated validation suite, unit-test layout, and the manual desktop verification matrix.',
   'CONTRIBUTING.md':
     'Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2.',
   'SECURITY.md':
@@ -75,7 +75,59 @@ const fileDescriptions: Record<string, string> = {
   'src/lib/toast.ts':
     'Reactive toast notification event bus and helper methods for triggering toasts across the app.',
   'src/lib/shortcuts.ts':
-    'Global keyboard shortcuts definitions, category mapping, and event helper utilities.',
+    'Application shortcut registry: default bindings, persisted per-machine user overrides, conflict detection, and event-to-action resolution built on lib/keyboard.',
+  'src/lib/keyboard.ts':
+    'Self-contained cross-platform keyboard/hotkey engine (handy-keys inspired): side-aware modifier flags, portable Mod+ spec parsing/formatting, layout-independent code matching, and a side-tracking keyboard listener.',
+  'src/lib/appMeta.ts':
+    'Product identity constants (APP_NAME, APP_SLUG) and localStorage key namespacing — the single place the frontend hardcodes the app name, rewritten by rename-project.',
+  'src/lib/download.ts':
+    'Blob download helper shared by settings backup export and the diagnostic report, with deferred object-URL revocation so webviews do not cancel the download.',
+  'src/components/HotkeyRecorder.tsx':
+    '"Press a shortcut" capture control that claims the keyboard while armed, previews the held chord live, and commits a canonical spec string.',
+  'test/keyboard.test.ts':
+    'Automated Bun unit tests covering hotkey parsing, formatting, platform modifier resolution, event matching, and the side-aware keyboard listener.',
+  '.vscode/launch.json':
+    'VS Code debug launch configurations for attaching to the Tauri Rust backend and the webview frontend.',
+  'src/components/GlobalHotkeysSection.tsx':
+    'Preferences section for system-wide hotkeys: enable toggle, per-action recorders, listener status, and the macOS Accessibility permission prompt.',
+  'src-tauri/src/global_hotkeys.rs':
+    'App-level global hotkey glue: the action set, persisted bindings, the supervisor that rebuilds the OS listener on change, dispatch to window actions, and the status the UI reads.',
+  'src-tauri/src/hotkeys/mod.rs':
+    'Root of the embedded cross-platform global-hotkey engine (vendored from handy-keys, MIT) — re-exports Hotkey, Modifiers, Key, KeyboardListener, and HotkeyManager.',
+  'src-tauri/src/hotkeys/error.rs':
+    'Hand-written error enum for the hotkey engine with user-facing Display messages (no thiserror dependency); converts into the IPC String error.',
+  'src-tauri/src/hotkeys/listener.rs':
+    'Platform-agnostic KeyboardListener: raw key-event stream used for hotkey recording, with clean thread shutdown per backend.',
+  'src-tauri/src/hotkeys/manager.rs':
+    'HotkeyManager: filters the raw key stream against registered hotkeys and emits press/release events, including modifier-only hotkeys.',
+  'src-tauri/src/hotkeys/types/mod.rs':
+    'Re-exports for the hotkey type layer (Hotkey, Key, Modifiers, and the event structs).',
+  'src-tauri/src/hotkeys/types/hotkey.rs':
+    'Hotkey definition (modifiers + optional key), the "Ctrl+Alt+Space" string grammar, and the hotkey/key event structs.',
+  'src-tauri/src/hotkeys/types/key.rs':
+    'Cross-platform Key enum (letters, digits, F1–F24, navigation, punctuation, keypad, media, mouse buttons) with case-insensitive parsing and Display.',
+  'src-tauri/src/hotkeys/types/modifiers.rs':
+    'Hand-rolled side-aware modifier bitset (no bitflags dependency) with alias parsing, the platform-resolving Mod/CmdOrCtrl alias, and pattern-vs-state match semantics.',
+  'src-tauri/src/hotkeys/platform/mod.rs':
+    'Platform backend selection for the hotkey engine (macOS / Windows / Linux).',
+  'src-tauri/src/hotkeys/platform/state.rs':
+    'Shared listener state and modifier reconciliation helpers that recover from a stuck modifier identically on Windows and Linux.',
+  'src-tauri/src/hotkeys/platform/windows/mod.rs': 'Windows hotkey backend module declarations.',
+  'src-tauri/src/hotkeys/platform/windows/listener.rs':
+    'Windows backend: WH_KEYBOARD_LL / WH_MOUSE_LL low-level hooks with a message loop, session-change hook reinstall, and hotkey blocking.',
+  'src-tauri/src/hotkeys/platform/windows/keycode.rs':
+    'Windows virtual-key and scancode to Key mapping, including layout-independent punctuation via scancode position.',
+  'src-tauri/src/hotkeys/platform/macos/mod.rs': 'macOS hotkey backend module declarations.',
+  'src-tauri/src/hotkeys/platform/macos/listener.rs':
+    'macOS backend: CGEventTap keyboard tap running on a dedicated CFRunLoop thread, with tap re-enable on timeout and clean shutdown.',
+  'src-tauri/src/hotkeys/platform/macos/keycode.rs':
+    'macOS virtual keycode to Key mapping (including JIS and media keys).',
+  'src-tauri/src/hotkeys/platform/macos/permissions.rs':
+    'macOS Accessibility permission check and a helper that opens the exact System Settings pane.',
+  'src-tauri/src/hotkeys/platform/linux/mod.rs': 'Linux hotkey backend module declarations.',
+  'src-tauri/src/hotkeys/platform/linux/listener.rs':
+    'Linux backend: reads /dev/input evdev devices directly (Wayland, X11, and console alike) with hotplug via inotify, and uinput re-injection for blocking.',
+  'src-tauri/src/hotkeys/platform/linux/keycode.rs': 'Linux evdev keycode to Key mapping.',
   'src/components/ToggleSwitch.tsx':
     'Reusable accessible ARIA toggle switch (role=switch, Space/Enter keys, visually-hidden checkbox) used by the Preferences tab.',
   'src/components/UpdateChecker.tsx':
@@ -91,9 +143,27 @@ const fileDescriptions: Record<string, string> = {
   'src/components/ErrorBoundary.tsx':
     'Top-level SolidJS 2 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action.',
   'src/components/KeyboardShortcutsModal.tsx':
-    'Keyboard shortcuts cheat sheet modal dialog with accessible ARIA dialog markup.',
+    'Keyboard shortcuts cheat sheet and rebinding surface: accessible ARIA dialog with a focus trap and a live HotkeyRecorder per shortcut.',
   'src/index.css':
     '100% AMOLED deep black theme (#000000) with glassmorphism, glowing toggle switches, and reduced-motion support.',
+  'src/bindings.ts':
+    'Auto-generated tauri-specta type-safe Rust↔TypeScript IPC bindings consumed by the SolidJS frontend via the `commands.*` wrappers.',
+  'src/components/DevConsole.tsx':
+    'Live dev-console log viewer: filterable severity badges, real-time backend log tailing, clear/pause controls, and dedup logic for the dev-log bus snapshot replay.',
+  'src/lib/console.ts':
+    'In-memory dev-log event bus (push / clear / subscribe) shared between the Rust log sink and the DevConsole view.',
+  'src/lib/icons.tsx':
+    'Self-contained SolidJS 2 icon set (brand, tray, toast, action glyphs) with AMOLED deep-black styling — replacing the removed lucide-solid dependency.',
+  'src/lib/logViewer.ts':
+    'Pure log-parsing utilities: severity classification from marker tokens and count-aware reconciliation of the live event stream against polled on-disk log lines.',
+  'src/lib/settingsBackup.ts':
+    'Settings backup/restore helpers: export/import to JSON with a sanitization layer, plus the FALLBACK_SETTINGS default constant.',
+  'test/logViewer.test.ts':
+    'Automated Bun unit tests validating log severity classification and live-vs-disk line reconciliation.',
+  'test/settings.test.ts':
+    'Automated Bun unit tests validating settings backup sanitization and the FALLBACK_SETTINGS structure.',
+  'test/shortcuts.test.ts':
+    'Automated Bun unit tests validating the shortcut registry, rebinding/override store, conflict detection, and action resolution.',
   'scripts/rename-project.ts':
     '1-command project customizer & renamer CLI script to rebrand the starter kit for new applications.',
   'test/version.test.ts':
@@ -106,7 +176,7 @@ const fileDescriptions: Record<string, string> = {
     'Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle.',
   'src-tauri/build.rs': 'Rust build script initializing Tauri build environment.',
   'src-tauri/capabilities/default.json':
-    'Tauri v2 capability definitions granting autostart, updater, process, and tray permissions.',
+    'Tauri v2 capability definitions granting core, autostart, updater, process, and notification permissions to the main window.',
   'src-tauri/src/lib.rs':
     "Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept.",
   'src-tauri/src/main.rs':
@@ -128,10 +198,24 @@ const fileDescriptions: Record<string, string> = {
   'scripts/version.ts':
     'Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.',
   'scripts/before-commit.ts':
-    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, --full (6-step suite incl. lint), and --install-hook modes.',
+    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json (+ Cargo.lock root entry via cargo generate-lockfile) with --check, --bump, --full (7-step suite incl. lint + unit tests), and --install-hook modes.',
   'src-tauri/Cargo.lock':
     'Rust dependency lockfile, committed to track exact crate versions for reproducible builds.',
 };
+
+/**
+ * Reads the product name from `tauri.conf.json` so the generated document
+ * follows a `rename-project` rebrand instead of hardcoding the template's name.
+ */
+function resolveProductName(rootDir: string): string {
+  try {
+    const raw = fs.readFileSync(path.join(rootDir, 'src-tauri', 'tauri.conf.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { productName?: unknown };
+    return typeof parsed.productName === 'string' ? parsed.productName : 'this application';
+  } catch {
+    return 'this application';
+  }
+}
 
 /** Human-readable byte size (e.g. `1.2 KB`). */
 function formatBytes(bytes: number): string {
@@ -194,6 +278,7 @@ function toBoxDrawingTree(treeString: string): string {
 async function generateArchitectureMarkdown() {
   const rootDir = process.cwd();
   const rootName = path.basename(rootDir);
+  const productName = resolveProductName(rootDir);
 
   // 1. Load repomix.config.json and merge with defaults (same merge the CLI performs).
   const fileConfig = await loadFileConfig(rootDir, null);
@@ -263,7 +348,7 @@ async function generateArchitectureMarkdown() {
 
   const content = `# Project Architecture Overview
 
-This document provides a single-file summary of the **Minimalistic App** architecture. The directory tree and per-file metadata are generated by the [Repomix](https://repomix.com) \`pack()\` API (\`scripts/generate-arch.ts\`), then post-processed with 1-line descriptions.
+This document provides a single-file summary of the **${productName}** architecture. The directory tree and per-file metadata are generated by the [Repomix](https://repomix.com) \`pack()\` API (\`scripts/generate-arch.ts\`), then post-processed with 1-line descriptions.
 
 > [!NOTE]
 > This file contains the complete directory tree and a metadata inventory (size, lines, tokens, characters) of every file in the project. Full code contents are omitted to keep the architecture map concise.

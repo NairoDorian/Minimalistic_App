@@ -131,7 +131,7 @@ bun run tauri dev
 
 ### 4. Frontend-Only Development (Browser Preview)
 
-To iterate purely on React 19 UI components and CSS styling in the web browser:
+To iterate purely on SolidJS 2 UI components and CSS styling in the web browser:
 
 ```bash
 bun run vite

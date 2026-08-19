@@ -1,6 +1,6 @@
 import { createSignal, onSettled, For } from 'solid-js';
 import { commands } from '../bindings';
-import type { AppSettings } from './PreferencesTab';
+import type { AppSettings } from '../bindings';
 import {
   Code,
   Terminal,
@@ -18,7 +18,7 @@ import {
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
 import { devLog } from '../lib/console';
-import { applyThemeAccent } from '../lib/theme';
+import { applyThemeAccent, THEME_ACCENT_STORAGE_KEY } from '../lib/theme';
 import {
   sanitizeSettings,
   downloadSettingsFile,
@@ -110,7 +110,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
   const handleOpenConfigDir = async () => {
     if (!isTauri) {
       devLog.info('Open config dir simulated (Web Preview)');
-      toast.info('[Web Preview] App config dir simulated: %APPDATA%\\com.minimalistic.app');
+      toast.info('[Web Preview] Opening the app config directory requires the desktop build');
       return;
     }
 
@@ -172,7 +172,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
       const current: AppSettings = {
         ...FALLBACK_SETTINGS,
         theme_accent:
-          (localStorage.getItem('theme_accent') as AppSettings['theme_accent']) ?? 'cyan',
+          (localStorage.getItem(THEME_ACCENT_STORAGE_KEY) as AppSettings['theme_accent']) ?? 'cyan',
       };
       downloadSettingsFile(current, __APP_VERSION__);
       devLog.success('Settings backup exported (Web Preview)');
@@ -192,7 +192,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
         applyThemeAccent(sanitized.theme_accent);
       } else {
         const sanitized = sanitizeSettings(parsed, FALLBACK_SETTINGS);
-        localStorage.setItem('theme_accent', sanitized.theme_accent ?? 'cyan');
+        localStorage.setItem(THEME_ACCENT_STORAGE_KEY, sanitized.theme_accent);
         applyThemeAccent(sanitized.theme_accent);
       }
 

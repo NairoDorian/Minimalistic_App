@@ -8,6 +8,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.20.0] - 2026-08-19
+
+### Round 20 — Cross-Platform Keyboard Engine, System-Wide Global Hotkeys, Correctness Pass & Pipeline Hygiene
+
+#### 🌐 System-Wide Global Hotkeys (new — vendored, zero hotkey dependencies)
+
+- **`src-tauri/src/hotkeys/` — a complete cross-platform global-hotkey engine embedded in the app**, derived from the MIT-licensed [`handy-keys`](https://github.com/handy-computer/handy-keys) crate and merged into the tree rather than depended on:
+  - **Windows**: `WH_KEYBOARD_LL` / `WH_MOUSE_LL` low-level hooks on a dedicated message-loop thread, with automatic hook reinstall after a session change.
+  - **macOS**: `CGEventTap` on its own `CFRunLoop`, with tap re-enable on timeout and an Accessibility permission check that can open the exact System Settings pane.
+  - **Linux**: direct evdev `/dev/input/event*` reads (identical on Wayland, X11, and the console), device hotplug via inotify, and uinput re-injection for hotkey blocking.
+  - Side-aware modifiers, modifier-only hotkeys, hotkey blocking, and a `KeyboardListener` for recording flows.
+- **Merged, not copied.** The `bitflags` and `thiserror` dependencies were removed by hand-writing `Modifiers` (a nine-flag bitset with `bitflags`-compatible `!` semantics) and the `Error` enum (with user-facing `Display` messages that reach the UI verbatim). The code was migrated to Rust 2024 — explicit `unsafe` blocks inside `unsafe fn`, let-chains for every collapsible `if`, edition-2024 binding modes — and a platform-resolving `Mod` / `CmdOrCtrl` alias was added so one persisted spec works on every OS. **The only remaining dependencies are the OS bindings themselves** (`windows`, `objc2*`, `evdev`).
+- **`src-tauri/src/global_hotkeys.rs`**: the app-level layer — action set, persisted bindings, a supervisor that rebuilds the OS listener on any change (joining the dispatch thread so the hook is released before a new one installs), and the status the UI displays.
+- **Preferences → Global Hotkeys**: opt-in enable toggle, a recorder per action, live listener status (including the detect-only fallback when blocking is unavailable), cross-action conflict rejection, and a macOS Accessibility prompt.
+- **Six new IPC commands** (`get_global_hotkeys`, `get_global_hotkey_status`, `validate_hotkey_spec`, `set_global_hotkey`, `set_global_hotkeys_enabled`, `open_accessibility_settings`) and a `global-hotkey` event so the UI can acknowledge a fired binding.
+- **Privacy properties are documented and enforced** (see `SECURITY.md`): off by default, no listener without bindings, keystrokes never stored/logged/transmitted, no raw key stream over IPC, and deterministic hook release.
+- **Verified end-to-end on Windows**: the listener starts with blocking enabled, and synthesized `Ctrl+Alt+U` / `Ctrl+Alt+Space` chords fire their actions from outside the app.
+
+#### ⌨️ Cross-Platform Keyboard & Rebindable Shortcuts (new)
+
+- **`src/lib/keyboard.ts` — self-contained hotkey engine** (zero dependencies), modeled on the [`handy-keys`](https://github.com/handy-computer/handy-keys) Rust crate and adapted to the webview's `KeyboardEvent` model:
+  - Portable spec strings (`"Mod+Shift+K"` → ⌘⇧K on macOS, Ctrl+Shift+K elsewhere), compatible with Tauri's `CmdOrCtrl+…` accelerator syntax so one string can drive both.
+  - Layout-independent matching on `KeyboardEvent.code` (physical position), with quoted tokens (`"Shift+'?'"`) opting into character matching for label-following bindings.
+  - Side-aware modifier flags (`LCtrl`, `CtrlRight`, `AltGr`) with "either side" compound aliases, and a generous modifier/key alias table.
+  - Strict per-group modifier semantics — a modifier the hotkey doesn't name must not be held, so `Ctrl+Alt+K` never fires a `Ctrl+K` binding.
+  - Modifier-only hotkeys (`"Cmd+Shift"`), canonical round-tripping (`hotkeyToString` ⇄ `parseHotkey`), and platform-correct rendering (`⌃⌥⇧⌘` vs `Ctrl+Alt+Shift+Win`).
+  - `createKeyboardListener()` — side-aware modifier tracking that reconciles against the event's boolean flags (self-healing after an alt-tab) and clears on blur.
+  - `beginHotkeyCapture()` / `isCapturingHotkey()` — a shared capture guard so an armed recorder owns the keyboard and the chord being bound isn't also executed.
+- **`src/lib/shortcuts.ts` rewritten as a rebindable registry**: stable per-binding ids, portable default specs, per-machine user overrides in `localStorage` (invalid or stale entries are ignored rather than disabling a binding), conflict detection, "rebinding to the default is a reset" semantics, and a subscribe bus.
+- **`src/components/HotkeyRecorder.tsx` (new)**: "press a shortcut" capture control with a live preview of the held chord, Escape to cancel, and blur to cancel.
+- **Shortcuts modal is now a rebinding surface**: every row is a live recorder, with per-row reset, conflict warnings, and a "Reset All Shortcuts" action. The cheat sheet and the runtime handler read the same registry, so they cannot drift.
+- **Platform-correct labels everywhere**: shortcut labels were previously hardcoded as `"Ctrl+1 / Cmd+1"` on every OS; they now render per-platform from the live binding.
+- **App shortcut dispatch** now resolves through the registry instead of a hardcoded `if/else` chain, and no longer uses the deprecated `navigator.platform` for Mac detection.
+
+#### ⚛️ SolidJS 2 / TypeScript Frontend (`src`)
+
+- **Fixed: About tab froze on its mount-time value.** `AboutTab` snapshotted `props.appInfo()` into a `const` in the component body; in SolidJS that runs once, so when About was the persisted startup tab, every tile showed `unknown` forever. Now read reactively in JSX.
+- **Fixed: update check ran even when disabled.** `checkUpdatesOnLaunch` sits at its optimistic `true` default during the settings IPC round-trip, so the launch check fired before the persisted `false` arrived. `PreferencesTab` now gates the auto-check behind a `settingsLoaded` signal.
+- **Fixed: unbounded id set in the Dev Console.** The bus-dedup `Set` grew for the life of the session; it is now pruned against the bus's own capped snapshot.
+- **Fixed: blob downloads could be cancelled before starting.** `URL.revokeObjectURL` ran in the same tick as `link.click()`; extracted to `src/lib/download.ts`, which attaches the anchor, clicks, and revokes on the next macrotask. Used by both the settings backup and the diagnostic report.
+- **Fixed: settings sanitizer could emit `undefined` typed as `number`.** `sanitizeSettings` now resolves the caller's fallback against factory defaults first, rejects arrays, and requires whole-number geometry (a fractional value would be rejected by serde at the IPC boundary).
+- **Toast progress bar is now a CSS animation** bound to each toast's lifetime, replacing a 20 Hz `setInterval` that re-rendered the DOM for every visible toast.
+- **`src/lib/appMeta.ts` (new)**: `APP_NAME` / `APP_SLUG` / `storageKey()` — the single place the frontend names the product. Removes hardcoded product names, download-filename prefixes, and the bundle identifier from components, and namespaces every localStorage key.
+- **Dev Console empty state**: restored the previously-dead `.dev-console-empty` styling with a real, context-aware empty state.
+- **`main.tsx`**: replaced the unused `export default dispose` and unchecked `as HTMLElement` cast with an explicit mount-target check and an `import.meta.hot.dispose` teardown so HMR can't stack app instances.
+- **Resilience**: `localStorage` access for the persisted tab is now guarded, so disabled/full storage degrades instead of crashing into the error boundary.
+- **De-duplication**: `TAB_ORDER` derives from `TABS`, shortcut categories derive from `APP_SHORTCUTS`, and the reset handler uses `DEFAULT_THEME_ACCENT` instead of a literal `'cyan'`.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Fixed: potential startup panic.** `save_window_geometry` and the `CloseRequested` handler called `window.state::<AppState>()`, which panics if a `Moved`/`Resized` event arrives before `setup()` has managed the state — Tauri creates configured windows first. Both now use `try_state` and no-op safely.
+- **Fixed: lost writes under concurrent settings updates.** `set_minimize_to_tray` took the settings lock three separate times around a read-modify-write, letting a concurrent writer's change be silently discarded. All settings commands now hold one guard across the whole operation, and commit to disk before mutating memory so the two can never disagree.
+- **Fixed: corrupt settings were silently destroyed.** An unparseable `settings.json` fell back to defaults and was overwritten by the next save. It is now preserved as `settings.json.bak`, and `minimize_to_tray` gained `#[serde(default)]` so _every_ field tolerates absence — a file from an older or newer build loads instead of resetting everything.
+- **Fixed: window flash on launch.** The main window is now declared `"visible": false` and shown explicitly from `setup()` after geometry restore, so `start_minimized` never flashes a window and a restored size/position never visibly jumps.
+- **Performance: no monitor enumeration during window drags.** Position saving now runs only the cheap Windows-minimized sentinel check per event; the "is this position still on an attached monitor" check runs at restore time, which is when a display can actually have gone away.
+- **`open_app_data_dir`** creates the config directory if it doesn't exist yet, so the file manager opens the real location instead of falling back to Documents.
+- **Geometry flush-on-close**: move/resize events update only the in-memory cache; `flush_window_geometry` persists once on `CloseRequested`, eliminating the per-drag-tick rewrite of `settings.json`.
+- **`specta_builder()` extracted** from `run()`, making the IPC command registry a single named definition.
+- **Rust tests**: 6 → 10, adding partial/empty-JSON tolerance, corrupt-file quarantine, missing-file handling, and window-position guards.
+
+#### 🔧 Project Tooling & Pipeline
+
+- **8-gate validation suite**: `before-commit --full` now runs version sync → typecheck → lint → **bun test** → vite build → cargo check → **cargo test** → arch refresh, ordered cheapest-first. Step numbers are derived from the array, and gates call package scripts (`bun run lint`) rather than duplicating their command lines.
+- **Script simplification**: `"test"` means `bun test` (it previously also ran the whole `--full` suite); `test:unit` removed; CI and the git hook updated to match.
+- **`rename-project.ts` overhaul**: now rewrites `src/lib/appMeta.ts`, the `kill` script's process name, and `main.rs`'s crate path; uses kebab-case for the Cargo package name and snake_case only for the derived library path; and **warns loudly when a pattern matches nothing** instead of reporting success. Verified end-to-end on a scratch copy.
+- **`generate-arch.ts`**: product name now derives from `tauri.conf.json` (so the doc follows a rebrand), added descriptions for every new file, and corrected several inaccurate ones (the log-viewer entries claimed ANSI stripping that does not exist).
+- **Dead dependency removal**: removed unused `lucide-solid` (the icon set lives in `src/lib/icons.tsx`).
+- **Dead CSS removal**: removed the legacy `ipc-output-box` block.
+- **Release profile**: added `[profile.release]` (`opt-level = "z"`, `lto`, `codegen-units = 1`, `strip`, `panic = "abort"`) for smaller production binaries.
+- **Typecheck coverage**: `test/` and `vite.config.ts` are now covered by `tsc -b` (added `@types/bun`); fixed a latent `exactOptionalPropertyTypes` violation in `vite.config.ts`.
+- **`cargo clippy -D warnings` is now a gate** in both `before-commit --full` and CI, and the whole tree (including the vendored hotkey engine) is clippy-clean.
+- **Tests**: 37 → 110 frontend tests (new `test/keyboard.test.ts`, rewritten `test/shortcuts.test.ts`, global-hotkey sanitizer cases) and 6 → 117 Rust tests (the vendored engine's own suite plus new settings/window-geometry coverage).
+- **Documentation sync**: `README.md` (new keyboard section, corrected project tree, `rename-project`-first rebranding guide, `tauri-plugin-log`/`notification` added to the plugin table), `TESTING.md` (8 gates, unit-test layout, expanded manual QA matrix), `SECURITY.md` (accurate capability list, full 10-command IPC table, trust-boundary notes), `CRUSH.md` (corrected design tokens, real ARIA switch markup, new Rust locking and keyboard patterns), `CONTRIBUTING.md`, and `THIRD_PARTY_LICENSES.md` (handy-keys design attribution).
+
 ## [0.19.0] - 2026-08-18
 
 ### Round 19 — SolidJS 2.0 Migration

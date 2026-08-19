@@ -10,25 +10,48 @@ import { ToastContainer } from './components/Toast';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { isTauri } from './lib/tauri';
-import { applyThemeAccent } from './lib/theme';
+import { applyThemeAccent, DEFAULT_THEME_ACCENT } from './lib/theme';
+import { resolveShortcutAction } from './lib/shortcuts';
+import { isCapturingHotkey } from './lib/keyboard';
+import { APP_NAME, storageKey } from './lib/appMeta';
 
 export type TabType = 'preferences' | 'about' | 'developer';
-
-const TAB_ORDER: readonly TabType[] = ['preferences', 'about', 'developer'];
-
-const ACTIVE_TAB_KEY = 'minimalistic_app.active_tab';
-
-function loadInitialTab(): TabType {
-  const saved = localStorage.getItem(ACTIVE_TAB_KEY);
-  if (TAB_ORDER.includes(saved as TabType)) return saved as TabType;
-  return 'preferences';
-}
 
 const TABS: readonly { id: TabType; label: string; icon: LucideIcon }[] = [
   { id: 'preferences', label: 'Preferences', icon: Settings },
   { id: 'about', label: 'System & About', icon: Info },
   { id: 'developer', label: 'Developer Hub', icon: Code2 },
 ];
+
+/** Tab ids in render order — derived from TABS so the two can never drift. */
+const TAB_ORDER: readonly TabType[] = TABS.map((tab) => tab.id);
+
+const ACTIVE_TAB_KEY = storageKey('active_tab');
+
+/**
+ * localStorage can throw (private mode, disabled storage, quota). The persisted
+ * tab is a convenience, never a correctness requirement, so failures degrade to
+ * the default tab instead of crashing the app into the error boundary.
+ */
+function loadInitialTab(): TabType {
+  try {
+    const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+    if (TAB_ORDER.includes(saved as TabType)) return saved as TabType;
+  } catch {
+    /* storage unavailable — fall through to the default */
+  }
+  return 'preferences';
+}
+
+/** Elements that own their keystrokes — un-modified shortcuts must not steal them. */
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
 
 export function AppContent() {
   const [activeTab, setActiveTab] = createSignal<TabType>(loadInitialTab);
@@ -46,23 +69,44 @@ export function AppContent() {
   createEffect(
     () => activeTab(),
     (tab) => {
-      localStorage.setItem(ACTIVE_TAB_KEY, tab);
+      try {
+        localStorage.setItem(ACTIVE_TAB_KEY, tab);
+      } catch {
+        /* storage unavailable — the tab simply won't be restored next launch */
+      }
     }
   );
 
-  // Load app metadata on mount (one-time, not reactive).
+  // Load app metadata on mount. Retries on startup IPC races (the same class
+  // race that PreferencesTab's settings load already guards against) so a
+  // transient failure never leaves the About tab stuck on a stale null snapshot
+  // that never updates.
   onSettled(() => {
     if (!isTauri) {
       setAppInfo(WEB_PREVIEW_APP_INFO);
       return;
     }
 
-    commands
-      .getAppInfo()
-      .then(setAppInfo)
-      .catch((err: unknown) => {
-        console.warn('App info IPC query failed:', err);
-      });
+    let cancelled = false;
+    const loadAppInfo = (attempt: number) => {
+      commands
+        .getAppInfo()
+        .then((info) => {
+          if (!cancelled) setAppInfo(info);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (attempt >= 3) {
+            console.warn('App info IPC query failed after retries:', err);
+            return;
+          }
+          setTimeout(() => loadAppInfo(attempt + 1), 300 * 2 ** attempt);
+        });
+    };
+    loadAppInfo(1);
+    return () => {
+      cancelled = true;
+    };
   });
 
   /** Sets a temporary status message that auto-clears to 'Ready' after 4 seconds. */
@@ -72,32 +116,36 @@ export function AppContent() {
     statusTimeout = setTimeout(() => setStatusMessage('Ready'), 4000);
   };
 
-  // Global keyboard shortcuts listener (Ctrl/Cmd + number, ?, Ctrl+/, Cmd+,)
+  // Global keyboard shortcuts, dispatched from the APP_SHORTCUTS registry so the
+  // cheat-sheet modal always documents exactly what the app listens for.
   onSettled(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const mod = isMac ? e.metaKey : e.ctrlKey;
+      // A hotkey recorder is armed — the chord being bound must not also fire
+      // whatever it is currently bound to.
+      if (isCapturingHotkey()) return;
 
-      if (mod && e.key === '1') {
-        e.preventDefault();
-        setActiveTab('preferences');
-      } else if (mod && e.key === '2') {
-        e.preventDefault();
-        setActiveTab('about');
-      } else if (mod && e.key === '3') {
-        e.preventDefault();
-        setActiveTab('developer');
-      } else if (mod && e.key === ',') {
-        e.preventDefault();
-        setActiveTab('preferences');
-      } else if (
-        (mod && e.key === '/') ||
-        (!mod &&
-          e.key === '?' &&
-          !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement))
-      ) {
-        e.preventDefault();
-        setShortcutsModalOpen((prev) => !prev);
+      const action = resolveShortcutAction(e);
+      // `Escape` is owned by whichever modal is open (see KeyboardShortcutsModal).
+      if (action === null || action === 'close-modal') return;
+
+      // Un-modified shortcuts (e.g. `?`) must never steal keystrokes from a field.
+      const isUnmodified = !e.ctrlKey && !e.metaKey;
+      if (isUnmodified && isTextEntryTarget(e.target)) return;
+
+      e.preventDefault();
+      switch (action) {
+        case 'tab-preferences':
+          setActiveTab('preferences');
+          break;
+        case 'tab-about':
+          setActiveTab('about');
+          break;
+        case 'tab-developer':
+          setActiveTab('developer');
+          break;
+        case 'toggle-shortcuts':
+          setShortcutsModalOpen((prev) => !prev);
+          break;
       }
     };
 
@@ -139,7 +187,7 @@ export function AppContent() {
   };
 
   const handleSettingsReset = () => {
-    applyThemeAccent('cyan');
+    applyThemeAccent(DEFAULT_THEME_ACCENT);
     updateStatus('Settings reset to defaults');
   };
 
@@ -156,7 +204,7 @@ export function AppContent() {
           <div class="brand-icon">
             <AppWindow size={18} />
           </div>
-          <span class="brand-title">Minimalistic App</span>
+          <span class="brand-title">{APP_NAME}</span>
         </div>
         <div class={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
           <span class="status-dot"></span>

@@ -13,9 +13,12 @@ import {
 } from '../lib/icons';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
+import { APP_NAME, APP_SLUG } from '../lib/appMeta';
+import { formatShortcutLabel } from '../lib/shortcuts';
+import { downloadTextFile } from '../lib/download';
 
 export const WEB_PREVIEW_APP_INFO: AppInfo = {
-  name: 'Minimalistic App',
+  name: APP_NAME,
   version: __APP_VERSION__,
   tauri_version: '2.11 (Web Preview)',
   os: 'Web Browser',
@@ -31,7 +34,8 @@ interface AboutTabProps {
 export function AboutTab(props: AboutTabProps) {
   const [copied, setCopied] = createSignal(false);
 
-  /** Builds the shared markdown diagnostics block used by both copy and report export. */
+  /** Builds the shared markdown diagnostics block used by both copy and report export.
+   * Snapshotting `props.appInfo()` here is safe: this runs on click, not at setup. */
   const buildDiagnosticsText = (): string => {
     const info = props.appInfo();
     const version = info?.version ?? __APP_VERSION__;
@@ -41,7 +45,7 @@ export function AboutTab(props: AboutTabProps) {
 
     return [
       '```markdown',
-      `- Application: ${info?.name ?? 'Minimalistic App'} v${version}`,
+      `- Application: ${info?.name ?? APP_NAME} v${version}`,
       `- Tauri Engine: v${tauriVer}`,
       `- OS / Architecture: ${os} (${arch})`,
       `- Runtime Stack: Bun 1.3+ | SolidJS 2 | Cargo Rust 2024`,
@@ -67,26 +71,21 @@ export function AboutTab(props: AboutTabProps) {
   /** Exports a timestamped diagnostic report as a downloadable `.txt` file (Blob download). */
   const handleSaveReport = () => {
     const report = [
-      'Minimalistic App — Diagnostic Report',
+      `${APP_NAME} — Diagnostic Report`,
       `Generated: ${new Date().toISOString()}`,
       '',
       buildDiagnosticsText(),
     ].join('\n');
 
-    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `minimalistic-app-diagnostics-${props.appInfo()?.version ?? __APP_VERSION__}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const version = props.appInfo()?.version ?? __APP_VERSION__;
+    downloadTextFile(`${APP_SLUG}-diagnostics-${version}.txt`, report, 'text/plain;charset=utf-8');
     toast.success('Diagnostic report downloaded');
     props.onStatusChange?.('Diagnostic report saved');
   };
 
   const handleOpenConfigDir = async () => {
     if (!isTauri) {
-      toast.info('[Web Preview] Simulated opening %APPDATA%\\com.minimalistic.app');
+      toast.info('[Web Preview] Opening the app config directory requires the desktop build');
       return;
     }
     try {
@@ -98,8 +97,10 @@ export function AboutTab(props: AboutTabProps) {
     }
   };
 
-  const info = props.appInfo();
-
+  // NOTE: `props.appInfo` is read inside JSX, never snapshotted into a local
+  // const here — the component body runs once, so a snapshot would freeze the
+  // tiles on the mount-time value (null when About is the persisted startup tab)
+  // and never update once the IPC query resolves.
   return (
     <div
       class="settings-card"
@@ -157,7 +158,7 @@ export function AboutTab(props: AboutTabProps) {
             <AppWindow size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Application Version</span>
           </div>
-          <span class="tile-value">v{info?.version ?? __APP_VERSION__}</span>
+          <span class="tile-value">v{props.appInfo()?.version ?? __APP_VERSION__}</span>
         </div>
 
         <div class="info-tile">
@@ -166,7 +167,7 @@ export function AboutTab(props: AboutTabProps) {
             <span class="tile-title">Tauri Core Engine</span>
           </div>
           <span class="tile-value">
-            v{info?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version}
+            v{props.appInfo()?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version}
           </span>
         </div>
 
@@ -176,7 +177,7 @@ export function AboutTab(props: AboutTabProps) {
             <span class="tile-title">Target Platform / Arch</span>
           </div>
           <span class="tile-value">
-            {info?.os ?? 'unknown'} ({info?.arch ?? 'unknown'})
+            {props.appInfo()?.os ?? 'unknown'} ({props.appInfo()?.arch ?? 'unknown'})
           </span>
         </div>
 
@@ -196,9 +197,9 @@ export function AboutTab(props: AboutTabProps) {
             type="button"
             class="btn-shortcuts-hint"
             onClick={props.onOpenShortcuts}
-            title="Press ? or Ctrl+/ for shortcut list"
+            title={`Press ? or ${formatShortcutLabel('show-shortcuts')} for the shortcut list`}
           >
-            Shortcuts (Ctrl+/)
+            Shortcuts ({formatShortcutLabel('show-shortcuts')})
           </button>
         </div>
         <ul class="notes-list">

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'bun:test';
-import { THEME_PRESETS, DEFAULT_THEME_ACCENT } from '../src/lib/theme';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { THEME_PRESETS, DEFAULT_THEME_ACCENT, applyThemeAccent } from '../src/lib/theme';
 
 describe('Theme Accent Engine', () => {
   it('contains the standard 5 theme presets', () => {
@@ -26,5 +26,57 @@ describe('Theme Accent Engine', () => {
       expect(preset.glow).toMatch(/^rgba\(/);
       expect(preset.badgeBg).toMatch(/^rgba\(/);
     }
+  });
+
+  it('each preset id is unique', () => {
+    const ids = THEME_PRESETS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('applyThemeAccent', () => {
+  let originalDocument: typeof globalThis.document | undefined;
+  const setPropertyCalls: Record<string, string> = {};
+
+  beforeAll(() => {
+    originalDocument = globalThis.document;
+    globalThis.document = {
+      documentElement: {
+        style: {
+          setProperty: (prop: string, value: string) => {
+            setPropertyCalls[prop] = value;
+          },
+        },
+      },
+    } as unknown as typeof globalThis.document;
+  });
+
+  afterAll(() => {
+    if (originalDocument !== undefined) {
+      globalThis.document = originalDocument;
+    } else {
+      // @ts-expect-error — clearing the mock
+      delete globalThis.document;
+    }
+  });
+
+  it('applies CSS variables for a known accent', () => {
+    const result = applyThemeAccent('emerald');
+    expect(result).toBe('emerald');
+    const emerald = THEME_PRESETS.find((p) => p.id === 'emerald')!;
+    expect(setPropertyCalls['--accent-cyan']).toBe(emerald.primary);
+    expect(setPropertyCalls['--accent-blue']).toBe(emerald.secondary);
+    expect(setPropertyCalls['--accent-glow']).toBe(emerald.glow);
+    expect(setPropertyCalls['--accent-badge-bg']).toBe(emerald.badgeBg);
+  });
+
+  it('falls back to the first preset for an unknown accent', () => {
+    const result = applyThemeAccent('nonexistent-accent');
+    expect(result).toBe(THEME_PRESETS[0]!.id);
+  });
+
+  it('falls back to the first preset for undefined', () => {
+    const result = applyThemeAccent(undefined);
+    expect(result).toBe(THEME_PRESETS[0]!.id);
   });
 });

@@ -13,7 +13,7 @@ sequenceDiagram
     autonumber
     actor User
     participant Tray as System Tray Menu
-    participant UI as React Frontend (UpdateChecker)
+    participant UI as SolidJS 2 Frontend (UpdateChecker)
     participant Tauri as Tauri 2 Rust Backend
     participant GH as GitHub Releases API
 
@@ -72,7 +72,7 @@ The updater plugin is configured under `bundle` and `plugins.updater`:
    ```
 
 2. **System Tray Integration**:
-   A context menu item `"check_updates"` is registered on the tray icon. Clicking it surfaces the window **only if hidden** and emits `"check-for-updates"` to React:
+   A context menu item `"check_updates"` is registered on the tray icon. Clicking it surfaces the window **only if hidden** and emits `"check-for-updates"` to SolidJS 2:
 
    ```rust
    "check_updates" => {
@@ -83,7 +83,7 @@ The updater plugin is configured under `bundle` and `plugins.updater`:
 
 3. **Capabilities** (`src-tauri/capabilities/default.json`): the webview needs the `updater:default` and `process:default` permissions (both already granted in the template) to call `check()` / `downloadAndInstall()` / `relaunch()`.
 
-### 3. React Frontend Component (`src/components/UpdateChecker.tsx`)
+### 3. SolidJS 2 Frontend Component (`src/components/UpdateChecker.tsx`)
 
 Inspired by Handy's `UpdateChecker` design:
 

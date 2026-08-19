@@ -1,6 +1,6 @@
 # Minimalistic App
 
-The ultimate minimalistic, high-performance cross-platform desktop application template powered by **Tauri 2**, **Bun.js**, **React 19**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
+The ultimate minimalistic, high-performance cross-platform desktop application template powered by **Tauri 2**, **Bun.js**, **SolidJS 2**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
 
 Designed with a sleek **100% AMOLED Deep Black glassmorphic GUI (`#000000`)**, this application operates as a background utility residing in your operating system's taskbar / system tray with full left-click, right-click context menu interaction, and automated auto-updater support.
 
@@ -167,15 +167,15 @@ Follow these steps **in this order** when bumping the version, preparing a relea
 
 ### `bun run before-commit` — Every Mode
 
-| Command                                | Effect                                                                                                                                                    | Writes? |
-| :------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :------ |
-| `bun run before-commit`                | Sync `APP_VERSION` from `scripts/version.ts` into `package.json`, `Cargo.toml`, `tauri.conf.json` (+ `Cargo.lock` via `cargo update`); per-mirror report. | Yes     |
-| `bun run before-commit --check`        | Read-only drift validation; exits `1` on any mismatch. Safe for CI / hooks.                                                                               | No      |
-| `bun run before-commit --bump patch`   | `0.9.0 → 0.9.1` then sync.                                                                                                                                | Yes     |
-| `bun run before-commit --bump minor`   | `0.9.0 → 0.10.0` then sync.                                                                                                                               | Yes     |
-| `bun run before-commit --bump major`   | `0.9.0 → 1.0.0` then sync.                                                                                                                                | Yes     |
-| `bun run before-commit --install-hook` | Install `.git/hooks/pre-commit` running `--check`; refuses to overwrite an existing hook.                                                                 | Yes     |
-| `bun run before-commit --help`         | Print usage.                                                                                                                                              | No      |
+| Command                                | Effect                                                                                                                                                               | Writes? |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------ |
+| `bun run before-commit`                | Sync `APP_VERSION` from `scripts/version.ts` into `package.json`, `Cargo.toml`, `tauri.conf.json` (+ `Cargo.lock` via `cargo generate-lockfile`); per-mirror report. | Yes     |
+| `bun run before-commit --check`        | Read-only drift validation; exits `1` on any mismatch. Safe for CI / hooks.                                                                                          | No      |
+| `bun run before-commit --bump patch`   | `0.9.0 → 0.9.1` then sync.                                                                                                                                           | Yes     |
+| `bun run before-commit --bump minor`   | `0.9.0 → 0.10.0` then sync.                                                                                                                                          | Yes     |
+| `bun run before-commit --bump major`   | `0.9.0 → 1.0.0` then sync.                                                                                                                                           | Yes     |
+| `bun run before-commit --install-hook` | Install `.git/hooks/pre-commit` running `--check`; refuses to overwrite an existing hook.                                                                            | Yes     |
+| `bun run before-commit --help`         | Print usage.                                                                                                                                                         | No      |
 
 Details: after a bump, a missing `## [<version>]` changelog header is an advisory `⚠️`, never a blocker. Invalid usage (`--bump` without a part, unknown part, `--check --bump` together) exits `1` with a descriptive message.
 
@@ -209,7 +209,7 @@ UpdateChecker card (listenForEvents=true) → check() → GitHub Releases API
 
 **Graceful Win32 Teardown**: quitting sets `is_quitting = true` and invokes `window.close()`, allowing WebView2 to unregister window classes (`Chrome_WidgetWin_0`) cleanly through the Win32 message loop without log errors.
 
-### ⚙️ IPC Command Surface (Rust ↔ React)
+### ⚙️ IPC Command Surface (Rust ↔ SolidJS 2)
 
 | Command                | Direction | Payload                                            | Purpose                                                                                               |
 | :--------------------- | :-------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
@@ -221,8 +221,10 @@ UpdateChecker card (listenForEvents=true) → check() → GitHub Releases API
 | `get_app_info`         | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch) | Reads `AppHandle::package_info()` — single source of truth, never hardcoded.                          |
 | `get_system_stats`     | Rust → UI | `SystemStats` (process_id, os, arch, tauri_ver)    | Returns runtime process and platform diagnostic telemetry.                                            |
 | `open_app_data_dir`    | UI → Rust | `Result<(), String>`                               | Opens the OS application data directory in the native file explorer.                                  |
+| `get_recent_logs`      | Rust → UI | `u32 (max_lines) → String`                         | Returns the last N lines of the backend log file as a single string.                                  |
+| `clear_logs`           | UI → Rust | `Result<(), String>`                               | Truncates the backend log file to zero bytes.                                                         |
 
-All handlers are registered via `tauri::generate_handler!` in `src-tauri/src/lib.rs` and callable from React through `@tauri-apps/api/core` `invoke()`.
+All handlers are registered via `tauri_specta::Builder` with `collect_commands!` in `src-tauri/src/lib.rs` and callable from SolidJS 2 through the auto-generated, type-safe `commands.*` wrappers in `src/bindings.ts`.
 
 ### 💾 Disk-Backed Settings Persistence
 
@@ -254,7 +256,7 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
    ├── package.json                (synced by before-commit.ts)
    ├── src-tauri/Cargo.toml        (synced by before-commit.ts)
    ├── src-tauri/tauri.conf.json   (synced by before-commit.ts → drives artifacts + updater feed)
-   ├── src-tauri/Cargo.lock        (refreshed via cargo update)
+   ├── src-tauri/Cargo.lock        (refreshed via cargo generate-lockfile)
    └── __APP_VERSION__ (Vite define)  ← imported directly by vite.config.ts
 ```
 
@@ -274,8 +276,57 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
 - **Start at OS Launch Toggle** (Default: `OFF`): Managed via `@tauri-apps/plugin-autostart` (macOS AppleScript launcher, `--autostart` arg).
 - **Minimize to Taskbar on Close Toggle** (Default: `OFF`): When OFF, closing the window quits the app. When ON, closing hides to taskbar tray. Persisted to disk atomically.
 - **Accessibility & Keyboard Control**: Full WAI-ARIA tabs pattern — roving `tabIndex`, `ArrowLeft` / `ArrowRight` cycling, `Home` / `End` jumps, and `tabIndex={0}` on `role="tabpanel"` cards for direct keyboard entry. Toggle switches use `role="switch"`, `aria-checked`, `aria-disabled`, `tabIndex`, `onKeyDown` handlers (`Space` / `Enter` toggles), and `:focus-visible` focus ring styles.
-- **React `<StrictMode>`**: enabled in `main.tsx` (dev-only double-invocation guard; all mount effects are idempotent).
+- **SolidJS 2 dev mode**: mount-once side effects use `onSettled` (one-time, not reactive); `createEffect` is reserved for reactive signal-dependent effects.
 - **Native Window Drag Region**: Header bar supports `data-tauri-drag-region` for smooth custom window repositioning with environment-aware tray/web badge.
+
+### ⌨️ Cross-Platform Keyboard & Rebindable Shortcuts
+
+A self-contained hotkey engine (`src/lib/keyboard.ts`, zero dependencies), modeled
+on the [`handy-keys`](https://github.com/handy-computer/handy-keys) Rust crate and
+adapted to the webview's `KeyboardEvent` world.
+
+- **One portable spec string.** `"Mod+Shift+K"` renders and matches as `⌘⇧K` on macOS and `Ctrl+Shift+K` everywhere else, so a saved binding is machine-portable. The syntax is deliberately compatible with Tauri's `CmdOrCtrl+…` accelerators.
+- **Layout-independent matching.** Keys match on physical position (`KeyboardEvent.code`), so `Ctrl+Z` stays on the same physical key on QWERTY, AZERTY, and QWERTZ. A quoted token — `"Shift+'?'"` — opts into character matching instead, for bindings that should follow the printed label.
+- **Strict modifier semantics.** `Ctrl+Alt+K` never fires a `Ctrl+K` binding; a modifier the hotkey doesn't name must not be held.
+- **Side-aware modifiers.** `LCtrl`, `CtrlRight`, `AltGr` parse, format, and match distinctly via `createKeyboardListener()`, which tracks individual modifier key events, reconciles against the event's boolean flags (self-healing after an alt-tab), and clears on blur.
+- **Modifier-only hotkeys.** `"Cmd+Shift"` with no key is a valid binding.
+- **Generous alias table.** `cmd` / `command` / `meta` / `super` / `win`, `alt` / `opt` / `option`, `esc`, `return`, `pgup`, `/` ↔ `Slash`, `keypad7`, `f24`, …
+- **Rebindable in-app.** Every shortcut in the cheat sheet (`?` or `Ctrl/Cmd+/`) is a live recorder: click it, press a chord, done. Conflicts are detected and surfaced, overrides persist per machine, and "Reset All Shortcuts" restores the defaults. While a recorder is armed it owns the keyboard, so the chord being bound is captured rather than executed.
+- **One registry, no drift.** `APP_SHORTCUTS` (`src/lib/shortcuts.ts`) drives the runtime handler, the cheat sheet, the labels, and the rebinding UI — the documented shortcuts cannot disagree with the ones the app listens for.
+
+### 🌐 System-Wide Global Hotkeys (no external crate)
+
+The Rust backend embeds a complete cross-platform global-hotkey engine in
+`src-tauri/src/hotkeys/` — OS keyboard hooks and all — so shortcuts fire even
+when the app is hidden in the tray and another window has focus.
+
+| Platform    | Backend                                     | Requirement                                                                                 |
+| :---------- | :------------------------------------------ | :------------------------------------------------------------------------------------------ |
+| **Windows** | `WH_KEYBOARD_LL` / `WH_MOUSE_LL` hooks      | None. Hooks are reinstalled automatically after a session change.                           |
+| **macOS**   | `CGEventTap` on a dedicated `CFRunLoop`     | Accessibility permission — the UI detects this and opens the exact settings pane.           |
+| **Linux**   | evdev `/dev/input/event*` (Wayland/X11/tty) | Read access to `/dev/input`; blocking also needs `/dev/uinput` (falls back to detect-only). |
+
+- **Vendored, not depended on.** The engine is derived from the MIT-licensed [`handy-keys`](https://github.com/handy-computer/handy-keys) crate and merged into the tree: the modifier bitset and error type were rewritten by hand (no `bitflags`, no `thiserror`), the code was adapted to Rust 2024 (explicit `unsafe` blocks, let-chains, edition-2024 binding modes), and `Mod`/`CmdOrCtrl` was added so one spec string is portable across platforms. The only dependencies left are the OS bindings themselves.
+- **Off by default.** It installs a system keyboard hook, so it is opt-in — enable it in Preferences → Global Hotkeys.
+- **Blocking when possible.** A matched chord is withheld from the focused application; where the OS won't allow that (Linux without `/dev/uinput`) it degrades to detect-only and says so in the status line.
+- **Bound with the same recorder** as the in-app shortcuts, validated and canonicalized by the backend before it is saved, with cross-action conflict detection.
+- **Actions**: show/hide the window, bring it to the front, check for updates. Deliberately no destructive action — a global hotkey fires from anywhere.
+- **117 Rust tests** cover the parser, the bitset, the match semantics, the keycode maps, and the Windows hook helpers.
+
+> The in-app shortcuts above and these global hotkeys are separate layers: the
+> first is a webview key handler, the second an OS hook. They share a spec
+> grammar and a recorder UI, so they read the same to users.
+
+| Shortcut             | Action                                   |
+| :------------------- | :--------------------------------------- |
+| `Ctrl/Cmd` + `1`     | Preferences tab                          |
+| `Ctrl/Cmd` + `2`     | System & About tab                       |
+| `Ctrl/Cmd` + `3`     | Developer Hub tab                        |
+| `Ctrl/Cmd` + `,`     | Open Preferences                         |
+| `Ctrl/Cmd` + `/`     | Toggle the shortcuts sheet               |
+| `?`                  | Toggle the shortcuts sheet               |
+| `Esc`                | Close the active modal                   |
+| `←` `→` `Home` `End` | Move between tabs (ARIA roving tabindex) |
 
 ### 🎨 100% AMOLED Pitch Black Aesthetic
 
@@ -285,7 +336,10 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
 
 ### 🔒 Security, CI/CD & TypeScript Rigor
 
-- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun x tsc -b`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, and `cargo check` — on every push and PR.
+- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun x tsc -b`), **Bun unit tests** (`bun run test`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, `cargo check`, and **Rust unit tests** (`cargo test`) — on every push and PR.
+- **Release profile tuned for distribution** (`Cargo.toml` `[profile.release]`): `opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"` — the smallest download the toolchain will produce.
+- **Settings survive schema change and corruption**: every `AppSettings` field carries a serde default, so a file written by an older or newer build still loads; an unparseable file is preserved as `settings.json.bak` instead of being silently overwritten.
+- **No window flash on launch**: the main window is declared `"visible": false` and shown from `setup()` after geometry restore, so `start_minimized` never flashes a window and a restored size/position never visibly jumps.
 - Strict **Content Security Policy** in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
 - Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
 - Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.
@@ -296,23 +350,25 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
 
 ## 🛠️ Tech Stack & Absolute @latest Versions
 
-| Tool / Library   | Version                                       | Purpose                                           |
-| :--------------- | :-------------------------------------------- | :------------------------------------------------ |
-| **Bun.js**       | `1.3+`                                        | Runtime, script runner & package manager          |
-| **Tauri**        | `^2.11.5`                                     | Lightweight cross-platform native desktop shell   |
-| **React**        | `19.3.0-canary-*` (exact-pinned canary build) | Frontend component framework                      |
-| **TypeScript**   | `7.1.0-dev.*` (nightly, `next` channel)       | Strict static type checking (TypeScript 7)        |
-| **Vite**         | `^8.2.1`                                      | Frontend dev server & production bundler (Vite 8) |
-| **Cargo / Rust** | `2024 edition`                                | Native system tray & background process backend   |
+| Tool / Library   | Version                                 | Purpose                                                |
+| :--------------- | :-------------------------------------- | :----------------------------------------------------- |
+| **Bun.js**       | `1.3+`                                  | Runtime, script runner & package manager               |
+| **Tauri**        | `^2.11.5`                               | Lightweight cross-platform native desktop shell        |
+| **SolidJS 2**    | `2.0.0-rc.0`                            | Frontend component framework (fine-grained reactivity) |
+| **TypeScript**   | `7.1.0-dev.*` (nightly, `next` channel) | Strict static type checking (TypeScript 7)             |
+| **Vite**         | `8.2.1`                                 | Frontend dev server & production bundler (Vite 8)      |
+| **Cargo / Rust** | `2024 edition`                          | Native system tray & background process backend        |
 
 ### Tauri Plugins
 
-| Plugin                         | Version   | Purpose                                    |
-| :----------------------------- | :-------- | :----------------------------------------- |
-| `tauri-plugin-autostart`       | `^2.5.1`  | OS startup launch management               |
-| `tauri-plugin-single-instance` | `^2.4.3`  | Duplicate-launch prevention & window focus |
-| `tauri-plugin-updater`         | `^2.10.1` | GitHub Releases auto-update                |
-| `tauri-plugin-process`         | `^2.3.1`  | App relaunch after update install          |
+| Plugin                         | Version   | Purpose                                                                                              |
+| :----------------------------- | :-------- | :--------------------------------------------------------------------------------------------------- |
+| `tauri-plugin-autostart`       | `^2.5.1`  | OS startup launch management                                                                         |
+| `tauri-plugin-single-instance` | `^2.4.3`  | Duplicate-launch prevention & window focus                                                           |
+| `tauri-plugin-updater`         | `^2.10.1` | GitHub Releases auto-update                                                                          |
+| `tauri-plugin-process`         | `^2.3.1`  | App relaunch after update install                                                                    |
+| `tauri-plugin-log`             | `^2.9.0`  | Backend logging to stdout, rotating log file, and `log://log` webview events (feeds the Dev Console) |
+| `tauri-plugin-notification`    | `^2.3.3`  | Native OS notification when an update is found while hidden in the tray                              |
 
 ---
 
@@ -320,16 +376,33 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
 
 ```
 Minimalistic_App/
-├── src/                          # React 19 frontend (TypeScript)
+├── src/                          # SolidJS 2 frontend (TypeScript)
 │   ├── lib/
-│   │   └── tauri.ts              # isTauri runtime detection (single shared check)
+│   │   ├── appMeta.ts            # APP_NAME / APP_SLUG — the ONE place the UI names the product
+│   │   ├── tauri.ts              # isTauri runtime detection (single shared check)
+│   │   ├── keyboard.ts           # Cross-platform hotkey engine (parse/format/match/listen)
+│   │   ├── shortcuts.ts          # App shortcut registry + user rebindings + conflicts
+│   │   ├── theme.ts              # Accent palette engine (CSS custom-property injection)
+│   │   ├── toast.ts              # Toast notification event bus
+│   │   ├── console.ts            # In-memory dev-log event bus
+│   │   ├── logViewer.ts          # Pure log parsing & live/disk reconciliation helpers
+│   │   ├── settingsBackup.ts     # Settings export/import + strict import sanitizer
+│   │   ├── download.ts           # Blob download helper (deferred object-URL revocation)
+│   │   └── icons.tsx             # Self-contained SVG icon set (no icon dependency)
 │   ├── components/
 │   │   ├── ToggleSwitch.tsx      # Accessible ARIA switch (Space/Enter, focus ring)
 │   │   ├── UpdateChecker.tsx     # Auto-update UI (card + footer variants)
-│   │   ├── PreferencesTab.tsx    # Preferences panel: toggles + update card (owns their state)
-│   │   └── AboutTab.tsx          # System & About panel (presentational; exports AppInfo)
+│   │   ├── PreferencesTab.tsx    # Preferences panel: toggles + theme + update card
+│   │   ├── AboutTab.tsx          # System & About panel (diagnostics, config dir, report)
+│   │   ├── DeveloperTab.tsx      # Developer hub: IPC playground, backup/restore, toast bench
+│   │   ├── DevConsole.tsx        # Live log viewer (bus + log:// events + polled file tail)
+│   │   ├── HotkeyRecorder.tsx    # "Press a shortcut" capture control
+│   │   ├── KeyboardShortcutsModal.tsx # Cheat sheet + rebinding surface
+│   │   ├── Toast.tsx             # Toast container & entries (CSS-driven progress)
+│   │   └── ErrorBoundary.tsx     # Top-level crash screen with copyable report
+│   ├── bindings.ts               # AUTO-GENERATED tauri-specta IPC bindings (do not edit)
 │   ├── App.tsx                   # Application shell: tabs, header, footer, status bar
-│   ├── main.tsx                  # React entry point (<StrictMode>)
+│   ├── main.tsx                  # SolidJS 2 entry point (render to #root, HMR dispose)
 │   └── index.css                 # AMOLED black design system (design tokens, glassmorphism)
 ├── src-tauri/                    # Rust backend (Tauri 2)
 │   ├── src/lib.rs                # Tray, IPC commands, window lifecycle, settings persistence
@@ -339,14 +412,23 @@ Minimalistic_App/
 │   ├── build.rs                  # tauri-build bootstrap
 │   ├── icons/                    # Generated icon set (PNG/ICO/ICNS — `bun run create-icons`)
 │   └── tauri.conf.json           # App config, CSP, updater endpoints (version synced)
+├── test/                         # Bun unit tests (`bun test`)
+│   ├── keyboard.test.ts          # Hotkey parsing, formatting, matching, listener
+│   ├── shortcuts.test.ts         # Registry, rebinding, conflicts, action resolution
+│   ├── logViewer.test.ts         # Severity classification & line reconciliation
+│   ├── settings.test.ts          # Settings backup sanitizer
+│   ├── theme.test.ts             # Theme presets & CSS variable application
+│   └── version.test.ts           # APP_VERSION SemVer format
 ├── scripts/                      # Node.js tooling (isolated tsconfig.scripts.json)
 │   ├── version.ts                # APP_VERSION — global single source of truth
-│   ├── before-commit.ts          # Version sync & validation (--check / --bump / --install-hook)
+│   ├── before-commit.ts          # Version sync & 8-gate suite (--check / --bump / --full)
+│   ├── rename-project.ts         # 1-command rebranding CLI
 │   ├── generate-arch.ts          # ARCHITECTURE.md generator (Repomix pack() API)
 │   ├── create-icons.ts           # Cross-platform PNG/ICO/ICNS icon generator
-│   └── update-deps.ts            # Dual-ecosystem 7-step upgrade pipeline
-├── .github/workflows/ci.yml      # Cross-platform CI (types, version sync, Vite, cargo)
-├── tsconfig.json                 # Frontend TypeScript config (strict, noUnusedLocals)
+│   ├── update-deps.ts            # Dual-ecosystem 7-step upgrade pipeline
+│   └── update-rtk.ts             # RTK CLI updater
+├── .github/workflows/ci.yml      # Cross-platform CI (fmt, lint, types, tests, Vite, cargo)
+├── tsconfig.json                 # Frontend TypeScript config (strict, src + test + vite.config)
 ├── tsconfig.scripts.json         # Scripts TypeScript config (isolated Node context)
 ├── vite.config.ts                # Vite config (target chrome105, injects __APP_VERSION__)
 ├── repomix.config.json           # Repomix metadata-only collection rules
@@ -357,22 +439,49 @@ Minimalistic_App/
 
 ## 🚀 From Template to Your App
 
-Turning this template into your own application, in order:
+### 1. Rebrand with one command
 
-1. **Pick a product name & identifier** — edit `src-tauri/tauri.conf.json`:
-   - `productName` (display name, window title, bundle name)
-   - `identifier` (reverse-DNS, e.g. `com.yourcompany.yourapp` — **must be unique per app**)
-   - `app.windows[0].title` (window title bar)
-2. **Sync the identifiers** — `package.json` → `name`, `src-tauri/Cargo.toml` → `package.name`, `src-tauri/Cargo.lock` → root `[[package]]` name, `scripts/before-commit.ts` → `CARGO_CRATE_NAME`, and the tray `tooltip` (auto-reads from `package_info()` — no manual edit needed).
-3. **Regenerate the icons** — `bun run create-icons` produces all PNG/ICO/ICNS sizes in the brand color.
-4. **Bump the version** — `bun run before-commit --bump minor` (or edit `scripts/version.ts` then run plain `bun run before-commit`).
-5. **Wire up auto-updates** (optional) — see [`AUTO-UPDATE.md`](AUTO-UPDATE.md):
+```bash
+bun run rename-project \
+  --name "Orbit Desktop" \
+  --identifier "com.acme.orbit" \
+  --author "Acme Corp" \
+  --github "acme/orbit-desktop" \
+  --desc "Mission control for your fleet"
+```
+
+This rewrites every identifier in the project and then refreshes `Cargo.lock`
+and the version mirrors for you:
+
+| Target                      | What changes                                                        |
+| :-------------------------- | :------------------------------------------------------------------ |
+| `package.json`              | `name` (kebab slug) and the `kill` script's process name            |
+| `src-tauri/Cargo.toml`      | `name`, `authors`, `description`                                    |
+| `src-tauri/src/main.rs`     | The `<crate>::run()` library path (snake_case, as Cargo derives it) |
+| `src-tauri/tauri.conf.json` | `productName`, window `title`, `identifier`, updater endpoint       |
+| `index.html`                | `<title>`                                                           |
+| `src/lib/appMeta.ts`        | `APP_NAME` + `APP_SLUG` — the whole UI reads these                  |
+
+Every rewrite that finds no match prints a loud `⚠️ No match` warning rather
+than silently skipping, so a stale pattern can't leave an old identifier behind.
+Anything the tool can't know (the tray tooltip and log filename) is already
+derived at runtime from `package_info()`, so it follows automatically.
+
+### 2. Finish the setup
+
+1. **Regenerate the icons** — `bun run create-icons` produces all PNG/ICO/ICNS sizes in the brand color.
+2. **Bump the version** — `bun run before-commit --bump minor` (or edit `scripts/version.ts` then run plain `bun run before-commit`).
+3. **Wire up auto-updates** (optional) — see [`AUTO-UPDATE.md`](AUTO-UPDATE.md):
    - Replace the placeholder `plugins.updater.pubkey` with your Minisign public key.
    - Point `plugins.updater.endpoints` at your GitHub repo's `latest.json`.
    - Add `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
-   - Commit `.github/workflows/release.yml` (template in `AUTO-UPDATE.md`) and push a `v*` tag.
-6. **Rebrand the GUI text** — `App.tsx` (brand title), `AboutTab.tsx` (`WEB_PREVIEW_APP_INFO`, notes list), `index.html` (`<title>`).
-7. **Update the docs** — regenerate `ARCHITECTURE.md` (`bun run arch`) and refresh README/CHANGELOG for the new name.
+   - Push a `v*` tag to trigger `.github/workflows/release.yml`.
+4. **Replace the placeholder copy** — the highlights list in `AboutTab.tsx` and this README.
+5. **Validate & regenerate the docs** — `bun run validate` runs all 8 gates and refreshes `ARCHITECTURE.md`.
+
+> Renaming by hand instead? The identifiers live in exactly the files in the
+> table above — `src/lib/appMeta.ts` is the only place the frontend hardcodes
+> the product name.
 
 ---
 
@@ -394,7 +503,7 @@ Turning this template into your own application, in order:
 ## 📄 Documentation Links
 
 - [`BUILD.md`](BUILD.md) — Cross-platform build instructions, prerequisites & troubleshooting.
-- [`TESTING.md`](TESTING.md) — Testing & QA guide: 6-step automated gates and manual desktop verification matrix.
+- [`TESTING.md`](TESTING.md) — Testing & QA guide: 7-step automated gates and manual desktop verification matrix.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contribution guidelines, Conventional Commits & code quality standards.
 - [`SECURITY.md`](SECURITY.md) — Security policy, DPAPI/keychain storage & vulnerability disclosure.
 - [`CRUSH.md`](CRUSH.md) — Developer & AI agent rapid reference cheat sheet.

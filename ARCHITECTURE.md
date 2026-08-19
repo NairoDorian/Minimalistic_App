@@ -29,14 +29,19 @@ Minimalistic_App/
 │   │   ├── DevConsole.tsx
 │   │   ├── DeveloperTab.tsx
 │   │   ├── ErrorBoundary.tsx
+│   │   ├── GlobalHotkeysSection.tsx
+│   │   ├── HotkeyRecorder.tsx
 │   │   ├── KeyboardShortcutsModal.tsx
 │   │   ├── PreferencesTab.tsx
 │   │   ├── Toast.tsx
 │   │   ├── ToggleSwitch.tsx
 │   │   └── UpdateChecker.tsx
 │   ├── lib/
+│   │   ├── appMeta.ts
 │   │   ├── console.ts
+│   │   ├── download.ts
 │   │   ├── icons.tsx
+│   │   ├── keyboard.ts
 │   │   ├── logViewer.ts
 │   │   ├── settingsBackup.ts
 │   │   ├── shortcuts.ts
@@ -59,14 +64,43 @@ Minimalistic_App/
 │   │   ├── icon.ico
 │   │   └── icon.png
 │   ├── src/
+│   │   ├── hotkeys/
+│   │   │   ├── platform/
+│   │   │   │   ├── linux/
+│   │   │   │   │   ├── keycode.rs
+│   │   │   │   │   ├── listener.rs
+│   │   │   │   │   └── mod.rs
+│   │   │   │   ├── macos/
+│   │   │   │   │   ├── keycode.rs
+│   │   │   │   │   ├── listener.rs
+│   │   │   │   │   ├── mod.rs
+│   │   │   │   │   └── permissions.rs
+│   │   │   │   ├── windows/
+│   │   │   │   │   ├── keycode.rs
+│   │   │   │   │   ├── listener.rs
+│   │   │   │   │   └── mod.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── state.rs
+│   │   │   ├── types/
+│   │   │   │   ├── hotkey.rs
+│   │   │   │   ├── key.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── modifiers.rs
+│   │   │   ├── error.rs
+│   │   │   ├── listener.rs
+│   │   │   ├── manager.rs
+│   │   │   └── mod.rs
+│   │   ├── global_hotkeys.rs
 │   │   ├── lib.rs
 │   │   └── main.rs
 │   ├── build.rs
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── test/
+│   ├── keyboard.test.ts
 │   ├── logViewer.test.ts
 │   ├── settings.test.ts
+│   ├── shortcuts.test.ts
 │   ├── theme.test.ts
 │   └── version.test.ts
 ├── .editorconfig
@@ -98,80 +132,108 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **64 files · 417.2 KB · 110,632 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **92 files · 750.3 KB · 196,117 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `.editorconfig` | 627 B | 30 | 168 | 626 | Cross-editor workspace configuration for indentation, charset, and whitespace trimming. |
 | `.gitattributes` | 2.6 KB | 120 | 678 | 2698 | Git line-ending normalization (LF for code, CRLF for Windows scripts) and binary asset protection rules. |
-| `.github/workflows/ci.yml` | 1.9 KB | 53 | 483 | 1883 | Cross-platform GitHub Actions CI validating formatting, oxlint, TypeScript types, Vite bundling, vite:lint, Rust unit tests (cargo test), and Cargo check across Linux, macOS, and Windows. |
+| `.github/workflows/ci.yml` | 2.1 KB | 57 | 538 | 2089 | Cross-platform GitHub Actions CI validating Prettier formatting, oxlint lint, TypeScript types (tsc), Vite production bundle, Bun unit tests (bun test), Rust compilation check (cargo check), and Rust unit tests (cargo test) across Linux, macOS, and Windows. |
 | `.github/workflows/release.yml` | 4.6 KB | 124 | 1154 | 4659 | Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles. |
 | `.gitignore` | 550 B | 42 | 153 | 547 | Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata. |
 | `.oxlintrc.json` | 700 B | 28 | 211 | 699 | oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and unicorn/import/typescript plugin rules. |
 | `.prettierignore` | 296 B | 25 | 90 | 295 | Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles. |
 | `.prettierrc` | 200 B | 11 | 74 | 199 | Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas. |
-| `AGENTS.md` | 22.2 KB | 303 | 4726 | 22634 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
-| `AUTO-UPDATE.md` | 11.6 KB | 245 | 2716 | 11873 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
-| `BUILD.md` | 6.1 KB | 247 | 1698 | 6243 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
-| `CHANGELOG.md` | 69.2 KB | 713 | 17846 | 70287 | Version history tracking releases and features starting with v0.1.0. |
-| `CONTRIBUTING.md` | 5.0 KB | 123 | 1277 | 5154 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2. |
-| `CRUSH.md` | 4.5 KB | 138 | 1127 | 4560 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, SolidJS 2 patterns, and design tokens. |
+| `AGENTS.md` | 23.0 KB | 305 | 4810 | 23487 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
+| `AUTO-UPDATE.md` | 11.6 KB | 245 | 2725 | 11885 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
+| `BUILD.md` | 6.1 KB | 247 | 1699 | 6244 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
+| `CHANGELOG.md` | 81.5 KB | 787 | 20839 | 82804 | Version history tracking releases and features starting with v0.1.0. |
+| `CONTRIBUTING.md` | 5.9 KB | 126 | 1476 | 6015 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2. |
+| `CRUSH.md` | 7.8 KB | 224 | 2011 | 7983 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, SolidJS 2 patterns, and design tokens. |
 | `index.html` | 912 B | 25 | 208 | 722 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
 | `LICENSE` | 1.1 KB | 21 | 223 | 1085 | Standard MIT open-source license. |
-| `package.json` | 1.7 KB | 50 | 620 | 1786 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling. |
-| `README.md` | 30.0 KB | 406 | 6647 | 30241 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
+| `package.json` | 1.7 KB | 49 | 600 | 1716 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling. |
+| `README.md` | 40.4 KB | 515 | 8965 | 40549 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 576 B | 26 | 163 | 575 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
-| `scripts/before-commit.ts` | 15.9 KB | 351 | 3534 | 13264 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json with --check, --bump, --full (6-step suite incl. lint), and --install-hook modes. |
+| `scripts/before-commit.ts` | 17.6 KB | 387 | 3839 | 14539 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json (+ Cargo.lock root entry via cargo generate-lockfile) with --check, --bump, --full (7-step suite incl. lint + unit tests), and --install-hook modes. |
 | `scripts/create-icons.ts` | 6.6 KB | 114 | 1527 | 4597 | Cross-platform icon generator producing multi-size PNG, multi-entry ICO, and valid ICNS assets for Tauri v2. |
-| `scripts/generate-arch.ts` | 16.2 KB | 263 | 3798 | 15407 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
-| `scripts/rename-project.ts` | 6.1 KB | 180 | 1572 | 5776 | 1-command project customizer & renamer CLI script to rebrand the starter kit for new applications. |
+| `scripts/generate-arch.ts` | 23.2 KB | 343 | 5400 | 22380 | Repomix pack() API-driven generator producing ARCHITECTURE.md with tree and per-file metadata inventory. |
+| `scripts/rename-project.ts` | 7.5 KB | 197 | 1762 | 6417 | 1-command project customizer & renamer CLI script to rebrand the starter kit for new applications. |
 | `scripts/update-deps.ts` | 32.5 KB | 638 | 6932 | 26299 | End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates. |
 | `scripts/update-rtk.ts` | 8.0 KB | 177 | 1804 | 6488 | RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`. |
 | `scripts/version.ts` | 1.2 KB | 1 | 12 | 36 | Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts. |
-| `SECURITY.md` | 3.4 KB | 66 | 727 | 3423 | Security policy, Tauri v2 capability scoping, atomic persistence guarantees, and vulnerability reporting procedures. |
+| `SECURITY.md` | 8.1 KB | 121 | 1793 | 8292 | Security policy, Tauri v2 capability scoping, atomic persistence guarantees, and vulnerability reporting procedures. |
 | `src-tauri/build.rs` | 40 B | 3 | 12 | 39 | Rust build script initializing Tauri build environment. |
-| `src-tauri/capabilities/default.json` | 405 B | 16 | 110 | 404 | Tauri v2 capability definitions granting autostart, updater, process, and tray permissions. |
-| `src-tauri/Cargo.toml` | 1.2 KB | 37 | 383 | 1242 | Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, serde, and serde_json. |
+| `src-tauri/capabilities/default.json` | 405 B | 16 | 110 | 404 | Tauri v2 capability definitions granting core, autostart, updater, process, and notification permissions to the main window. |
+| `src-tauri/Cargo.toml` | 3.1 KB | 86 | 885 | 3055 | Cargo manifest declaring Rust dependencies: tauri v2, autostart, updater, process, serde, and serde_json. |
 | `src-tauri/icons/128x128.png` | 523 B | — | — | — | Application icon at 128x128 pixels. |
 | `src-tauri/icons/128x128@2x.png` | 1.6 KB | — | — | — | HiDPI application icon at 256x256 pixels (128x128 @2x). |
 | `src-tauri/icons/32x32.png` | 108 B | — | — | — | Application tray/window icon at 32x32 pixels. |
 | `src-tauri/icons/icon.icns` | 58.9 KB | — | — | — | Valid macOS Apple Icon Image container (icp4-ic15, base + retina). |
 | `src-tauri/icons/icon.ico` | 2.8 KB | — | — | — | Multi-resolution Windows icon container (16/32/48/64/128/256). |
 | `src-tauri/icons/icon.png` | 5.7 KB | — | — | — | 512x512 master application icon. |
-| `src-tauri/src/lib.rs` | 28.7 KB | 614 | 5379 | 23850 | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept. |
+| `src-tauri/src/global_hotkeys.rs` | 14.0 KB | 291 | 2514 | 11013 | App-level global hotkey glue: the action set, persisted bindings, the supervisor that rebuilds the OS listener on change, dispatch to window actions, and the status the UI reads. |
+| `src-tauri/src/hotkeys/error.rs` | 5.3 KB | 107 | 937 | 3997 | Hand-written error enum for the hotkey engine with user-facing Display messages (no thiserror dependency); converts into the IPC String error. |
+| `src-tauri/src/hotkeys/listener.rs` | 6.0 KB | 96 | 782 | 3522 | Platform-agnostic KeyboardListener: raw key-event stream used for hotkey recording, with clean thread shutdown per backend. |
+| `src-tauri/src/hotkeys/manager.rs` | 22.5 KB | 453 | 4317 | 18837 | HotkeyManager: filters the raw key stream against registered hotkeys and emits press/release events, including modifier-only hotkeys. |
+| `src-tauri/src/hotkeys/mod.rs` | 2.1 KB | 11 | 99 | 393 | Root of the embedded cross-platform global-hotkey engine (vendored from handy-keys, MIT) — re-exports Hotkey, Modifiers, Key, KeyboardListener, and HotkeyManager. |
+| `src-tauri/src/hotkeys/platform/linux/keycode.rs` | 10.4 KB | 210 | 2497 | 8956 | Linux evdev keycode to Key mapping. |
+| `src-tauri/src/hotkeys/platform/linux/listener.rs` | 48.2 KB | 841 | 7363 | 31529 | Linux backend: reads /dev/input evdev devices directly (Wayland, X11, and console alike) with hotplug via inotify, and uinput re-injection for blocking. |
+| `src-tauri/src/hotkeys/platform/linux/mod.rs` | 108 B | 2 | 13 | 48 | Linux hotkey backend module declarations. |
+| `src-tauri/src/hotkeys/platform/macos/keycode.rs` | 11.0 KB | 258 | 3452 | 10019 | macOS virtual keycode to Key mapping (including JIS and media keys). |
+| `src-tauri/src/hotkeys/platform/macos/listener.rs` | 29.6 KB | 547 | 4510 | 21623 | macOS backend: CGEventTap keyboard tap running on a dedicated CFRunLoop thread, with tap re-enable on timeout and clean shutdown. |
+| `src-tauri/src/hotkeys/platform/macos/mod.rs` | 168 B | 4 | 29 | 138 | macOS hotkey backend module declarations. |
+| `src-tauri/src/hotkeys/platform/macos/permissions.rs` | 570 B | 15 | 111 | 443 | macOS Accessibility permission check and a helper that opens the exact System Settings pane. |
+| `src-tauri/src/hotkeys/platform/mod.rs` | 193 B | 7 | 42 | 147 | Platform backend selection for the hotkey engine (macOS / Windows / Linux). |
+| `src-tauri/src/hotkeys/platform/state.rs` | 5.5 KB | 116 | 1076 | 4269 | Shared listener state and modifier reconciliation helpers that recover from a stuck modifier identically on Windows and Linux. |
+| `src-tauri/src/hotkeys/platform/windows/keycode.rs` | 19.8 KB | 397 | 4613 | 13790 | Windows virtual-key and scancode to Key mapping, including layout-independent punctuation via scancode position. |
+| `src-tauri/src/hotkeys/platform/windows/listener.rs` | 44.8 KB | 758 | 6358 | 27799 | Windows backend: WH_KEYBOARD_LL / WH_MOUSE_LL low-level hooks with a message loop, session-change hook reinstall, and hotkey blocking. |
+| `src-tauri/src/hotkeys/platform/windows/mod.rs` | 79 B | 2 | 10 | 37 | Windows hotkey backend module declarations. |
+| `src-tauri/src/hotkeys/types/hotkey.rs` | 14.5 KB | 363 | 3172 | 12863 | Hotkey definition (modifiers + optional key), the "Ctrl+Alt+Space" string grammar, and the hotkey/key event structs. |
+| `src-tauri/src/hotkeys/types/key.rs` | 21.5 KB | 547 | 5530 | 18991 | Cross-platform Key enum (letters, digits, F1–F24, navigation, punctuation, keypad, media, mouse buttons) with case-insensitive parsing and Display. |
+| `src-tauri/src/hotkeys/types/mod.rs` | 196 B | 6 | 45 | 155 | Re-exports for the hotkey type layer (Hotkey, Key, Modifiers, and the event structs). |
+| `src-tauri/src/hotkeys/types/modifiers.rs` | 19.4 KB | 444 | 4238 | 17064 | Hand-rolled side-aware modifier bitset (no bitflags dependency) with alias parsing, the platform-resolving Mod/CmdOrCtrl alias, and pattern-vs-state match semantics. |
+| `src-tauri/src/lib.rs` | 41.2 KB | 816 | 7011 | 31038 | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept. |
 | `src-tauri/src/main.rs` | 171 B | 4 | 28 | 109 | Main Rust entry point launching the lib run loop without extra Windows console. |
-| `src-tauri/tauri.conf.json` | 1.5 KB | 51 | 488 | 1571 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
-| `src/App.tsx` | 7.4 KB | 198 | 1744 | 7180 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
-| `src/bindings.ts` | 3.9 KB | 38 | 384 | 1409 | Source or configuration file for the application. |
-| `src/components/AboutTab.tsx` | 7.2 KB | 200 | 1674 | 7133 | Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener. |
-| `src/components/DevConsole.tsx` | 14.8 KB | 393 | 3159 | 12965 | Source or configuration file for the application. |
-| `src/components/DeveloperTab.tsx` | 13.0 KB | 344 | 2889 | 12833 | Developer Hub tab providing live IPC command execution, toast benchmarks, memory telemetry, and factory reset actions. |
+| `src-tauri/tauri.conf.json` | 1.5 KB | 51 | 488 | 1572 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
+| `src/App.tsx` | 9.3 KB | 226 | 1915 | 7958 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
+| `src/bindings.ts` | 7.1 KB | 61 | 642 | 2406 | Auto-generated tauri-specta type-safe Rust↔TypeScript IPC bindings consumed by the SolidJS frontend via the `commands.*` wrappers. |
+| `src/components/AboutTab.tsx` | 7.6 KB | 197 | 1676 | 7193 | Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener. |
+| `src/components/DevConsole.tsx` | 15.9 KB | 409 | 3332 | 13680 | Live dev-console log viewer: filterable severity badges, real-time backend log tailing, clear/pause controls, and dedup logic for the dev-log bus snapshot replay. |
+| `src/components/DeveloperTab.tsx` | 13.0 KB | 344 | 2890 | 12866 | Developer Hub tab providing live IPC command execution, toast benchmarks, memory telemetry, and factory reset actions. |
 | `src/components/ErrorBoundary.tsx` | 2.4 KB | 62 | 545 | 2223 | Top-level SolidJS 2 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action. |
-| `src/components/KeyboardShortcutsModal.tsx` | 4.3 KB | 109 | 821 | 3887 | Keyboard shortcuts cheat sheet modal dialog with accessible ARIA dialog markup. |
-| `src/components/PreferencesTab.tsx` | 14.2 KB | 346 | 2981 | 13391 | Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, theme picker, and update checker card. |
-| `src/components/Toast.tsx` | 2.4 KB | 69 | 558 | 2210 | Toast notification container and animated item components with auto-dismiss timers and ARIA live regions. |
+| `src/components/GlobalHotkeysSection.tsx` | 8.6 KB | 202 | 1787 | 7844 | Preferences section for system-wide hotkeys: enable toggle, per-action recorders, listener status, and the macOS Accessibility permission prompt. |
+| `src/components/HotkeyRecorder.tsx` | 4.8 KB | 106 | 812 | 3392 | "Press a shortcut" capture control that claims the keyboard while armed, previews the held chord live, and commits a canonical spec string. |
+| `src/components/KeyboardShortcutsModal.tsx` | 7.2 KB | 175 | 1375 | 6385 | Keyboard shortcuts cheat sheet and rebinding surface: accessible ARIA dialog with a focus trap and a live HotkeyRecorder per shortcut. |
+| `src/components/PreferencesTab.tsx` | 15.1 KB | 349 | 3015 | 13544 | Preferences tab panel owning autostart and minimize-to-tray toggle state, handlers, theme picker, and update checker card. |
+| `src/components/Toast.tsx` | 2.3 KB | 62 | 482 | 1919 | Toast notification container and animated item components with auto-dismiss timers and ARIA live regions. |
 | `src/components/ToggleSwitch.tsx` | 2.6 KB | 52 | 395 | 1615 | Reusable accessible ARIA toggle switch (role=switch, Space/Enter keys, visually-hidden checkbox) used by the Preferences tab. |
 | `src/components/UpdateChecker.tsx` | 12.9 KB | 343 | 2746 | 12181 | Auto-update checker component handling release checks, streamed progress, and app relaunch. |
-| `src/index.css` | 32.0 KB | 1457 | 10674 | 31119 | 100% AMOLED deep black theme (#000000) with glassmorphism, glowing toggle switches, and reduced-motion support. |
-| `src/lib/console.ts` | 1.9 KB | 46 | 346 | 1308 | Source or configuration file for the application. |
-| `src/lib/icons.tsx` | 16.8 KB | 621 | 7099 | 17077 | Source or configuration file for the application. |
-| `src/lib/logViewer.ts` | 3.2 KB | 45 | 427 | 1569 | Source or configuration file for the application. |
-| `src/lib/settingsBackup.ts` | 4.6 KB | 96 | 824 | 3500 | Source or configuration file for the application. |
-| `src/lib/shortcuts.ts` | 1.3 KB | 58 | 345 | 1241 | Global keyboard shortcuts definitions, category mapping, and event helper utilities. |
+| `src/index.css` | 35.5 KB | 1599 | 11660 | 34143 | 100% AMOLED deep black theme (#000000) with glassmorphism, glowing toggle switches, and reduced-motion support. |
+| `src/lib/appMeta.ts` | 989 B | 5 | 41 | 172 | Product identity constants (APP_NAME, APP_SLUG) and localStorage key namespacing — the single place the frontend hardcodes the app name, rewritten by rename-project. |
+| `src/lib/console.ts` | 1.9 KB | 46 | 346 | 1308 | In-memory dev-log event bus (push / clear / subscribe) shared between the Rust log sink and the DevConsole view. |
+| `src/lib/download.ts` | 965 B | 13 | 113 | 458 | Blob download helper shared by settings backup export and the diagnostic report, with deferred object-URL revocation so webviews do not cancel the download. |
+| `src/lib/icons.tsx` | 16.8 KB | 621 | 7099 | 17077 | Self-contained SolidJS 2 icon set (brand, tray, toast, action glyphs) with AMOLED deep-black styling — replacing the removed lucide-solid dependency. |
+| `src/lib/keyboard.ts` | 27.2 KB | 651 | 5719 | 19553 | Self-contained cross-platform keyboard/hotkey engine (handy-keys inspired): side-aware modifier flags, portable Mod+ spec parsing/formatting, layout-independent code matching, and a side-tracking keyboard listener. |
+| `src/lib/logViewer.ts` | 3.2 KB | 45 | 427 | 1569 | Pure log-parsing utilities: severity classification from marker tokens and count-aware reconciliation of the live event stream against polled on-disk log lines. |
+| `src/lib/settingsBackup.ts` | 7.9 KB | 125 | 1282 | 5535 | Settings backup/restore helpers: export/import to JSON with a sanitization layer, plus the FALLBACK_SETTINGS default constant. |
+| `src/lib/shortcuts.ts` | 9.0 KB | 209 | 1598 | 6332 | Application shortcut registry: default bindings, persisted per-machine user overrides, conflict detection, and event-to-action resolution built on lib/keyboard. |
 | `src/lib/tauri.ts` | 454 B | 1 | 25 | 97 | Shared Tauri v2 runtime detection utility exporting the isTauri constant. |
-| `src/lib/theme.ts` | 2.0 KB | 61 | 577 | 1709 | Theme accent customization engine with 5 curated neon color palettes and dynamic CSS variable injection. |
+| `src/lib/theme.ts` | 2.2 KB | 63 | 603 | 1817 | Theme accent customization engine with 5 curated neon color palettes and dynamic CSS variable injection. |
 | `src/lib/toast.ts` | 1.9 KB | 48 | 386 | 1449 | Reactive toast notification event bus and helper methods for triggering toasts across the app. |
-| `src/main.tsx` | 199 B | 5 | 45 | 196 | SolidJS 2 application entry point rendering App root (JSX transform handles element creation). |
+| `src/main.tsx` | 514 B | 11 | 90 | 353 | SolidJS 2 application entry point rendering App root (JSX transform handles element creation). |
 | `src/vite-env.d.ts` | 355 B | 1 | 8 | 38 | Vite client type references and declaration of the build-time __APP_VERSION__ constant. |
-| `test/logViewer.test.ts` | 4.8 KB | 100 | 1268 | 4294 | Source or configuration file for the application. |
-| `test/settings.test.ts` | 2.9 KB | 75 | 706 | 2883 | Source or configuration file for the application. |
-| `test/theme.test.ts` | 1.1 KB | 27 | 309 | 1104 | Automated Bun unit tests validating theme preset definitions and color tokens. |
+| `test/keyboard.test.ts` | 18.1 KB | 431 | 5001 | 17704 | Automated Bun unit tests covering hotkey parsing, formatting, platform modifier resolution, event matching, and the side-aware keyboard listener. |
+| `test/logViewer.test.ts` | 4.8 KB | 100 | 1268 | 4294 | Automated Bun unit tests validating log severity classification and live-vs-disk line reconciliation. |
+| `test/settings.test.ts` | 4.6 KB | 118 | 1159 | 4625 | Automated Bun unit tests validating settings backup sanitization and the FALLBACK_SETTINGS structure. |
+| `test/shortcuts.test.ts` | 8.5 KB | 204 | 2256 | 8416 | Automated Bun unit tests validating the shortcut registry, rebinding/override store, conflict detection, and action resolution. |
+| `test/theme.test.ts` | 2.8 KB | 71 | 729 | 2772 | Automated Bun unit tests validating theme preset definitions and color tokens. |
 | `test/version.test.ts` | 632 B | 15 | 176 | 629 | Automated Bun unit tests validating SemVer format and version consistency. |
-| `TESTING.md` | 5.3 KB | 88 | 1198 | 5359 | Testing & QA guide detailing the 5-step automated validation gates and manual desktop verification matrix. |
-| `THIRD_PARTY_LICENSES.md` | 5.3 KB | 154 | 1221 | 5449 | Third-party software, font (Inter OFL-1.1), icon (Lucide MIT), and runtime license attributions. |
-| `tsconfig.json` | 804 B | 29 | 229 | 801 | TypeScript root configuration with strict type checking, bundler resolution, and enforced noUnusedLocals. |
+| `TESTING.md` | 11.7 KB | 130 | 2252 | 11952 | Testing & QA guide detailing the 8-gate automated validation suite, unit-test layout, and the manual desktop verification matrix. |
+| `THIRD_PARTY_LICENSES.md` | 7.0 KB | 194 | 1629 | 7178 | Third-party software, font (Inter OFL-1.1), icon (Lucide MIT), and runtime license attributions. |
+| `tsconfig.json` | 845 B | 29 | 243 | 842 | TypeScript root configuration with strict type checking, bundler resolution, and enforced noUnusedLocals. |
 | `tsconfig.scripts.json` | 497 B | 20 | 143 | 496 | Separate TypeScript config for Node.js scripts — uses ES2022 lib without DOM types to avoid type collisions. |
-| `vite.config.ts` | 1.2 KB | 29 | 162 | 612 | Vite bundler configuration optimized for SolidJS 2 and Tauri v2 dev server integration, injecting __APP_VERSION__ at build time. |
+| `vite.config.ts` | 1.4 KB | 23 | 156 | 563 | Vite bundler configuration optimized for SolidJS 2 and Tauri v2 dev server integration, injecting __APP_VERSION__ at build time. |
 
 ---
 

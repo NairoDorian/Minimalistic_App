@@ -5,13 +5,14 @@ import type { AppSettings as BindingAppSettings } from '../bindings';
 import { Power, Minimize2, Maximize2, Move3d, Palette, EyeOff, RefreshCw } from '../lib/icons';
 import { ToggleSwitch } from './ToggleSwitch';
 import { UpdateChecker } from './UpdateChecker';
+import { GlobalHotkeysSection } from './GlobalHotkeysSection';
 import {
   THEME_PRESETS,
+  THEME_ACCENT_STORAGE_KEY,
   applyThemeAccent,
   type ThemeAccent,
   DEFAULT_THEME_ACCENT,
 } from '../lib/theme';
-import { FALLBACK_SETTINGS } from '../lib/settingsBackup';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
 
@@ -48,16 +49,23 @@ export function PreferencesTab(props: PreferencesTabProps) {
   const [rememberWindowSize, setRememberWindowSize] = createSignal<boolean>(false);
   const [rememberWindowPosition, setRememberWindowPosition] = createSignal<boolean>(false);
   const [currentAccent, setCurrentAccent] = createSignal<ThemeAccent>(DEFAULT_THEME_ACCENT);
-  const [loadedSettings, setLoadedSettings] = createSignal<AppSettings | null>(null);
+  /**
+   * Gates the update checker's auto-check until the persisted preferences have
+   * actually been read. Without it, `checkUpdatesOnLaunch` sits at its optimistic
+   * `true` default for the duration of the settings IPC round-trip and the
+   * checker fires a launch check even when the user has the setting turned off.
+   */
+  const [settingsLoaded, setSettingsLoaded] = createSignal<boolean>(false);
 
   // Load persisted preferences on mount (one-time, not reactive).
   onSettled(() => {
     if (!isTauri) {
-      const saved = localStorage.getItem('theme_accent') as ThemeAccent | null;
+      const saved = localStorage.getItem(THEME_ACCENT_STORAGE_KEY) as ThemeAccent | null;
       if (saved) {
         const accent = applyThemeAccent(saved);
         setCurrentAccent(accent);
       }
+      setSettingsLoaded(true);
       return;
     }
 
@@ -72,8 +80,10 @@ export function PreferencesTab(props: PreferencesTabProps) {
       if (isCancelled) return;
       setAutostart(autostartEnabled);
       if (settings) {
-        setLoadedSettings(settings);
-        setMinimizeToTray(settings.minimize_to_tray);
+        // Every AppSettings field is optional: the Rust struct gives each one a
+        // serde default so an older/newer settings.json still loads, which makes
+        // them all optional in the generated bindings.
+        setMinimizeToTray(settings.minimize_to_tray ?? false);
         setStartMinimized(settings.start_minimized ?? false);
         setCheckUpdatesOnLaunch(settings.check_updates_on_launch ?? true);
         setRememberWindowSize(settings.remember_window_size ?? false);
@@ -87,6 +97,7 @@ export function PreferencesTab(props: PreferencesTabProps) {
           void commands.updateAppSettings({ ...settings, theme_accent: applied });
         }
       }
+      setSettingsLoaded(true);
     });
 
     return () => {
@@ -96,14 +107,16 @@ export function PreferencesTab(props: PreferencesTabProps) {
 
   /**
    * Persists the full settings struct, merging a partial patch over the current
-   * preferences. Every toggle writes the complete AppSettings struct so no other
-   * preference can be silently clobbered — including backend-managed window
-   * geometry fields carried from the last loaded snapshot.
+   * preferences. Fetches a fresh copy from the backend immediately before writing
+   * so backend-managed window-geometry fields (updated by save_window_geometry on
+   * every move/resize) are carried through instead of being clobbered by a stale
+   * mount-time snapshot. Every toggle writes the complete AppSettings struct so no
+   * other preference is silently dropped.
    */
   const saveSettings = async (patch: Partial<AppSettings>) => {
-    const base = loadedSettings() ?? FALLBACK_SETTINGS;
+    const current = await commands.getAppSettings();
     const next: AppSettings = {
-      ...base,
+      ...current,
       minimize_to_tray: minimizeToTray(),
       start_minimized: startMinimized(),
       check_updates_on_launch: checkUpdatesOnLaunch(),
@@ -113,7 +126,6 @@ export function PreferencesTab(props: PreferencesTabProps) {
       ...patch,
     };
     await commands.updateAppSettings(next);
-    setLoadedSettings(next);
   };
 
   const handleAutostartToggle = async (newValue: boolean) => {
@@ -266,7 +278,7 @@ export function PreferencesTab(props: PreferencesTabProps) {
         console.error('Failed to persist theme accent:', err);
       }
     } else {
-      localStorage.setItem('theme_accent', accent);
+      localStorage.setItem(THEME_ACCENT_STORAGE_KEY, accent);
       toast.success(`[Web Preview] Accent set to ${accent}`);
     }
   };
@@ -379,11 +391,14 @@ export function PreferencesTab(props: PreferencesTabProps) {
         onToggle={handleRememberWindowPositionToggle}
       />
 
+      {/* System-wide hotkeys, handled by the native OS keyboard hook */}
+      <GlobalHotkeysSection onStatusChange={props.onStatusChange} />
+
       {/* Auto-Update Checker Card */}
       <UpdateChecker
         onStatusChange={props.onStatusChange}
         variant="card"
-        autoCheckOnMount={checkUpdatesOnLaunch}
+        autoCheckOnMount={() => settingsLoaded() && checkUpdatesOnLaunch()}
         listenForEvents={() => true}
       />
     </div>

@@ -5,7 +5,15 @@
  * to CSS custom properties (--accent-cyan, --accent-blue, --accent-glow) on the document root.
  */
 
+import { storageKey } from './appMeta';
+
 export type ThemeAccent = 'cyan' | 'emerald' | 'violet' | 'amber' | 'rose';
+
+/**
+ * localStorage key backing the accent in browser-preview mode. The desktop
+ * build persists the accent through `AppSettings` on the Rust side instead.
+ */
+export const THEME_ACCENT_STORAGE_KEY = storageKey('theme_accent');
 
 export interface ThemePreset {
   id: ThemeAccent;

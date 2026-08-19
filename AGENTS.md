@@ -1,6 +1,6 @@
 # Development Procedure & Workflow Guidelines (AGENTS.md)
 
-This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **React 19**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
+This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **SolidJS 2**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
 
 ---
 
@@ -123,7 +123,7 @@ Follow these steps **in this order** whenever a version bump / release is reques
 bun run before-commit --bump <major|minor|patch>
 ```
 
-- Updates `scripts/version.ts` (the **only** place the version is defined) and auto-syncs the mirrors: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo update`.
+- Updates `scripts/version.ts` (the **only** place the version is defined) and auto-syncs the mirrors: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo generate-lockfile`.
 - NEVER hand-edit the version in any mirror file — the script owns them.
 
 #### Choosing `major`, `minor`, or `patch` (SemVer semantics)
@@ -201,19 +201,19 @@ rtk git push origin main
 
 ### `bun run before-commit` Reference — Every Mode, Explained
 
-| Command                                                | What it does                                                                                                                                                                                                                                                     | Writes?                  |
-| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
-| `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes                      |
-| `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                  | No                       |
-| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 6 quality gates sequentially: version check, TS typecheck (`tsc -b`), code lint (oxlint), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown.               | Yes (`arch`)             |
-| `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                             | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
-| `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                         | Yes (incl. `version.ts`) |
-| `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                        | Git index                |
-| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `lint` + `typecheck` before every commit).                                                                                                                                                                    | Yes (hook file)          |
-| `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                | Yes (removes hook)       |
-| `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                          | No                       |
+| Command                                                | What it does                                                                                                                                                                                                                                                                                             | Writes?                  |
+| :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
+| `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`).                                         | Yes                      |
+| `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                                                          | No                       |
+| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 8 quality gates sequentially, cheapest-first: version mirror check, TS typecheck (`tsc -b`), code lint (oxlint), Bun unit tests, production Vite build, `cargo check`, `cargo test`, and Architecture map refresh. Exits 0 on 100% pass with a timing breakdown. | Yes (`arch`)             |
+| `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                                                              | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                                                                     | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                                                              | Yes (incl. `version.ts`) |
+| `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                                                                 | Yes (incl. `version.ts`) |
+| `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                                                                | Git index                |
+| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `lint` + `typecheck` before every commit).                                                                                                                                                                                                            | Yes (hook file)          |
+| `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                                                        | Yes (removes hook)       |
+| `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                                                                  | No                       |
 
 **Behavioral details:**
 
@@ -247,7 +247,9 @@ rtk git push origin main
 | Format backend only (cargo fmt)          | `bun run format:backend`                                                                        |
 | Lint codebase (oxlint, TS7-compatible)   | `bun run lint`                                                                                  |
 | Auto-fix lint issues                     | `bun run lint:fix`                                                                              |
-| Run full pre-commit test suite           | `bun test` (or `bun run validate`)                                                              |
+| Run frontend unit tests                  | `bun test` (Bun runner, everything in `test/`)                                                  |
+| Run Rust unit tests                      | `cargo test --manifest-path src-tauri/Cargo.toml`                                               |
+| Run full pre-commit gate suite           | `bun run validate` (or `bun run before-commit --full`)                                          |
 | Type-check the whole workspace           | `bun run typecheck`                                                                             |
 | Rebrand & rename project starter kit     | `bun run rename-project --name "App Name" --identifier "com.id"`                                |
 | Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
@@ -278,12 +280,12 @@ rtk git push origin main
    - **Single source of truth**: product name/tooltip/version come from `AppHandle::package_info()`; settings paths come from `app_config_dir()`; never reconstruct either by string matching.
    - **Descriptive `expect`/error messages**: icon bootstrapping fails gracefully with a setup error instead of a cryptic panic.
 
-4. **React 19 / TypeScript Frontend Conventions (`src`)**:
-   - **Component separation** (Round 8 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
+4. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:
+   - **Component separation** (Round 14 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
    - **Stable callbacks for event listeners**: any callback registered by a mount-once listener (e.g. tray `"check-for-updates"` events) must be stable — use ref-based concurrency guards (`isCheckingRef` / `isInstallingRef`) and an empty dep array rather than reading state directly.
-   - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={false} listenForEvents={false}` to prevent duplicate network requests.
+   - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={() => false} listenForEvents={() => false}` to prevent duplicate network requests.
    - **Optimistic rollback**: toggles update state immediately, then revert on IPC/plugin failure (see `PreferencesTab.tsx`).
-   - **Never `import React`** unless a type requires it; use `import type { FC }` / named type imports with `verbatimModuleSyntax`-safe patterns. React 19's JSX transform handles element creation.
+   - **Never `import React`** — SolidJS 2's JSX transform handles element creation via `jsxImportSource: "@solidjs/web"`. Use `import type { Component }` / named type imports with `verbatimModuleSyntax`-safe patterns.
    - **Catch clauses**: use `error: unknown` + `instanceof Error` narrowing — never `any`.
 
 5. **Accessibility Contract (ARIA)**:

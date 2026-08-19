@@ -64,7 +64,7 @@ const BUS_LEVEL_TO_SEVERITY: Record<DevLogEntry['level'], LineSeverity> = {
 };
 
 /** File lines look like:
- *   [2026-08-15][00:04:36][minimalistic_app_lib::setup][INFO] message */
+ *   [2026-08-15][00:04:36][<crate>_lib::setup][INFO] message */
 const parseFileLine = (raw: string): LogLine => {
   const severity = severityFromText(raw);
   const tsMatch = raw.match(/^\[([^\]]+)\]/);
@@ -216,8 +216,21 @@ export const DevConsole: Component = () => {
   );
 
   // Frontend dev log bus — replays the snapshot on subscribe, then streams.
+  // The bus notifies listeners with the *full* entry snapshot on every push, so
+  // dedupe by entry id here: without this, each push re-appends every prior line
+  // (the bus is an append-only snapshot, not a delta stream).
   onSettled(() => {
-    return subscribeDevLog((entries) => appendLiveLines(busLinesFrom(entries)));
+    let seenIds = new Set<string>();
+    return subscribeDevLog((batch) => {
+      const unseen = batch.filter((entry) => !seenIds.has(entry.id));
+      if (unseen.length === 0) return;
+      unseen.forEach((entry) => seenIds.add(entry.id));
+      // The bus drops its own oldest entries once it hits its cap, so ids for
+      // lines that can never reappear would otherwise accumulate forever.
+      // Rebuilding from the current batch keeps the set bounded by the bus size.
+      if (seenIds.size > MAX_LINES) seenIds = new Set(batch.map((entry) => entry.id));
+      appendLiveLines(busLinesFrom(unseen));
+    });
   });
 
   // Subscribe to the backend log stream so new lines appear instantly.
@@ -429,6 +442,15 @@ export const DevConsole: Component = () => {
         tabindex={0}
         aria-label="Debug console log feed"
       >
+        {filteredLines().length === 0 && (
+          <div class="dev-console-empty">
+            {lines().length === 0
+              ? isTauri
+                ? 'No log lines yet — run an IPC command or wait for backend activity.'
+                : 'No log lines yet — run a mock IPC command (backend logs need the desktop build).'
+              : 'No lines match the current filter.'}
+          </div>
+        )}
         <For each={filteredLines()}>
           {(line) => (
             <div

@@ -14,7 +14,7 @@
     "noEmit": true,
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web",
-    "types": ["vite/client"],
+    "types": ["vite/client", "node", "bun"],
 
     /* Linting — enforce clean code, no dead locals/parameters */
     "strict": true,
@@ -24,6 +24,6 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["src"],
+  "include": ["src", "test", "vite.config.ts"],
   "references": [{ "path": "./tsconfig.scripts.json" }]
 }

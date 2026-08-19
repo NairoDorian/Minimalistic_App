@@ -6,7 +6,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Tauri IPC command: Retrieves current minimize-to-tray preference. */
 	getMinimizeToTray: () => __TAURI_INVOKE<boolean>("get_minimize_to_tray"),
-	/**  Tauri IPC command: Updates current minimize-to-tray preference and persists to disk. */
+	/**
+	 *  Tauri IPC command: Updates current minimize-to-tray preference and persists to disk.
+	 * 
+	 *  The settings lock is held across the whole read-modify-write. Taking it three
+	 *  separate times would let a concurrent writer (`update_app_settings`, or a
+	 *  window move updating the in-memory geometry) slip in between the clone and
+	 *  the write-back, silently discarding its change.
+	 */
 	setMinimizeToTray: (enabled: boolean) => __TAURI_INVOKE<null>("set_minimize_to_tray", { enabled }),
 	/**  Tauri IPC command: Retrieves the entire persisted `AppSettings` struct. */
 	getAppSettings: () => __TAURI_INVOKE<AppSettings>("get_app_settings"),
@@ -28,6 +35,27 @@ export const commands = {
 	getRecentLogs: (maxLines: number) => __TAURI_INVOKE<string>("get_recent_logs", { maxLines }),
 	/**  Truncates the backend log file so the Dev Console starts clean. */
 	clearLogs: () => __TAURI_INVOKE<null>("clear_logs"),
+	/**  Tauri IPC command: Lists every global hotkey action and its current binding. */
+	getGlobalHotkeys: () => __TAURI_INVOKE<GlobalHotkeyBinding[]>("get_global_hotkeys"),
+	/**  Tauri IPC command: Reports whether the OS listener is running, and why not. */
+	getGlobalHotkeyStatus: () => __TAURI_INVOKE<GlobalHotkeyStatus>("get_global_hotkey_status"),
+	/**
+	 *  Tauri IPC command: Validates and canonicalizes a hotkey spec without binding
+	 *  it — lets the recorder UI reject an unusable chord before it is saved.
+	 */
+	validateHotkeySpec: (spec: string) => __TAURI_INVOKE<string>("validate_hotkey_spec", { spec }),
+	/**
+	 *  Tauri IPC command: Binds (or, with an empty spec, clears) one global hotkey,
+	 *  persists it, and restarts the listener.
+	 */
+	setGlobalHotkey: (action: GlobalHotkeyAction, spec: string) => __TAURI_INVOKE<null>("set_global_hotkey", { action, spec }),
+	/**  Tauri IPC command: Turns the global hotkey listener on or off and persists it. */
+	setGlobalHotkeysEnabled: (enabled: boolean) => __TAURI_INVOKE<null>("set_global_hotkeys_enabled", { enabled }),
+	/**
+	 *  Tauri IPC command: Opens the macOS Accessibility settings pane so the user
+	 *  can grant the permission global hotkeys need there. A no-op elsewhere.
+	 */
+	openAccessibilitySettings: () => __TAURI_INVOKE<null>("open_accessibility_settings"),
 };
 
 /* Types */
@@ -51,7 +79,7 @@ export type AppSettings = {
 	 *  Controls whether closing the main GUI window minimizes the app to the system tray
 	 *  instead of terminating the application process. Default is false.
 	 */
-	minimize_to_tray: boolean,
+	minimize_to_tray?: boolean,
 	/**  Controls whether the application starts silently minimized to the system tray on launch. */
 	start_minimized?: boolean,
 	/**  Controls whether the application checks for updates on startup. */
@@ -70,6 +98,54 @@ export type AppSettings = {
 	saved_window_x?: number,
 	/**  Last persisted window Y in physical pixels (`i32::MIN` = unset). */
 	saved_window_y?: number,
+	/**
+	 *  Whether the OS-wide global hotkey listener runs at all. Off by default:
+	 *  it installs a system keyboard hook, which is opt-in behaviour.
+	 */
+	global_hotkeys_enabled?: boolean,
+	/**
+	 *  User-configured global hotkeys, one entry per bound action. Actions with
+	 *  no entry (or an empty spec) are unbound.
+	 */
+	global_hotkeys?: GlobalHotkeyBinding[],
+};
+
+/**
+ *  What triggering a global hotkey does.
+ * 
+ *  Deliberately a small, safe set: a global hotkey fires from anywhere in the
+ *  OS, so destructive actions (quit, reset) are not offered.
+ */
+export type GlobalHotkeyAction = 
+/**  Show the window if hidden, hide it if visible. */
+"toggle_window" | 
+/**  Always bring the window to the foreground. */
+"show_window" | 
+/**  Surface the window and run an update check. */
+"check_updates";
+
+/**  One persisted global hotkey binding. */
+export type GlobalHotkeyBinding = {
+	action: GlobalHotkeyAction,
+	/**  Hotkey spec string, e.g. `"Mod+Alt+Space"`. Empty means unbound. */
+	spec: string,
+};
+
+/**  Runtime state of the global hotkey listener, surfaced to the UI. */
+export type GlobalHotkeyStatus = {
+	/**  True when the OS listener is running. */
+	active: boolean,
+	/**  Number of hotkeys currently registered with the OS. */
+	registered: number,
+	/**
+	 *  True when matched hotkeys are also withheld from other applications.
+	 *  False means they are detected but still reach the focused app.
+	 */
+	blocking: boolean,
+	/**  Why the listener could not start, shown verbatim in the UI. */
+	error: string | null,
+	/**  macOS: the Accessibility permission is missing and must be granted. */
+	needs_accessibility: boolean,
 };
 
 /**  System and process diagnostic telemetry returned by `get_system_stats`. */
