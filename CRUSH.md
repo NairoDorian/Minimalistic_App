@@ -9,6 +9,7 @@
 ```bash
 # Development & Testing (Ultimate standard command)
 bun run tauri dev              # Full Tauri desktop app in live dev mode
+bun run dev:fast               # Same, with the fastest linker available (2.6x here)
 bun run vite                   # Web-only preview in browser
 
 # Quality Gates & Verification

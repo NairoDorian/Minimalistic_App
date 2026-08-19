@@ -8,6 +8,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.23.0] - 2026-08-20
+
+### Round 23 — Practices Borrowed From a Production Tauri App: 2.6× Faster Dev Loop, Self-Healing Settings
+
+Read the source of [AIVORelay](https://github.com/MaxITService/AIVORelay) — a
+production Tauri 2 desktop app with a 100-plus-module Rust backend — and adopted
+the practices that fit a starting-point template. Each was re-derived and
+re-measured here rather than copied; the full adopted/rejected ledger with
+reasoning is [`DOCUMENTATION.md`](DOCUMENTATION.md) §6.
+
+#### ⚡ Fast Dev Loop — `bun run dev:fast` (new)
+
+- **A one-line Rust edit now goes from 10.17 s to 3.92 s — 2.6× — back to a
+  running binary.** Measured on this repository (Windows 11, warm target dir),
+  not quoted: the slow half of a Tauri edit→relaunch loop is _linking_, and two
+  settings dominate it — LLVM's `lld` (which links in parallel) and
+  `CARGO_PROFILE_DEV_DEBUG=limited` (which keeps file/line info in backtraces
+  while dropping the expensive rest).
+- **New `scripts/dev-fast.ts`** detects the best available fast linker per
+  platform — `lld-link` on Windows, `mold` then `ld.lld` on Linux, `ld64.lld` on
+  macOS — and applies both settings as **environment variables for that one
+  process**. Nothing is written to disk, so there is nothing to revert and
+  nothing that can leak into a commit. With no fast linker installed it prints
+  an install hint and runs an ordinary dev session, so it is always safe to use
+  as the default dev command. `--check` reports the detected configuration
+  without launching; `--debug <level>` overrides the debuginfo level.
+- **New `.cargo/config.toml`** carries the measurement table, per-platform
+  `linker`/`rustflags` snippets (**commented out** — an uncommented entry would
+  break the build for every contributor and CI runner without LLVM, and a
+  template must clone-and-build on a bare toolchain), and the tuning knobs that
+  were tested and found **not** to help: forcing `CARGO_BUILD_JOBS` above the
+  logical CPU count, explicit `codegen-units`, and `profile.dev.build-override`
+  all lost to Cargo's defaults. It also enables
+  `[future-incompat-report] frequency = "always"`.
+- ⚠️ Documented caveat: changing the debuginfo level invalidates the dependency
+  cache, so alternating `tauri dev` with `dev:fast` costs a full rebuild each
+  way. `dev:fast --debug full` takes the linker win without that.
+
+#### 🩹 Self-Healing Settings — `src-tauri/src/settings_repair.rs` (new)
+
+- **A single wrong-typed field no longer costs the user every other setting.**
+  `#[serde(default)]` covers a _missing_ field but does nothing for one that is
+  present with the wrong type: one `"minimize_to_tray": "yes"` made
+  `from_str::<AppSettings>` fail for the whole document, and the old response —
+  quarantine the file, start from defaults — discarded the accent colour,
+  hotkeys, window geometry and tray behaviour along with it.
+- The loader now merges the stored JSON over the serialized defaults, uses
+  **`serde_path_to_error`** to learn the exact JSON path serde rejected
+  (`theme_accent`, `global_hotkeys[2].spec`), resets that field alone, and
+  retries under a bounded attempt budget. Each repair is logged by path, and the
+  healed document is written back so the next launch starts clean.
+- Failure handling is now a graded ladder rather than one branch: missing file →
+  silent defaults; **unreadable** file → defaults for this session but
+  deliberately **no** quarantine (renaming would turn a transient permissions or
+  I/O error into permanent data loss); not-valid-JSON → quarantine to `.bak`;
+  valid JSON with bad fields → repair in place.
+- **11 new Rust tests**: wrong types, several broken fields at once, missing
+  keys, unknown keys preserved for downgrade-safety, a broken element nested in
+  a collection, an out-of-range integer, a scalar where an object belongs, plus
+  path-parsing and merge unit tests. Two end-to-end tests assert the file is
+  repaired _and not quarantined_, and that a valid hotkey binding survives a
+  malformed neighbour.
+
+#### 📱 Mobile-Capable Library Target
+
+- `src-tauri/Cargo.toml` gained a `[lib]` section with
+  `crate-type = ["staticlib", "cdylib", "rlib"]`. `run()` already carried
+  `#[cfg_attr(mobile, tauri::mobile_entry_point)]`, but without those crate types
+  a mobile build could never have linked it — the template advertised a mobile
+  entry point it could not build. The `_lib` name suffix additionally avoids the
+  Windows lib/bin name collision (rust-lang/cargo#8519).
+
+#### 📚 Reference-Implementation Mirror
+
+- **`bun run docs:sync` now vendors a sixth source**: AIVORelay's Rust backend,
+  `docs/`, and the maintainers' `.AGENTS/` engineering notes (sparse, ~6 MB).
+  Reference manuals say what an API does; they do not say what an app built on
+  it looks like after two years in production.
+- `scripts/sync-docs.ts` gained a per-source `searchExtensions` field so
+  `docs:find` searches `.rs` in that mirror and markdown everywhere else.
+- **Two bugs found and fixed in the sync script** while adding it: a `*.md` glob
+  in a sparse spec is rejected by git's _cone mode_ and made the whole
+  `sparse-checkout set` call fail, leaving the clone checked out at root level;
+  and because the update path never re-applied the sparse config, that
+  half-configured clone then fetched, reset and **reported success forever**.
+  The update path now re-asserts the sparse set every run, so a mirror heals
+  itself instead of needing a manual delete.
+
+#### 🗂️ Repository Templates
+
+- `.github/ISSUE_TEMPLATE/bug_report.md` — points reporters at the app's own
+  **Copy Diagnostics** button (System & About tab) and Dev Console, so the
+  environment and log sections fill themselves in.
+- `.github/ISSUE_TEMPLATE/feature_request.md` — asks for the _problem_, and for
+  the case that an addition belongs in something deliberately minimal.
+- `.github/ISSUE_TEMPLATE/config.yml` — routes stack questions to
+  `DOCUMENTATION.md`, build problems to `BUILD.md`, and vulnerabilities to the
+  private process in `SECURITY.md`.
+- `.github/PULL_REQUEST_TEMPLATE.md` — requires a human-written "why" even when
+  a tool wrote the code, a citation of the local doc mirror for framework-shaped
+  changes, and an explicit statement of whether the change was manually run.
+
+#### 📖 Documentation
+
+- `DOCUMENTATION.md` §6 — the adopted/rejected ledger, including why the
+  Windows-only CDP remote-debugging hook was **not** taken (Tauri's WebDriver
+  path is the cross-platform answer and works with a config-declared window) and
+  why i18n / zustand / zod / tailwind stay out of a template.
+- `BUILD.md` — new setup step 5 with the measurement table and per-OS installs.
+- `README.md` — fast-dev-loop and self-healing-settings feature sections.
+- `SECURITY.md` — untrusted-file tolerance as a distinct hardening property.
+- `AGENTS.md`, `CRUSH.md` — `dev:fast` in the command tables.
+
 ## [0.22.0] - 2026-08-20
 
 ### Round 22 — Documentation-Driven Audit: Async State in the Graph, Lifecycle Correctness, CSP Least Privilege

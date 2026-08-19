@@ -360,6 +360,30 @@ when the app is hidden in the tray and another window has focus.
 
 ---
 
+### ⚡ Fast Rust Dev Loop (`bun run dev:fast`)
+
+```bash
+bun run dev:fast          # tauri dev with the fastest linker this machine has
+bun run dev:fast --check  # report the detected configuration, don't launch
+```
+
+Measured here: a one-line edit to `src-tauri/src/lib.rs` goes from **10.17 s** to
+**3.92 s** back to a running binary — **2.6×** — by using LLVM's `lld` and
+`CARGO_PROFILE_DEV_DEBUG=limited`. Settings are applied as environment variables
+for that one process, so nothing on disk changes and a machine without LLVM
+simply gets a normal dev run. Full measurement table and the tuning knobs that
+were tested and did **not** help: [`.cargo/config.toml`](.cargo/config.toml).
+
+### 🩹 Self-Healing Settings (`settings_repair.rs`)
+
+A hand-edited or downgraded `settings.json` no longer costs the user everything.
+Rather than failing the whole document on one bad value, the loader merges over
+the defaults, uses `serde_path_to_error` to learn the **exact JSON path** that
+serde rejected (`theme_accent`, `global_hotkeys[2].spec`), resets just that
+field, retries, and writes the healed file back. A stray
+`"minimize_to_tray": "yes"` costs you that one toggle — not your accent colour,
+hotkeys and window geometry too. Covered by 11 Rust tests.
+
 ## 🛠️ Tech Stack & Absolute @latest Versions
 
 | Tool / Library   | Version                                 | Purpose                                                |

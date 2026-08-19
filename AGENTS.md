@@ -268,6 +268,7 @@ rtk git push origin main
 | Task                                     | Command(s)                                                                                      |
 | :--------------------------------------- | :---------------------------------------------------------------------------------------------- |
 | Live development                         | `bun run tauri dev`                                                                             |
+| Live development, fastest link path      | `bun run dev:fast` (`--check` to report the detected configuration only)                        |
 | Add a runtime dependency                 | `bun add <package>`                                                                             |
 | Add a dev dependency                     | `bun add -d <package>`                                                                          |
 | Upgrade everything to @latest            | `bun run update-deps`                                                                           |

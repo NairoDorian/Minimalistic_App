@@ -43,13 +43,14 @@ across an upstream force-push.
 
 ## 2. The mirrors
 
-| Layer                     | Local path                           | Tracks       | Upstream                                                                        |
-| ------------------------- | ------------------------------------ | ------------ | ------------------------------------------------------------------------------- |
-| **Tauri 2**               | `.docs/tauri-docs/src/content/docs/` | `v2`         | [tauri-apps/tauri-docs](https://github.com/tauri-apps/tauri-docs/tree/v2)       |
-| **SolidJS 2**             | `.docs/solid-docs/src/routes/`       | `v2-rebuild` | [solidjs/solid-docs](https://github.com/solidjs/solid-docs/tree/v2-rebuild)     |
-| **Bun**                   | `.docs/bun-docs/content/docs/`       | `main`       | [RiskyMH/bun-docs](https://github.com/RiskyMH/bun-docs)                         |
-| **TypeScript**            | `.docs/typescript-website/packages/` | `v2`         | [microsoft/TypeScript-Website](https://github.com/microsoft/TypeScript-Website) |
-| **TypeScript 7 (native)** | `.docs/typescript-go/CHANGES.md`     | `main`       | [microsoft/typescript-go](https://github.com/microsoft/typescript-go)           |
+| Layer                        | Local path                           | Tracks       | Upstream                                                                        |
+| ---------------------------- | ------------------------------------ | ------------ | ------------------------------------------------------------------------------- |
+| **Tauri 2**                  | `.docs/tauri-docs/src/content/docs/` | `v2`         | [tauri-apps/tauri-docs](https://github.com/tauri-apps/tauri-docs/tree/v2)       |
+| **SolidJS 2**                | `.docs/solid-docs/src/routes/`       | `v2-rebuild` | [solidjs/solid-docs](https://github.com/solidjs/solid-docs/tree/v2-rebuild)     |
+| **Bun**                      | `.docs/bun-docs/content/docs/`       | `main`       | [RiskyMH/bun-docs](https://github.com/RiskyMH/bun-docs)                         |
+| **TypeScript**               | `.docs/typescript-website/packages/` | `v2`         | [microsoft/TypeScript-Website](https://github.com/microsoft/TypeScript-Website) |
+| **TypeScript 7 (native)**    | `.docs/typescript-go/CHANGES.md`     | `main`       | [microsoft/typescript-go](https://github.com/microsoft/typescript-go)           |
+| **Reference implementation** | `.docs/aivorelay/src-tauri/src/`     | `main`       | [MaxITService/AIVORelay](https://github.com/MaxITService/AIVORelay)             |
 
 Branch choice is load-bearing, not incidental:
 
@@ -67,6 +68,12 @@ Branch choice is load-bearing, not incidental:
 - **`typescript-go@main`** — the native Go port that _is_ TypeScript 7. Its
   `CHANGES.md` is the authoritative list of behavioural differences. See
   [TYPESCRIPT-7.md](TYPESCRIPT-7.md).
+- **`AIVORelay@main`** — not a specification but a **reference implementation**:
+  a production Tauri 2 desktop app with a 100-plus-module Rust backend. Sparse
+  checkout of `src-tauri/src/`, `docs/` and the maintainers' `.AGENTS/`
+  engineering notes, and the only mirror `docs:find` searches `.rs` files in.
+  Reference manuals tell you what an API does; they do not tell you what an app
+  built on it looks like after two years of production use. See §7.
 
 ---
 
@@ -144,6 +151,22 @@ High-traffic reference pages for this codebase:
 
 ---
 
+### Reference implementation — `.docs/aivorelay/`
+
+| Question                                                            | Read                                                                                    |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| How does a large Tauri backend lay out its modules?                 | `src-tauri/src/` — one file per concern, `commands/`, `managers/`, `helpers/`, `utils/` |
+| How is a big settings struct loaded without all-or-nothing failure? | `src-tauri/src/settings.rs` (`deserialize_settings_value_with_repair`)                  |
+| What actually makes Rust dev builds slow?                           | `.AGENTS/dev-build-speed-notes.md` — measured, with the things that did **not** help    |
+| How do you drive a Tauri window from a test harness?                | `PLAYWRIGHT_TAURI_CONNECTION.md`, `src-tauri/src/webview_runtime.rs`                    |
+| Release, branch-propagation and upstream-intake process             | `.AGENTS/*-playbook.md`                                                                 |
+
+Treat it as evidence, not scripture — it is a different app with different
+constraints, and it is MIT-licensed but not ours. Read it to see how a problem
+was solved at scale, then solve ours in the smallest way that fits a template.
+
+---
+
 ## 4. Layers with no mirror (and why they need none)
 
 | Layer                             | Where its docs already are                                                                                                                                                                                                        |
@@ -175,7 +198,36 @@ High-traffic reference pages for this codebase:
 
 ---
 
-## 6. Repository documentation index
+## 6. Practices adopted from the reference implementation
+
+Recorded so that each has a traceable origin and can be re-evaluated later.
+Every one was re-derived and re-measured here rather than copied wholesale.
+
+| Practice                                               | Where it lives now                                               | Why                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fast dev-link configuration**, empirically justified | `.cargo/config.toml`, `scripts/dev-fast.ts` (`bun run dev:fast`) | A one-line Rust edit went from **10.17 s to 3.92 s** here — 2.6×. AIVORelay's `.AGENTS/dev-build-speed-notes.md` supplied the method _and_ the negative results, which is the rarer half: forcing `CARGO_BUILD_JOBS`, `codegen-units` and `build-override` were all measured and all lost to Cargo's defaults. |
+| **Field-level settings repair**                        | `src-tauri/src/settings_repair.rs`                               | One wrong-typed field used to cost the user every other preference. Now `serde_path_to_error` names the failing path, that field alone is reset, and the healed file is written back.                                                                                                                          |
+| **Mobile-capable library target**                      | `[lib]` in `src-tauri/Cargo.toml`                                | `run()` already carried `#[cfg_attr(mobile, tauri::mobile_entry_point)]`, but without `cdylib`/`staticlib` crate types a mobile build could never link it. The `_lib` suffix additionally avoids the Windows lib/bin name collision (rust-lang/cargo#8519).                                                    |
+| **Issue and PR templates** that ask for reasoning      | `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`    | Their PR template demands a human-written "why" even when a tool wrote the code — the one thing a diff cannot express. Ours also points bug reporters at the app's own **Copy Diagnostics** button, so the environment section fills itself in.                                                                |
+| **Engineering notes as durable artefacts**             | This section; the measurement tables in `.cargo/config.toml`     | Their `.AGENTS/` directory keeps _measured_ findings with dates and the experiments that failed. A number with provenance survives a rewrite; an opinion does not.                                                                                                                                             |
+
+Considered and deliberately **not** adopted:
+
+- **CDP remote-debugging hook** for E2E driving (`webview_runtime.rs`). It is
+  Windows-only — `additional_browser_args` is unsupported on macOS and Linux —
+  and it requires moving window creation out of `tauri.conf.json` into Rust,
+  trading this template's declarative window config for a single-platform
+  capability. Tauri's own cross-platform answer is
+  `.docs/tauri-docs/src/content/docs/develop/Tests/WebDriver/`, which works with
+  a config-declared window and is the better fit if E2E is added later.
+- **i18n**, **zustand**, **zod**, **tailwind**. All sound choices for that app;
+  all weight a starting point should let its downstream authors choose for
+  themselves. The template hand-rolls the equivalents it genuinely needs
+  (`src/lib/settingsBackup.ts` sanitizes untrusted input the way zod would).
+
+---
+
+## 7. Repository documentation index
 
 | File                                               | Covers                                                                     |
 | -------------------------------------------------- | -------------------------------------------------------------------------- |

@@ -1,12 +1,13 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.22.0",
+  "version": "0.23.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
     "vite:build": "vite build",
     "build": "bun run tauri build",
+    "dev:fast": "bun scripts/dev-fast.ts",
     "tauri": "tauri",
     "typecheck": "bun x tsc -b",
     "lint": "oxlint src test scripts",

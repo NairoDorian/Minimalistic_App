@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Stack documentation (Tauri 2, SolidJS 2, Bun, TypeScript 7)
+    url: https://github.com/NairoDorian/Minimalistic_App/blob/main/DOCUMENTATION.md
+    about: The upstream docs for every layer are mirrored locally — run `bun run docs:sync`, then `bun run docs:find "<query>"`.
+  - name: 🛠️ Build problems and per-OS prerequisites
+    url: https://github.com/NairoDorian/Minimalistic_App/blob/main/BUILD.md
+    about: Toolchain setup, the Windows MAX_PATH limit, webkit2gtk versions, and the rest of the troubleshooting cheatsheet.
+  - name: 🔒 Security vulnerability
+    url: https://github.com/NairoDorian/Minimalistic_App/blob/main/SECURITY.md
+    about: Please report privately using the process in SECURITY.md rather than opening a public issue.

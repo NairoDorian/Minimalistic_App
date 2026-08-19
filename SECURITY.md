@@ -46,14 +46,27 @@ Tauri v2 enforces a strict capability-based security model. Webview access to na
   derives itself (`app_config_dir()` / `app_log_dir()`); no path, glob, or command
   string is ever accepted from the frontend.
 
+- **Untrusted-File Tolerance**: the settings file on disk is user-writable, so
+  it is an input like any other. A malformed value no longer discards the
+  document: `src-tauri/src/settings_repair.rs` merges the stored JSON over the
+  serialized defaults, identifies the exact path serde rejected via
+  `serde_path_to_error`, resets that field alone, and retries under a bounded
+  attempt budget. Only a file that is not valid JSON at all is quarantined to
+  `.bak`. This is availability hardening rather than confidentiality: it means a
+  corrupt or hand-edited file degrades one setting instead of silently resetting
+  every security-relevant preference (autostart, global hotkeys) at once. Note
+  that an unreadable file — a permissions or I/O error — is deliberately **not**
+  quarantined, since renaming it would turn a transient failure into permanent
+  data loss.
+
 - **Input Sanitization at the Trust Boundary**: `update_app_settings` accepts a
   struct from the webview, so imported settings backups are passed through a
   strict sanitizer first (`src/lib/settingsBackup.ts`): unknown fields are dropped,
   every field is individually type-checked, the theme accent must name a known
   preset, and window geometry must be a non-negative whole number. On the Rust
-  side every field carries a serde default, so a truncated or older settings file
-  loads rather than failing, and an unparseable one is preserved as
-  `settings.json.bak` instead of being silently overwritten.
+  side every field additionally carries a serde default, so a truncated or older
+  settings file loads rather than failing — the two layers are independent, and
+  the backend does not trust the frontend's sanitizer to have run.
 
 ### 2. Global Hotkeys — a System-Wide Keyboard Hook
 

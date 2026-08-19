@@ -39,17 +39,38 @@ interface DocSource {
    * Sparse-checkout paths. When present the clone is a partial (`blob:none`)
    * clone and only these paths are materialized — used for repositories where
    * we want a few directories out of a very large tree.
+   *
+   * **Directories only.** Git's sparse-checkout defaults to *cone mode*, which
+   * accepts directory prefixes and rejects globs like `*.md`; a pattern it
+   * rejects makes the whole `set` call fail, leaving the clone checked out at
+   * root level only. Files at the repository root are included automatically by
+   * cone mode, so they never need listing.
    */
   sparse?: readonly string[];
   /** Directory inside the mirror where the prose actually lives. */
   entry: string;
+  /**
+   * File extensions `docs:find` searches and `docs:check` counts.
+   *
+   * Defaults to markdown, which is all a documentation repository holds worth
+   * reading. A *reference implementation* mirror is different: the answer to
+   * "how does a real app do this" is in its source, so it opts into `.rs` too.
+   * Keep these lists narrow — every added extension is more bytes read on every
+   * query, across every mirror.
+   */
+  searchExtensions?: readonly string[];
   /** Why this mirror exists — surfaced in `.docs/README.md`. */
   why: string;
 }
 
 /**
  * The stack manifest. One entry per layer we can be asked an architecture
- * question about. Adding a layer to the app means adding its docs here.
+ * question about, plus one reference implementation.
+ *
+ * Adding a layer to the app means adding its docs here. The last entry is a
+ * different kind of source: not a specification, but a mature production app
+ * built on the same stack, kept for the "how does a real Tauri 2 app handle
+ * this?" questions that no reference manual answers.
  */
 const DOC_SOURCES: readonly DocSource[] = [
   {
@@ -99,7 +120,27 @@ const DOC_SOURCES: readonly DocSource[] = [
     entry: '.',
     why: 'This repo pins a TypeScript 7 dev build. CHANGES.md is the authoritative list of TS7 behavioural differences — see TYPESCRIPT-7.md.',
   },
+  {
+    id: 'aivorelay',
+    title: 'AIVORelay — reference implementation (production Tauri 2 desktop app)',
+    repo: 'MaxITService/AIVORelay',
+    branch: 'main',
+    dir: 'aivorelay',
+    // Only the Rust backend and the maintainers' engineering notes: this is a
+    // large application repo and we want the parts that answer "how is this
+    // done at scale", not its frontend, assets or build outputs. Cone mode
+    // includes the root-level markdown (README, TESTING, AGENTS…) for free.
+    sparse: ['src-tauri/src', '.AGENTS', 'docs'],
+    entry: 'src-tauri/src',
+    // The whole point of this mirror is the implementation, so search the Rust
+    // alongside the notes.
+    searchExtensions: ['.rs', '.md'],
+    why: 'Specifications say what an API does; they do not say what a mature app built on it looks like. This one is a 100+ module Tauri 2 backend under real production load, and its .AGENTS/ notes carry measured findings (dev-build linker benchmarks, settings-repair strategy) rather than opinions. Source of several practices now in this repo — see DOCUMENTATION.md §7.',
+  },
 ] as const;
+
+/** Extensions searched when a source does not name its own. */
+const DEFAULT_SEARCH_EXTENSIONS: readonly string[] = ['.md', '.mdx'];
 
 /** Directory names inside mirrors that hold translations, not new content. */
 const LOCALE_DIRS = new Set([
@@ -163,8 +204,8 @@ interface SourceStatus {
   bytes: number;
 }
 
-/** Recursively counts markdown files and total bytes, skipping `.git`. */
-function measure(dir: string): { files: number; bytes: number } {
+/** Recursively counts searchable files and total bytes, skipping `.git`. */
+function measure(dir: string, extensions: readonly string[]): { files: number; bytes: number } {
   let files = 0;
   let bytes = 0;
   const walk = (current: string) => {
@@ -187,7 +228,7 @@ function measure(dir: string): { files: number; bytes: number } {
         walk(full);
       } else {
         bytes += info.size;
-        if (name.endsWith('.md') || name.endsWith('.mdx')) files += 1;
+        if (extensions.some((extension) => name.endsWith(extension))) files += 1;
       }
     }
   };
@@ -200,7 +241,7 @@ function statusOf(source: DocSource): SourceStatus {
   if (!existsSync(join(dir, '.git'))) {
     return { source, present: false, branch: null, commit: null, date: null, files: 0, bytes: 0 };
   }
-  const { files, bytes } = measure(dir);
+  const { files, bytes } = measure(dir, source.searchExtensions ?? DEFAULT_SEARCH_EXTENSIONS);
   return {
     source,
     present: true,
@@ -238,6 +279,18 @@ function syncSource(source: DocSource): SourceStatus {
   } else {
     const before = gitOrNull(dir, 'rev-parse', 'HEAD');
     log(`${CYAN}▸${RESET} updating ${BOLD}${source.repo}${RESET} @ ${source.branch} …`);
+    // Re-assert the sparse set every time. A clone whose initial
+    // `sparse-checkout set` failed (a rejected pattern, an interrupted run) is
+    // otherwise stuck checked out at root level forever, because the update
+    // path below would happily fetch and reset that partial tree and report
+    // success. Re-applying makes the mirror self-healing rather than requiring
+    // the user to notice files are missing and delete the directory by hand.
+    if (source.sparse) {
+      execFileSync('git', ['sparse-checkout', 'set', ...source.sparse], {
+        cwd: dir,
+        stdio: 'inherit',
+      });
+    }
     execFileSync('git', ['fetch', '--depth', '1', 'origin', source.branch], {
       cwd: dir,
       stdio: 'inherit',
@@ -311,6 +364,7 @@ function findInDocs(query: string, sources: readonly DocSource[]) {
     const dir = dirOf(source);
     if (!existsSync(dir)) continue;
 
+    const extensions = source.searchExtensions ?? DEFAULT_SEARCH_EXTENSIONS;
     const hits: { file: string; line: number; text: string }[] = [];
 
     const walk = (current: string) => {
@@ -334,7 +388,7 @@ function findInDocs(query: string, sources: readonly DocSource[]) {
           walk(full);
           continue;
         }
-        if (!name.endsWith('.md') && !name.endsWith('.mdx')) continue;
+        if (!extensions.some((extension) => name.endsWith(extension))) continue;
 
         const contents = readFileSync(full, 'utf8');
         if (!contents.toLowerCase().includes(needle)) continue;
@@ -393,7 +447,7 @@ function printStatus(statuses: readonly SourceStatus[]) {
       continue;
     }
     log(
-      `  ${GREEN}✓${RESET} ${id}  ${s.branch}@${s.commit}  ${DIM}${s.date}  ${String(s.files).padStart(4)} md  ${formatBytes(s.bytes).padStart(6)}${RESET}`
+      `  ${GREEN}✓${RESET} ${id}  ${s.branch}@${s.commit}  ${DIM}${s.date}  ${String(s.files).padStart(4)} files  ${formatBytes(s.bytes).padStart(6)}${RESET}`
     );
   }
   const missing = statuses.filter((s) => !s.present).length;

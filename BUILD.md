@@ -145,7 +145,53 @@ bun run tauri dev
 - **Right-Click Tray Icon**: Surfaces context menu (`Open / Hide GUI`, `Check for Updates...`, `Quit`).
 - **Close Window (X)**: Minimizes to system tray when configured in Preferences (default: quits application).
 
-### 5. Frontend-Only Development (Browser Preview)
+### 5. Faster Rust Rebuilds (optional, recommended)
+
+The slow half of a Tauri edit→relaunch loop is **linking**, not compiling. Two
+settings dominate it, and both are purely local developer-experience choices
+that change nothing about the shipped release binary:
+
+```bash
+bun run dev:fast          # detect a fast linker, then run tauri dev
+bun run dev:fast --check  # report what would be used, without launching
+```
+
+Measured on this repository (Windows 11, warm target directory), timing
+`touch src-tauri/src/lib.rs` → `cargo build` finished:
+
+| Configuration                                      | Time        |
+| :------------------------------------------------- | :---------- |
+| Default `link.exe`, default dev debuginfo          | **10.17 s** |
+| `lld-link.exe` + `CARGO_PROFILE_DEV_DEBUG=limited` | **3.92 s**  |
+
+**2.6× faster.** Install a fast linker to get it:
+
+| Platform        | Install                            |
+| :-------------- | :--------------------------------- |
+| Windows         | `winget install LLVM.LLVM`         |
+| macOS           | `brew install llvm`                |
+| Debian / Ubuntu | `sudo apt install mold` (or `lld`) |
+| Arch            | `sudo pacman -S mold`              |
+| Fedora          | `sudo dnf install mold`            |
+
+`dev:fast` applies the settings as environment variables **for that one process**
+— nothing is written to disk, so there is nothing to revert and nothing that can
+leak into a commit. Without a fast linker installed it prints an install hint and
+runs an ordinary dev session, so it is always safe to use as your default.
+
+> [!WARNING]
+> Changing the debuginfo level invalidates the whole dependency cache, so the
+> first build after switching modes recompiles everything (~1.5 min here).
+> Pick one command and stay with it; alternating `bun run tauri dev` with
+> `bun run dev:fast` pays that cost every time you switch. Use
+> `bun run dev:fast --debug full` to take the fast linker while keeping the
+> stock debuginfo level, if you need to move between the two.
+
+The full measurement table, the settings that were tested and found **not** to
+help, and per-platform `.cargo/config.toml` snippets are in
+[`.cargo/config.toml`](.cargo/config.toml).
+
+### 6. Frontend-Only Development (Browser Preview)
 
 To iterate purely on SolidJS 2 UI components and CSS styling in the web browser:
 

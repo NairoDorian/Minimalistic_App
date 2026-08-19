@@ -1,5 +1,6 @@
 pub mod global_hotkeys;
 pub mod hotkeys;
+pub mod settings_repair;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -160,31 +161,73 @@ fn quarantine_unreadable_settings(path: &Path) {
     }
 }
 
-/// Loads settings from disk, falling back to defaults if the file is missing
-/// or cannot be parsed. Failures are logged so corrupt state is never silently
-/// ignored by the UI, and an unparseable file is preserved as `.bak`.
+/// Loads settings from disk, repairing individual broken fields instead of
+/// discarding the file.
+///
+/// The escalation ladder, weakest failure first:
+///
+/// 1. **File missing** — first launch. Defaults, no complaint, no quarantine.
+/// 2. **File unreadable** (permissions, I/O error) — defaults for this session.
+///    The file is *not* quarantined: it may be perfectly good and merely locked,
+///    and renaming it would turn a transient error into permanent data loss.
+/// 3. **Not valid JSON** — genuinely unsalvageable. Quarantine as `.bak` so the
+///    user can recover by hand, then start from defaults.
+/// 4. **Valid JSON, but some field is wrong** — the common case for a
+///    hand-edited or downgraded file. [`settings_repair`] resets exactly the
+///    fields serde rejected and keeps everything else. Each repair is logged by
+///    path, and the healed struct is written back so the next launch is clean.
+///
+/// Step 4 is why a single `"minimize_to_tray": "yes"` no longer costs the user
+/// their accent colour, hotkeys and window geometry.
 fn load_settings_from_disk(path: &Path) -> AppSettings {
-    match fs::read_to_string(path) {
-        Ok(content) => match serde_json::from_str::<AppSettings>(&content) {
-            Ok(settings) => settings,
-            Err(err) => {
-                log::error!(
-                    "[settings] Failed to parse {}: {err} — using defaults",
-                    path.display()
-                );
-                quarantine_unreadable_settings(path);
-                AppSettings::default()
-            }
-        },
-        Err(err) if err.kind() == ErrorKind::NotFound => AppSettings::default(),
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == ErrorKind::NotFound => return AppSettings::default(),
         Err(err) => {
             log::error!(
-                "[settings] Failed to read {}: {err} — using defaults",
+                "[settings] Failed to read {}: {err} — using defaults for this session",
                 path.display()
             );
-            AppSettings::default()
+            return AppSettings::default();
+        }
+    };
+
+    let stored = match serde_json::from_str::<serde_json::Value>(&content) {
+        Ok(value) => value,
+        Err(err) => {
+            log::error!(
+                "[settings] {} is not valid JSON: {err} — using defaults",
+                path.display()
+            );
+            quarantine_unreadable_settings(path);
+            return AppSettings::default();
+        }
+    };
+
+    let defaults = AppSettings::default();
+    let Some(outcome) = settings_repair::deserialize_with_repair(&stored, &defaults) else {
+        log::error!(
+            "[settings] {} could not be salvaged — using defaults",
+            path.display()
+        );
+        quarantine_unreadable_settings(path);
+        return defaults;
+    };
+
+    for repaired in &outcome.repaired_paths {
+        log::warn!("[settings] Reset invalid field '{repaired}' to its default");
+    }
+
+    if outcome.needs_rewrite {
+        // Persist the healed document so the repair happens once rather than on
+        // every launch, and so the file on disk matches what the app is using.
+        // A failed rewrite is not fatal: the in-memory settings are already correct.
+        if let Err(err) = save_settings_to_disk(path, &outcome.value) {
+            log::warn!("[settings] Could not write back the repaired settings: {err}");
         }
     }
+
+    outcome.value
 }
 
 /// Helper function to persist settings to disk, creating parent directories as needed.
@@ -1023,6 +1066,95 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&backup).expect("backup unreadable"),
             "{ this is not json"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_wrong_typed_field_is_repaired_without_losing_other_settings() {
+        // The regression this guards: before field-level repair, ONE mistyped
+        // value made `serde_json::from_str::<AppSettings>` fail for the whole
+        // document, so the file was quarantined and every other preference —
+        // accent, hotkeys, window geometry — was silently reset to defaults.
+        let temp_dir = std::env::temp_dir().join(format!("tauri_repair_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        fs::write(
+            &settings_path,
+            r#"{
+                "minimize_to_tray": "yes",
+                "theme_accent": "violet",
+                "start_minimized": true,
+                "saved_window_width": 900,
+                "global_hotkeys_enabled": true
+            }"#,
+        )
+        .expect("write failed");
+
+        let loaded = load_settings_from_disk(&settings_path);
+
+        // Only the broken field fell back.
+        assert_eq!(
+            loaded.minimize_to_tray,
+            AppSettings::default().minimize_to_tray
+        );
+        // Everything else survived.
+        assert_eq!(loaded.theme_accent, "violet");
+        assert!(loaded.start_minimized);
+        assert_eq!(loaded.saved_window_width, 900);
+        assert!(loaded.global_hotkeys_enabled);
+
+        // A repairable file is NOT quarantined — it was salvaged in place.
+        assert!(
+            !settings_path.with_extension("json.bak").exists(),
+            "a repairable file must not be quarantined"
+        );
+
+        // The healed document was written back, so the next launch is clean and
+        // the repair does not have to happen again.
+        let rewritten: AppSettings =
+            serde_json::from_str(&fs::read_to_string(&settings_path).expect("read back failed"))
+                .expect("the rewritten file must parse strictly");
+        assert_eq!(rewritten, loaded);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_repair_survives_a_broken_hotkey_binding() {
+        // Collections are the harder case: the bad value is nested inside an
+        // array element, so the repair has to address `global_hotkeys[1].spec`
+        // rather than a top-level key.
+        let temp_dir =
+            std::env::temp_dir().join(format!("tauri_repair_vec_{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        fs::write(
+            &settings_path,
+            r#"{
+                "theme_accent": "emerald",
+                "global_hotkeys": [
+                    { "action": "toggle_window", "spec": "Ctrl+Alt+M" },
+                    { "action": "show_window", "spec": 12345 }
+                ]
+            }"#,
+        )
+        .expect("write failed");
+
+        let loaded = load_settings_from_disk(&settings_path);
+
+        assert_eq!(loaded.theme_accent, "emerald");
+        // The intact binding is untouched; the app does not lose a working
+        // hotkey because a neighbouring entry was malformed.
+        assert!(
+            loaded
+                .global_hotkeys
+                .iter()
+                .any(|binding| binding.spec == "Ctrl+Alt+M"),
+            "the valid binding must survive its broken neighbour"
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
