@@ -1,6 +1,6 @@
 [package]
 name = "minimalistic-app"
-version = "0.20.0"
+version = "0.20.1"
 description = "Minimalistic cross-platform desktop application based on Tauri 2, Bun, SolidJS 2, and TypeScript"
 authors = ["Z"]
 edition = "2024"

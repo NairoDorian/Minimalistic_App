@@ -15,6 +15,9 @@ Minimalistic_App/
 │   └── workflows/
 │       ├── ci.yml
 │       └── release.yml
+├── .playwright-mcp/
+│   ├── page-2026-08-19T20-29-01-618Z.yml
+│   └── page-2026-08-19T20-29-23-389Z.yml
 ├── scripts/
 │   ├── before-commit.ts
 │   ├── create-icons.ts
@@ -132,7 +135,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **92 files · 750.3 KB · 196,117 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **94 files · 761.3 KB · 199,148 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -142,17 +145,19 @@ Repomix metrics: **92 files · 750.3 KB · 196,117 tokens** (text files; binary 
 | `.github/workflows/release.yml` | 4.6 KB | 124 | 1154 | 4659 | Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles. |
 | `.gitignore` | 550 B | 42 | 153 | 547 | Git ignore configuration excluding build artifacts, node_modules, editor noise, logs, foreign lockfiles, and OS metadata. |
 | `.oxlintrc.json` | 700 B | 28 | 211 | 699 | oxlint (TS7-compatible linter) configuration with correctness/suspicious/perf categories and unicorn/import/typescript plugin rules. |
+| `.playwright-mcp/page-2026-08-19T20-29-01-618Z.yml` | 4.0 KB | 71 | 1159 | 4124 | Source or configuration file for the application. |
+| `.playwright-mcp/page-2026-08-19T20-29-23-389Z.yml` | 4.0 KB | 71 | 1159 | 4124 | Source or configuration file for the application. |
 | `.prettierignore` | 296 B | 25 | 90 | 295 | Prettier ignore configuration excluding dist, target, node_modules, logs, and lockfiles. |
 | `.prettierrc` | 200 B | 11 | 74 | 199 | Prettier formatting configuration enforcing single quotes, 2-space indentation, and es5 trailing commas. |
 | `AGENTS.md` | 23.0 KB | 305 | 4810 | 23487 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 11.6 KB | 245 | 2725 | 11885 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
 | `BUILD.md` | 6.1 KB | 247 | 1699 | 6244 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
-| `CHANGELOG.md` | 81.5 KB | 787 | 20839 | 82804 | Version history tracking releases and features starting with v0.1.0. |
+| `CHANGELOG.md` | 82.9 KB | 803 | 21211 | 84238 | Version history tracking releases and features starting with v0.1.0. |
 | `CONTRIBUTING.md` | 5.9 KB | 126 | 1476 | 6015 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2. |
 | `CRUSH.md` | 7.8 KB | 224 | 2011 | 7983 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, SolidJS 2 patterns, and design tokens. |
 | `index.html` | 912 B | 25 | 208 | 722 | Main HTML entry point featuring Google Fonts Inter and root mount target. |
 | `LICENSE` | 1.1 KB | 21 | 223 | 1085 | Standard MIT open-source license. |
-| `package.json` | 1.7 KB | 49 | 600 | 1716 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling. |
+| `package.json` | 1.7 KB | 49 | 600 | 1715 | Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling. |
 | `README.md` | 40.4 KB | 515 | 8965 | 40549 | User manual and documentation specifying feature list, SOP procedure, and 'bun run tauri dev' command. |
 | `repomix.config.json` | 576 B | 26 | 163 | 575 | Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents). |
 | `scripts/before-commit.ts` | 17.6 KB | 387 | 3839 | 14539 | Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json (+ Cargo.lock root entry via cargo generate-lockfile) with --check, --bump, --full (7-step suite incl. lint + unit tests), and --install-hook modes. |
@@ -196,9 +201,9 @@ Repomix metrics: **92 files · 750.3 KB · 196,117 tokens** (text files; binary 
 | `src-tauri/src/lib.rs` | 41.2 KB | 816 | 7011 | 31038 | Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept. |
 | `src-tauri/src/main.rs` | 171 B | 4 | 28 | 109 | Main Rust entry point launching the lib run loop without extra Windows console. |
 | `src-tauri/tauri.conf.json` | 1.5 KB | 51 | 488 | 1572 | Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle. |
-| `src/App.tsx` | 9.3 KB | 226 | 1915 | 7958 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
+| `src/App.tsx` | 12.4 KB | 274 | 2326 | 9771 | Application shell: modular tab navigation (ARIA tabs), header with drag region, footer status bar, and app-info IPC loading. |
 | `src/bindings.ts` | 7.1 KB | 61 | 642 | 2406 | Auto-generated tauri-specta type-safe Rust↔TypeScript IPC bindings consumed by the SolidJS frontend via the `commands.*` wrappers. |
-| `src/components/AboutTab.tsx` | 7.6 KB | 197 | 1676 | 7193 | Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener. |
+| `src/components/AboutTab.tsx` | 7.6 KB | 193 | 1606 | 6936 | Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener. |
 | `src/components/DevConsole.tsx` | 15.9 KB | 409 | 3332 | 13680 | Live dev-console log viewer: filterable severity badges, real-time backend log tailing, clear/pause controls, and dedup logic for the dev-log bus snapshot replay. |
 | `src/components/DeveloperTab.tsx` | 13.0 KB | 344 | 2890 | 12866 | Developer Hub tab providing live IPC command execution, toast benchmarks, memory telemetry, and factory reset actions. |
 | `src/components/ErrorBoundary.tsx` | 2.4 KB | 62 | 545 | 2223 | Top-level SolidJS 2 Error Boundary with glassmorphic crash card, stack trace toggle, and copy logs action. |

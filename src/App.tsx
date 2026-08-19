@@ -1,4 +1,5 @@
-import { createSignal, createEffect, onCleanup, onSettled, For } from 'solid-js';
+import { createSignal, createEffect, createMemo, isPending, onCleanup, onSettled, For } from 'solid-js';
+import { Loading } from '@solidjs/web';
 import { Settings, Info, AppWindow, Shield, Code2, type LucideIcon } from './lib/icons';
 import { commands } from './bindings';
 import type { AppInfo } from './bindings';
@@ -56,7 +57,6 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 export function AppContent() {
   const [activeTab, setActiveTab] = createSignal<TabType>(loadInitialTab);
   const [statusMessage, setStatusMessage] = createSignal<string>('Ready');
-  const [appInfo, setAppInfo] = createSignal<AppInfo | null>(null);
   const [shortcutsModalOpen, setShortcutsModalOpen] = createSignal<boolean>(false);
 
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -77,36 +77,41 @@ export function AppContent() {
     }
   );
 
-  // Load app metadata on mount. Retries on startup IPC races (the same class
-  // race that PreferencesTab's settings load already guards against) so a
-  // transient failure never leaves the About tab stuck on a stale null snapshot
-  // that never updates.
-  onSettled(() => {
-    if (!isTauri) {
-      setAppInfo(WEB_PREVIEW_APP_INFO);
-      return;
-    }
+  /**
+   * Application metadata as a SolidJS 2 async memo — "async lives in the graph".
+   *
+   * The memo wraps the IPC round-trip (with exponential-backoff retries for the
+   * startup IPC race) so consumers read `appInfo()` as a plain accessor. While the
+   * promise is in flight, `isPending(appInfo)` is true and any read without a
+   * `<Loading>` ancestor reports "not ready". After it settles, stale content
+   * stays visible during revalidation (none here — it's a one-shot load).
+   *
+   * In the browser preview the memo resolves synchronously to the stub info,
+   * so no `<Loading>` boundary is ever observed.
+   */
+  const appInfo = createMemo(async (): Promise<AppInfo> => {
+    if (!isTauri) return WEB_PREVIEW_APP_INFO;
 
-    let cancelled = false;
-    const loadAppInfo = (attempt: number) => {
-      commands
-        .getAppInfo()
-        .then((info) => {
-          if (!cancelled) setAppInfo(info);
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          if (attempt >= 3) {
-            console.warn('App info IPC query failed after retries:', err);
-            return;
-          }
-          setTimeout(() => loadAppInfo(attempt + 1), 300 * 2 ** attempt);
-        });
-    };
-    loadAppInfo(1);
-    return () => {
-      cancelled = true;
-    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // Intentionally sequential — each retry must wait for the previous
+        // attempt to fail before backing off and trying again.
+        // eslint-disable-next-line no-await-in-loop
+        return await commands.getAppInfo();
+      } catch (err: unknown) {
+        if (attempt >= 3) {
+          console.warn('App info IPC query failed after retries:', err);
+          return WEB_PREVIEW_APP_INFO;
+        }
+        // Exponential backoff before the next attempt — same regime as the
+        // settings loader in PreferencesTab. Must await sequentially so the
+        // delay precedes the retry.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
+      }
+    }
+    // Unreachable, but satisfies the control-flow exhaustiveness for TS.
+    return WEB_PREVIEW_APP_INFO;
   });
 
   /** Sets a temporary status message that auto-clears to 'Ready' after 4 seconds. */
@@ -255,7 +260,10 @@ export function AppContent() {
       <footer class="app-footer">
         <div class="footer-status" aria-live="polite">
           <Shield size={12} color="var(--accent-cyan)" />
-          <span>Status: {statusMessage()}</span>
+          {/* isPending surfaces the in-flight state of the app-info async memo —
+              true while the startup IPC round-trip is outstanding, false once it
+              settles. Shows a loading hint instead of the static "Ready". */}
+          <span>Status: {isPending(appInfo) ? 'Loading system info...' : statusMessage()}</span>
         </div>
         <UpdateChecker
           variant="footer"
@@ -270,7 +278,67 @@ export function AppContent() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppContent />
+      {/* App-level Loading boundary: absorbs the appInfo async memo's initial
+          IPC round-trip (and any future revalidation). In the browser preview
+          the memo resolves synchronously so this never shows a fallback. */}
+      <Loading fallback={<AppSkeleton />}>
+        <AppContent />
+      </Loading>
     </ErrorBoundary>
+  );
+}
+
+/** Skeleton rendered while the root app data is still mounting. */
+function AppSkeleton() {
+  return (
+    <div class="app-container">
+      <header class="app-header" data-tauri-drag-region>
+        <div class="brand-section" data-tauri-drag-region>
+          <div class="brand-icon">
+            <AppWindow size={18} />
+          </div>
+          <span class="brand-title">{APP_NAME}</span>
+        </div>
+        <div class={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
+          <span class="status-dot"></span>
+          <span>{isTauri ? 'System Tray Active' : 'Web Preview'}</span>
+        </div>
+      </header>
+      <main class="app-content">
+        <nav class="navigation-tab" role="tablist" aria-label="Main Navigation">
+          <For each={TABS} keyed>
+            {(tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  type="button"
+                  class="tab-btn"
+                  role="tab"
+                  tabindex={-1}
+                  aria-selected={tab.id === 'preferences' ? 'true' : 'false'}
+                >
+                  <Icon size={14} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            }}
+          </For>
+        </nav>
+        <div class="app-content-tabs">
+          <div class="settings-card" role="tabpanel" tabindex={0}>
+            <div class="settings-card-header">
+              <h2 class="settings-card-title">Loading…</h2>
+              <p class="settings-card-desc">Initializing application metadata…</p>
+            </div>
+          </div>
+        </div>
+      </main>
+      <footer class="app-footer">
+        <div class="footer-status" aria-live="polite">
+          <Shield size={12} color="var(--accent-cyan)" />
+          <span>Status: Loading…</span>
+        </div>
+      </footer>
+    </div>
   );
 }

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.20.1] - 2026-08-19
+
+### SolidJS 2 Async-Graph Migration & Pipeline Hygiene
+
+#### ⚛️ SolidJS 2 Async Data Loading (modernization)
+
+- **App-level app-info loading migrated from legacy `onSettled` + Promise signal pattern to SolidJS 2's native `createMemo(async)` "async lives in the graph" model** in `src/App.tsx:92` — consumers read `appInfo()` as a plain accessor; `isPending(appInfo)` surfaces the in-flight state.
+- **Root `<Loading fallback={<AppSkeleton />}>` boundary** added in `src/App.tsx:284` wrapping `<AppContent>`, absorbing the startup IPC round-trip (with 3-attempt exponential-backoff retries). In the browser preview the memo resolves synchronously so the skeleton never appears.
+- **`AboutTab` prop type tightened** from `() => AppInfo | null` to `() => AppInfo` at `src/components/AboutTab.tsx:15` — the `<Loading>` boundary guarantees readiness, eliminating all null-check fallbacks in tile JSX and diagnostic handlers.
+- **Tile JSX subscribes directly** to `props.appInfo()` in tracking scope; event handlers (`buildDiagnosticsText`, `handleSaveReport`) switched to `untrack(() => props.appInfo())` for safe non-tracking reads.
+- `AppSkeleton` tray-status badge now respects `isTauri` instead of hardcoding `web-preview`.
+
+#### 📦 Dependency Hygiene
+
+- `@solidjs/web` version pin normalized from `^2.0.0-rc.0` to `2.0.0-rc.0` in `package.json` to match the `solid-js` pin (eliminates resolution variance).
+
 ## [0.20.0] - 2026-08-19
 
 ### Round 20 — Cross-Platform Keyboard Engine, System-Wide Global Hotkeys, Correctness Pass & Pipeline Hygiene

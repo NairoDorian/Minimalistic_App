@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, untrack } from 'solid-js';
 import { commands } from '../bindings';
 import type { AppInfo } from '../bindings';
 import {
@@ -26,7 +26,8 @@ export const WEB_PREVIEW_APP_INFO: AppInfo = {
 };
 
 interface AboutTabProps {
-  appInfo: () => AppInfo | null;
+  /** Async memo accessor resolving to the app's metadata (see App.tsx). */
+  appInfo: () => AppInfo;
   onStatusChange?: (status: string) => void;
   onOpenShortcuts?: () => void;
 }
@@ -34,20 +35,21 @@ interface AboutTabProps {
 export function AboutTab(props: AboutTabProps) {
   const [copied, setCopied] = createSignal(false);
 
-  /** Builds the shared markdown diagnostics block used by both copy and report export.
-   * Snapshotting `props.appInfo()` here is safe: this runs on click, not at setup. */
+  /**
+   * Builds the shared markdown diagnostics block used by both copy and report export.
+   *
+   * Reads the app-info accessor through `untrack` — this runs in an event handler
+   * (click), not a tracking scope, so a plain read returns the last settled
+   * value without subscribing. By the time the user clicks, the startup IPC
+   * memo has resolved.
+   */
   const buildDiagnosticsText = (): string => {
-    const info = props.appInfo();
-    const version = info?.version ?? __APP_VERSION__;
-    const tauriVer = info?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version;
-    const os = info?.os ?? 'unknown';
-    const arch = info?.arch ?? 'unknown';
-
+    const info = untrack(() => props.appInfo());
     return [
       '```markdown',
-      `- Application: ${info?.name ?? APP_NAME} v${version}`,
-      `- Tauri Engine: v${tauriVer}`,
-      `- OS / Architecture: ${os} (${arch})`,
+      `- Application: ${info.name} v${info.version}`,
+      `- Tauri Engine: v${info.tauri_version}`,
+      `- OS / Architecture: ${info.os} (${info.arch})`,
       `- Runtime Stack: Bun 1.3+ | SolidJS 2 | Cargo Rust 2024`,
       '```',
     ].join('\n');
@@ -77,7 +79,7 @@ export function AboutTab(props: AboutTabProps) {
       buildDiagnosticsText(),
     ].join('\n');
 
-    const version = props.appInfo()?.version ?? __APP_VERSION__;
+    const version = untrack(() => props.appInfo()).version;
     downloadTextFile(`${APP_SLUG}-diagnostics-${version}.txt`, report, 'text/plain;charset=utf-8');
     toast.success('Diagnostic report downloaded');
     props.onStatusChange?.('Diagnostic report saved');
@@ -97,10 +99,10 @@ export function AboutTab(props: AboutTabProps) {
     }
   };
 
-  // NOTE: `props.appInfo` is read inside JSX, never snapshotted into a local
-  // const here — the component body runs once, so a snapshot would freeze the
-  // tiles on the mount-time value (null when About is the persisted startup tab)
-  // and never update once the IPC query resolves.
+  // NOTE: `props.appInfo()` is read inside JSX expressions so each tile subscribes
+  // to the async memo — when the startup IPC settles (or revalidates), the tiles
+  // update automatically. The About tab is always rendered under an <Errored> and
+  // a parent <Loading> boundary, so the not-ready state is absorbed by Loading.
   return (
     <div
       class="settings-card"
@@ -158,28 +160,28 @@ export function AboutTab(props: AboutTabProps) {
             <AppWindow size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Application Version</span>
           </div>
-          <span class="tile-value">v{props.appInfo()?.version ?? __APP_VERSION__}</span>
-        </div>
+           <span class="tile-value">v{props.appInfo().version}</span>
+         </div>
 
-        <div class="info-tile">
-          <div class="tile-header">
-            <Cpu size={16} color="var(--accent-cyan)" />
-            <span class="tile-title">Tauri Core Engine</span>
-          </div>
-          <span class="tile-value">
-            v{props.appInfo()?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version}
-          </span>
-        </div>
+         <div class="info-tile">
+           <div class="tile-header">
+             <Cpu size={16} color="var(--accent-cyan)" />
+             <span class="tile-title">Tauri Core Engine</span>
+           </div>
+           <span class="tile-value">
+             v{props.appInfo().tauri_version}
+           </span>
+         </div>
 
-        <div class="info-tile">
-          <div class="tile-header">
-            <HardDrive size={16} color="var(--accent-cyan)" />
-            <span class="tile-title">Target Platform / Arch</span>
-          </div>
-          <span class="tile-value">
-            {props.appInfo()?.os ?? 'unknown'} ({props.appInfo()?.arch ?? 'unknown'})
-          </span>
-        </div>
+         <div class="info-tile">
+           <div class="tile-header">
+             <HardDrive size={16} color="var(--accent-cyan)" />
+             <span class="tile-title">Target Platform / Arch</span>
+           </div>
+           <span class="tile-value">
+             {props.appInfo().os} ({props.appInfo().arch})
+           </span>
+         </div>
 
         <div class="info-tile">
           <div class="tile-header">
