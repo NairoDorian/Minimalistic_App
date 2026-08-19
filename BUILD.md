@@ -117,7 +117,23 @@ cd minimalistic-app
 bun install
 ```
 
-### 3. Start Live Development Mode
+### 3. Fetch the Local Documentation Mirrors (recommended, one-time)
+
+The upstream docs for every layer of the stack are vendored into `.docs/`
+(gitignored, ~200 MB) so architecture questions can be answered offline against
+the exact versions this app runs:
+
+```bash
+bun run docs:sync     # Tauri 2 (v2), SolidJS 2 (v2-rebuild), Bun, TypeScript, TypeScript 7
+bun run docs:check    # verify what is present and how fresh it is
+```
+
+Requires `git` on `PATH` and network access. Skippable — the app builds and runs
+without it — but every doc-driven workflow in [`AGENTS.md`](AGENTS.md) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) assumes the mirrors are present. See
+[`DOCUMENTATION.md`](DOCUMENTATION.md).
+
+### 4. Start Live Development Mode
 
 Launch both the Vite frontend server and Tauri 2 Rust application in live hot-reload development mode:
 
@@ -129,7 +145,7 @@ bun run tauri dev
 - **Right-Click Tray Icon**: Surfaces context menu (`Open / Hide GUI`, `Check for Updates...`, `Quit`).
 - **Close Window (X)**: Minimizes to system tray when configured in Preferences (default: quits application).
 
-### 4. Frontend-Only Development (Browser Preview)
+### 5. Frontend-Only Development (Browser Preview)
 
 To iterate purely on SolidJS 2 UI components and CSS styling in the web browser:
 

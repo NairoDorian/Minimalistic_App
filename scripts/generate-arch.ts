@@ -63,6 +63,10 @@ const fileDescriptions: Record<string, string> = {
     'Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository.',
   'AUTO-UPDATE.md':
     'Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow.',
+  'DOCUMENTATION.md':
+    'Master documentation map: where the vendored upstream docs for every stack layer live under .docs/, which file to read for which question, and the working agreement for doc-driven changes.',
+  'TYPESCRIPT-7.md':
+    'TypeScript 7 (native Go port) changed defaults, removed options, behavioural differences, new CLI flags, and the compliance audit of both tsconfig projects in this repository.',
   'src/main.tsx':
     'SolidJS 2 application entry point rendering App root (JSX transform handles element creation).',
   'src/App.tsx':
@@ -195,6 +199,8 @@ const fileDescriptions: Record<string, string> = {
     'End-to-end automated update & build validation pipeline script for Bun packages & Cargo crates.',
   'scripts/update-rtk.ts':
     'RTK CLI updater that resolves the latest rtk-ai/rtk GitHub tag and runs `cargo install --git --tag <tag> --force`.',
+  'scripts/sync-docs.ts':
+    'Documentation mirror manager: the committed manifest of every upstream doc source (Tauri 2 @ v2, SolidJS 2 @ v2-rebuild, Bun, TypeScript-Website, typescript-go), with shallow/sparse clone, fast-forward update, status reporting, and cross-mirror search that skips translation directories.',
   'scripts/version.ts':
     'Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.',
   'scripts/before-commit.ts':

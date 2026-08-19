@@ -1,13 +1,12 @@
-import { Errored } from '@solidjs/web';
 import type { JSX } from '@solidjs/web';
-import { createSignal } from 'solid-js';
-import { AlertOctagon, RotateCcw, Copy, Check } from '../lib/icons';
+import { createSignal, Errored } from 'solid-js';
+import { AlertOctagon, RotateCcw, RefreshCw, Copy, Check } from '../lib/icons';
 
 const handleReload = () => {
   window.location.reload();
 };
 
-function ErrorFallback(props: { error: unknown }) {
+function ErrorFallback(props: { error: unknown; reset: () => void }) {
   const error = props.error instanceof Error ? props.error : new Error(String(props.error));
   const [copied, setCopied] = createSignal(false);
 
@@ -56,9 +55,17 @@ function ErrorFallback(props: { error: unknown }) {
             {copied() ? <Check size={14} /> : <Copy size={14} />}
             <span>{copied() ? 'Copied Details' : 'Copy Crash Log'}</span>
           </button>
-          <button type="button" class="btn-update-primary" onClick={handleReload}>
+          <button type="button" class="btn-update-secondary" onClick={handleReload}>
             <RotateCcw size={14} />
             <span>Reload Application</span>
+          </button>
+          {/* Preferred recovery path: `reset` re-runs the reactive sources the
+              boundary collected, so a transient failure (a failed IPC round-trip,
+              a rejected async memo) re-renders in place — no full webview reload,
+              no loss of in-memory state such as the dev console feed. */}
+          <button type="button" class="btn-update-primary" onClick={() => props.reset()}>
+            <RefreshCw size={14} />
+            <span>Try Again</span>
           </button>
         </div>
       </div>
@@ -68,9 +75,21 @@ function ErrorFallback(props: { error: unknown }) {
 
 /**
  * Top-level error boundary wrapping the application.
- * Uses SolidJS 2.0's <Errored> boundary which replaces React's class-based ErrorBoundary.
- * The fallback receives an error accessor: (err) => err().
+ *
+ * Uses SolidJS 2.0's `<Errored>` boundary, which replaces React's class-based
+ * ErrorBoundary. The fallback callback receives two arguments: an error
+ * accessor (`err()`) and a `reset()` retry function that re-runs the reactive
+ * sources the boundary collected — see the Solid 2 reference for `Errored`
+ * (`.docs/solid-docs/.../components-jsx/errored.mdx`, and Concepts → Boundaries).
+ *
+ * Loading and error status are separate channels in Solid 2: this boundary does
+ * not swallow the `<Loading>` fallback scoped around the About panel in App.tsx,
+ * and that boundary does not hide errors from this one.
  */
 export function ErrorBoundary(props: { children: JSX.Element }) {
-  return <Errored fallback={(err) => <ErrorFallback error={err()} />}>{props.children}</Errored>;
+  return (
+    <Errored fallback={(err, reset) => <ErrorFallback error={err()} reset={reset} />}>
+      {props.children}
+    </Errored>
+  );
 }

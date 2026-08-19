@@ -1,5 +1,12 @@
-import { createSignal, createEffect, createMemo, isPending, onCleanup, onSettled, For } from 'solid-js';
-import { Loading } from '@solidjs/web';
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  isPending,
+  onSettled,
+  For,
+  Loading,
+} from 'solid-js';
 import { Settings, Info, AppWindow, Shield, Code2, type LucideIcon } from './lib/icons';
 import { commands } from './bindings';
 import type { AppInfo } from './bindings';
@@ -61,10 +68,6 @@ export function AppContent() {
 
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  onCleanup(() => {
-    if (statusTimeout) clearTimeout(statusTimeout);
-  });
-
   // Persist the active tab so the app reopens on the same view it was closed on.
   createEffect(
     () => activeTab(),
@@ -121,8 +124,13 @@ export function AppContent() {
     statusTimeout = setTimeout(() => setStatusMessage('Ready'), 4000);
   };
 
-  // Global keyboard shortcuts, dispatched from the APP_SHORTCUTS registry so the
-  // cheat-sheet modal always documents exactly what the app listens for.
+  // Component setup + teardown in one block — the SolidJS 2 lifecycle shape
+  // (`onSettled` returning a cleanup replaces the 1.x `onMount` + `onCleanup`
+  // pairing; `onCleanup` is now reserved for library/custom-primitive internals).
+  //
+  // Registers the global keyboard shortcuts, dispatched from the APP_SHORTCUTS
+  // registry so the cheat-sheet modal always documents exactly what the app
+  // listens for, and disarms the pending status-message timer on disposal.
   onSettled(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // A hotkey recorder is armed — the chord being bound must not also fire
@@ -155,7 +163,10 @@ export function AppContent() {
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+      if (statusTimeout) clearTimeout(statusTimeout);
+    };
   });
 
   /** Arrow / Home / End navigation between tabs — follows ARIA roving-tabindex. */
@@ -245,11 +256,20 @@ export function AppContent() {
         <div class="app-content-tabs">
           {activeTab() === 'preferences' && <PreferencesTab onStatusChange={updateStatus} />}
           {activeTab() === 'about' && (
-            <AboutTab
-              appInfo={appInfo}
-              onStatusChange={updateStatus}
-              onOpenShortcuts={() => setShortcutsModalOpen(true)}
-            />
+            /* The ONLY consumer of the `appInfo` async memo, so the boundary
+               belongs here and nowhere higher: "place a loading boundary around
+               the smallest coherent region that its fallback should replace —
+               keep navigation, forms, and other controls outside when they must
+               remain available during the load" (Solid 2, Concepts → Boundaries).
+               Header, tab bar and footer stay live and interactive while the
+               startup IPC round-trip is in flight. */
+            <Loading fallback={<AboutTabSkeleton />}>
+              <AboutTab
+                appInfo={appInfo}
+                onStatusChange={updateStatus}
+                onOpenShortcuts={() => setShortcutsModalOpen(true)}
+              />
+            </Loading>
           )}
           {activeTab() === 'developer' && (
             <DeveloperTab onStatusChange={updateStatus} onSettingsReset={handleSettingsReset} />
@@ -278,67 +298,25 @@ export function AppContent() {
 export default function App() {
   return (
     <ErrorBoundary>
-      {/* App-level Loading boundary: absorbs the appInfo async memo's initial
-          IPC round-trip (and any future revalidation). In the browser preview
-          the memo resolves synchronously so this never shows a fallback. */}
-      <Loading fallback={<AppSkeleton />}>
-        <AppContent />
-      </Loading>
+      <AppContent />
     </ErrorBoundary>
   );
 }
 
-/** Skeleton rendered while the root app data is still mounting. */
-function AppSkeleton() {
+/**
+ * Fallback for the scoped `<Loading>` boundary around the About panel.
+ *
+ * Deliberately shell-free: the app chrome (header, tab bar, footer) renders
+ * outside the boundary and stays interactive, so this only has to stand in for
+ * the one card whose content depends on the in-flight `appInfo` memo.
+ */
+function AboutTabSkeleton() {
   return (
-    <div class="app-container">
-      <header class="app-header" data-tauri-drag-region>
-        <div class="brand-section" data-tauri-drag-region>
-          <div class="brand-icon">
-            <AppWindow size={18} />
-          </div>
-          <span class="brand-title">{APP_NAME}</span>
-        </div>
-        <div class={`tray-status-badge ${isTauri ? 'tray-active' : 'web-preview'}`}>
-          <span class="status-dot"></span>
-          <span>{isTauri ? 'System Tray Active' : 'Web Preview'}</span>
-        </div>
-      </header>
-      <main class="app-content">
-        <nav class="navigation-tab" role="tablist" aria-label="Main Navigation">
-          <For each={TABS} keyed>
-            {(tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  type="button"
-                  class="tab-btn"
-                  role="tab"
-                  tabindex={-1}
-                  aria-selected={tab.id === 'preferences' ? 'true' : 'false'}
-                >
-                  <Icon size={14} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            }}
-          </For>
-        </nav>
-        <div class="app-content-tabs">
-          <div class="settings-card" role="tabpanel" tabindex={0}>
-            <div class="settings-card-header">
-              <h2 class="settings-card-title">Loading…</h2>
-              <p class="settings-card-desc">Initializing application metadata…</p>
-            </div>
-          </div>
-        </div>
-      </main>
-      <footer class="app-footer">
-        <div class="footer-status" aria-live="polite">
-          <Shield size={12} color="var(--accent-cyan)" />
-          <span>Status: Loading…</span>
-        </div>
-      </footer>
+    <div class="settings-card" role="tabpanel" tabindex={0} aria-busy="true">
+      <div class="settings-card-header">
+        <h2 class="settings-card-title">Loading…</h2>
+        <p class="settings-card-desc">Querying application metadata over IPC…</p>
+      </div>
     </div>
   );
 }

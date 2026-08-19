@@ -31,6 +31,46 @@ This repository contains a cross-platform minimalistic desktop application templ
 
 ---
 
+## 📚 Documentation-First Standard
+
+> [!CRITICAL]
+> **The upstream documentation for every layer of this stack is vendored on disk.
+> Read it before answering an architecture question — do not answer from memory
+> and do not reach for a web search first.**
+>
+> ```bash
+> bun run docs:sync                  # clone/refresh every mirror (gitignored, ~200 MB)
+> bun run docs:check                 # branch, commit, freshness per mirror
+> bun run docs:find "capabilities"   # search all mirrors at once
+> ```
+>
+> | Layer                | Local mirror                         | Pinned branch |
+> | :------------------- | :----------------------------------- | :------------ |
+> | Tauri 2              | `.docs/tauri-docs/src/content/docs/` | `v2`          |
+> | SolidJS 2            | `.docs/solid-docs/src/routes/`       | `v2-rebuild`  |
+> | Bun                  | `.docs/bun-docs/content/docs/`       | `main`        |
+> | TypeScript           | `.docs/typescript-website/packages/` | `v2`          |
+> | TypeScript 7 changes | `.docs/typescript-go/CHANGES.md`     | `main`        |
+>
+> **The branch pins are load-bearing.** `solid-docs@main` documents SolidJS 1.x —
+> a different runtime with `createResource`, `onMount`, `<Suspense>` and
+> `<ErrorBoundary>`, none of which exist in this codebase. Tauri 1 docs describe
+> an allowlist security model we do not use. TypeScript 5 tutorials assume
+> defaults TypeScript 7 changed.
+>
+> **Cite the file you read** when a change is doc-driven, e.g. "per
+> `.docs/solid-docs/src/routes/(2)concepts/(4)boundaries.mdx`, a loading boundary
+> belongs around the smallest coherent region".
+>
+> Never edit anything under `.docs/` — it is a read-only checkout and the next
+> sync hard-resets it. Adding a significant dependency means adding its docs to
+> the manifest in `scripts/sync-docs.ts`.
+>
+> Full reading map: [`DOCUMENTATION.md`](DOCUMENTATION.md). TypeScript 7 specifics
+> and this repo's compliance audit: [`TYPESCRIPT-7.md`](TYPESCRIPT-7.md).
+
+---
+
 ## 📋 Standard Operating Procedure (SOP)
 
 Follow this 7-step process when developing, modifying, or testing this repository:
@@ -253,6 +293,9 @@ rtk git push origin main
 | Type-check the whole workspace           | `bun run typecheck`                                                                             |
 | Rebrand & rename project starter kit     | `bun run rename-project --name "App Name" --identifier "com.id"`                                |
 | Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
+| Clone / refresh the doc mirrors          | `bun run docs:sync` (add `--only <id>` for one source)                                          |
+| Check doc mirror freshness               | `bun run docs:check`                                                                            |
+| Search all doc mirrors                   | `bun run docs:find "<query>"`                                                                   |
 | Regenerate all app icons                 | `bun run create-icons`                                                                          |
 | Purge Rust build artifacts               | `bun run clean`                                                                                 |
 | Production build                         | `bun run build`                                                                                 |
@@ -280,7 +323,13 @@ rtk git push origin main
    - **Single source of truth**: product name/tooltip/version come from `AppHandle::package_info()`; settings paths come from `app_config_dir()`; never reconstruct either by string matching.
    - **Descriptive `expect`/error messages**: icon bootstrapping fails gracefully with a setup error instead of a cryptic panic.
 
-4. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:
+4. **Documentation-Driven Changes**:
+   - Before changing anything framework-shaped — a lifecycle primitive, a boundary, a capability, a `tsconfig` flag — read the pinned local mirror (`bun run docs:find`), not memory.
+   - Prefer the primitive the current major version prescribes: `onSettled` returning a cleanup (not `onMount`/`onCleanup`), two-argument `createEffect`, async `createMemo` (not `createResource`), `<Loading>`/`<Errored>` (not `<Suspense>`/`<ErrorBoundary>`).
+   - Scope `<Loading>` to the smallest region its fallback should replace; keep navigation and controls outside it so they stay usable during a load.
+   - Grant Tauri permissions explicitly rather than relying on a plugin's `:default` set, so an upstream widening of that set cannot silently broaden this app's surface.
+
+5. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:
    - **Component separation** (Round 14 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
    - **Stable callbacks for event listeners**: any callback registered by a mount-once listener (e.g. tray `"check-for-updates"` events) must be stable — use ref-based concurrency guards (`isCheckingRef` / `isInstallingRef`) and an empty dep array rather than reading state directly.
    - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={() => false} listenForEvents={() => false}` to prevent duplicate network requests.
@@ -288,18 +337,19 @@ rtk git push origin main
    - **Never `import React`** — SolidJS 2's JSX transform handles element creation via `jsxImportSource: "@solidjs/web"`. Use `import type { Component }` / named type imports with `verbatimModuleSyntax`-safe patterns.
    - **Catch clauses**: use `error: unknown` + `instanceof Error` narrowing — never `any`.
 
-5. **Accessibility Contract (ARIA)**:
+6. **Accessibility Contract (ARIA)**:
    - **Tabs**: `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected`, `aria-controls`, `aria-labelledby`, roving `tabIndex`, and arrow + Home/End keyboard navigation.
    - **Switches**: `role="switch"` + `aria-checked`, `tabIndex={0}`, Space/Enter activation, and a visually-hidden native checkbox for form semantics.
    - **Live regions**: `aria-live="polite"` on the footer status and update status regions; `role="progressbar"` with `aria-valuemin/max/now` on download progress.
 
-6. **UI Theme & Aesthetic Standards**:
+7. **UI Theme & Aesthetic Standards**:
    - **Background**: 100% AMOLED Deep Black (`#000000`) — also painted inline in `index.html` to avoid white flash.
    - **Glassmorphism**: Translucent frosted cards (`backdrop-filter: blur(20px)`), `rgba(255, 255, 255, 0.08)` borders, and neon cyan (`#00f2fe`) accent glows.
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
-7. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`BUILD.md`](BUILD.md), [`TESTING.md`](TESTING.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`LICENSE`](LICENSE), [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+8. **Documentation Rules**:
+   - Maintain [`README.md`](README.md), [`DOCUMENTATION.md`](DOCUMENTATION.md), [`TYPESCRIPT-7.md`](TYPESCRIPT-7.md), [`BUILD.md`](BUILD.md), [`TESTING.md`](TESTING.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`LICENSE`](LICENSE), [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+   - When a dependency layer is added or a major version is bumped, update the mirror manifest in [`scripts/sync-docs.ts`](scripts/sync-docs.ts) and the reading map in [`DOCUMENTATION.md`](DOCUMENTATION.md) in the same change.
    - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining _why_, not just _what_.
    - After any file add/remove/rename, regenerate the architecture map (`bun run arch`).
    - Each changelog version header may appear exactly once; keep the exact `## [X.Y.Z] - YYYY-MM-DD` format.

@@ -8,6 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.21.0] - 2026-08-19
+
+### Round 21 — Local Documentation Mirrors for the Whole Stack, SolidJS 2 Boundary Correctness & TypeScript 7 Audit
+
+#### 📚 Documentation Infrastructure (new capability)
+
+- **The upstream documentation for every layer of the stack is now vendored on disk** under `.docs/` (gitignored, ~200 MB) so architecture questions are answered from the primary source at the exact version this app runs — not from memory or a web search.
+  | Layer | Mirror | Pinned branch |
+  | :--- | :--- | :--- |
+  | Tauri 2 | `tauri-apps/tauri-docs` | `v2` |
+  | SolidJS 2 | `solidjs/solid-docs` | `v2-rebuild` |
+  | Bun | `RiskyMH/bun-docs` | `main` |
+  | TypeScript | `microsoft/TypeScript-Website` | `v2` (sparse) |
+  | TypeScript 7 | `microsoft/typescript-go` | `main` (sparse) |
+- **New `scripts/sync-docs.ts`** — the committed manifest is the source of truth, not the checkout: shallow (`--depth 1 --single-branch`) clones, partial (`--filter=blob:none --sparse`) for the two large Microsoft repos, fetch + hard-reset updates, and a status table reporting branch, commit, date, markdown count and size per mirror.
+- **New scripts**: `bun run docs:sync` (clone/fast-forward), `bun run docs:check` (status, no network), `bun run docs:find "<query>"` (search all five mirrors at once, skipping `.git` and translation directories so one query does not return the same page in five languages). `--only <id>` restricts any of them to one source.
+- **New `DOCUMENTATION.md`** — the master reading map: why the mirrors are gitignored, why each branch pin is load-bearing, a per-layer "I need to know X, read Y" table for Tauri 2 / SolidJS 2 / Bun / TypeScript, the layers that need no mirror (Rust via `rustup doc` and `cargo doc`, Vite, oxlint, Prettier), and the working agreement for doc-driven changes.
+- **New `TYPESCRIPT-7.md`** — TypeScript 7 changed defaults, removed options (now hard errors), Unicode template-literal-type behaviour, the trimmed JS/JSDoc surface, new `--checkers`/`--builders`/`--singleThreaded` flags, the 7.1 programmatic-API caveat (and why oxlint makes it a non-issue here), plus a **compliance audit of both `tsconfig` projects — result: no changes required, this repo is TS7-clean**.
+- `.docs/` and `.playwright-mcp/` added to `.gitignore`; `.docs/` added to `.prettierignore` so third-party docs are never reformatted.
+- Documentation-first standard propagated into `README.md`, `AGENTS.md` (new critical section + best-practice rule + Common Tasks rows), `CONTRIBUTING.md` (new rule + PR checklist item), `CRUSH.md`, `BUILD.md` (new setup step 3), `TESTING.md`, and `SECURITY.md` (a claim → upstream-reference table).
+
+#### ⚛️ SolidJS 2 Correctness (doc-driven, cites `.docs/solid-docs`)
+
+- **`<Loading>` boundary re-scoped from the whole app to the single data-dependent slot** in `src/App.tsx`. Per `(2)concepts/(4)boundaries.mdx` — _"place a loading boundary around the smallest coherent region that its fallback should replace; keep navigation, forms, and other controls outside when they must remain available during the load"_ — the boundary now wraps only the About panel, the sole consumer of the `appInfo` async memo. The header, tab bar and footer stay mounted and interactive during the startup IPC round-trip, and a future revalidation can no longer blank the entire window.
+- **`AppSkeleton` deleted** (~50 lines that duplicated the entire app shell) and replaced by a small `AboutTabSkeleton` card with `aria-busy="true"`. The chrome is rendered once, not twice.
+- **Component-body `onCleanup` replaced by an `onSettled`-returned cleanup.** Per `(3)lifecycle-actions/on-settled.mdx` and `(6)advanced/(2)specialized-reactivity/on-cleanup.mdx`, `onSettled` returning a cleanup is the 2.0 component setup/teardown shape and `onCleanup` is now reserved for library/custom-primitive internals. Listener registration and the status-timer teardown now live in one block.
+- **`<Errored>` now surfaces its `reset` function.** The fallback signature is `(err, reset)`; the crash screen gained a primary **"Try Again"** action that re-runs the reactive sources the boundary collected — recovering from a transient failure in place, without a full webview reload that would discard in-memory state such as the Dev Console feed. "Reload Application" is retained as the secondary escape hatch.
+- `Loading` and `Errored` imported from `solid-js` (their canonical home) rather than the `@solidjs/web` re-export.
+
+#### 🔒 Security (doc-driven, cites `.docs/tauri-docs`)
+
+- **`autostart:default` removed from `src-tauri/capabilities/default.json`** in favour of the three explicit commands it expands to (`allow-enable`, `allow-disable`, `allow-is-enabled` — verified against the plugin's own `permissions/default.toml`). Behaviour is identical today, but pinning the individual commands means a future upstream widening of that permission set cannot silently broaden this app's surface. This is the form `plugin/autostart.mdx` itself documents. The capability `description` now records the reasoning.
+
+#### 🧹 Hygiene
+
+- Pre-existing Prettier indentation drift in `src/components/AboutTab.tsx` corrected.
+- `scripts/generate-arch.ts` description map extended with `DOCUMENTATION.md`, `TYPESCRIPT-7.md` and `scripts/sync-docs.ts`; `ARCHITECTURE.md` regenerated.
+
 ## [0.20.1] - 2026-08-19
 
 ### SolidJS 2 Async-Graph Migration & Pipeline Hygiene

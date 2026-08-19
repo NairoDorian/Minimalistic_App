@@ -100,8 +100,26 @@ rtk git commit -m "feat(v0.11.0): deep audit round 5 — single-instance guard, 
 - **Optimistic UI with Rollback**: Toggle switches update state immediately for instantaneous response, rolling back if the underlying IPC call rejects.
 - **Component Modularity**: Keep tab views, toggle switches, and update checkers decoupled in separate component files under `src/components/`.
 - **Type-Safe IPC**: All IPC calls go through the auto-generated `commands.*` wrappers in `src/bindings.ts` (produced by `tauri-specta`), never `invoke()` directly.
+- **Boundaries**: Scope `<Loading>` around the smallest region its fallback should replace — keep the header, tab bar, and footer outside it so they stay usable while data loads. `<Errored>` fallbacks receive `(err, reset)`; offer `reset()` as the primary recovery action instead of a full webview reload.
+- **Lifecycle**: `onSettled` returning a cleanup function is the SolidJS 2 component setup/teardown shape (it replaces the 1.x `onMount` + `onCleanup` pairing). `onCleanup` is reserved for library and custom-primitive internals.
 
-### 3. Formatting Standards
+### 3. Documentation-First Rule
+
+Every layer of this stack has its upstream documentation vendored locally under
+`.docs/`, pinned to the branch that matches the version we run. Before changing
+anything framework-shaped — a lifecycle primitive, a boundary, a Tauri
+capability, a `tsconfig` flag — read the mirror:
+
+```bash
+bun run docs:sync                   # first time, or to refresh
+bun run docs:find "createMemo"      # search Tauri 2 / SolidJS 2 / Bun / TypeScript at once
+```
+
+Cite the file you read in the PR description when a change is doc-driven. See
+[`DOCUMENTATION.md`](DOCUMENTATION.md) for the full reading map and
+[`TYPESCRIPT-7.md`](TYPESCRIPT-7.md) for the TypeScript 7 rules this repo follows.
+
+### 4. Formatting Standards
 
 - Keep files formatted with Prettier:
   ```bash
@@ -124,3 +142,4 @@ Before submitting a Pull Request:
 4. [ ] **Architecture Map**: `bun run arch` has updated `ARCHITECTURE.md` with any new or modified files.
 5. [ ] **Full Validation Gate**: `bun run validate` passes 100% of all 8 pre-commit gates (version sync, types, lint, Bun tests, Vite build, cargo check, cargo test, arch map).
 6. [ ] **Documentation**: Any new feature or configuration setting is documented in `README.md` and `CHANGELOG.md`.
+7. [ ] **Doc-Driven Changes Cited**: Framework-shaped changes reference the local mirror they came from (`bun run docs:find`), and any new dependency layer has been added to the manifest in `scripts/sync-docs.ts` — see [`DOCUMENTATION.md`](DOCUMENTATION.md).

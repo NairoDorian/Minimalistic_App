@@ -12,7 +12,7 @@ Tauri v2 enforces a strict capability-based security model. Webview access to na
 
 - **Explicit Capabilities** (`src-tauri/capabilities/default.json`): The frontend webview is granted only the permissions strictly required to function, scoped to the `main` window:
   - `core:default`: The Tauri core permission set (event, window, webview, path primitives).
-  - `autostart:default` + `autostart:allow-enable` / `allow-disable` / `allow-is-enabled`: Windows/macOS/Linux system startup toggle.
+  - `autostart:allow-enable` / `allow-disable` / `allow-is-enabled`: Windows/macOS/Linux system startup toggle. Granted as three **explicit commands** rather than the `autostart:default` set — the two are identical today, but pinning the individual commands means a future upstream widening of that plugin's default set cannot silently broaden this app's surface. This is the form the plugin's own documentation shows (`.docs/tauri-docs/src/content/docs/plugin/autostart.mdx`).
   - `updater:default`: Checking and applying cryptographically signed GitHub releases.
   - `process:default`: Safe application relaunching after an update.
   - `notification:default`: Native OS notification when an update is found while the window is hidden in the tray.
@@ -105,6 +105,28 @@ The webview enforces strict Content Security Policies in production:
 - No remote script execution (`script-src 'self'`).
 - Restricted stylesheet and asset loading.
 - Inline styles are restricted to designated theme variables.
+
+---
+
+## 📚 Verifying These Claims Against Upstream
+
+The Tauri 2 security documentation is vendored locally so every statement above
+can be checked against the primary source rather than taken on trust:
+
+```bash
+bun run docs:sync
+bun run docs:find "capabilities"
+```
+
+| Claim in this document            | Upstream reference                                                 |
+| :-------------------------------- | :----------------------------------------------------------------- |
+| Capability & permission model     | `.docs/tauri-docs/src/content/docs/security/capabilities.mdx`      |
+| What a permission actually grants | `.docs/tauri-docs/src/content/docs/security/permissions.mdx`       |
+| Runtime authority / ACL           | `.docs/tauri-docs/src/content/docs/security/runtime-authority.mdx` |
+| Content Security Policy           | `.docs/tauri-docs/src/content/docs/security/csp.mdx`               |
+| Updater signature verification    | `.docs/tauri-docs/src/content/docs/plugin/updater.mdx`             |
+
+See [`DOCUMENTATION.md`](DOCUMENTATION.md).
 
 ---
 

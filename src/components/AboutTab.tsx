@@ -160,28 +160,26 @@ export function AboutTab(props: AboutTabProps) {
             <AppWindow size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Application Version</span>
           </div>
-           <span class="tile-value">v{props.appInfo().version}</span>
-         </div>
+          <span class="tile-value">v{props.appInfo().version}</span>
+        </div>
 
-         <div class="info-tile">
-           <div class="tile-header">
-             <Cpu size={16} color="var(--accent-cyan)" />
-             <span class="tile-title">Tauri Core Engine</span>
-           </div>
-           <span class="tile-value">
-             v{props.appInfo().tauri_version}
-           </span>
-         </div>
+        <div class="info-tile">
+          <div class="tile-header">
+            <Cpu size={16} color="var(--accent-cyan)" />
+            <span class="tile-title">Tauri Core Engine</span>
+          </div>
+          <span class="tile-value">v{props.appInfo().tauri_version}</span>
+        </div>
 
-         <div class="info-tile">
-           <div class="tile-header">
-             <HardDrive size={16} color="var(--accent-cyan)" />
-             <span class="tile-title">Target Platform / Arch</span>
-           </div>
-           <span class="tile-value">
-             {props.appInfo().os} ({props.appInfo().arch})
-           </span>
-         </div>
+        <div class="info-tile">
+          <div class="tile-header">
+            <HardDrive size={16} color="var(--accent-cyan)" />
+            <span class="tile-title">Target Platform / Arch</span>
+          </div>
+          <span class="tile-value">
+            {props.appInfo().os} ({props.appInfo().arch})
+          </span>
+        </div>
 
         <div class="info-tile">
           <div class="tile-header">

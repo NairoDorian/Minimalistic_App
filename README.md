@@ -359,6 +359,22 @@ when the app is hidden in the tray and another window has focus.
 | **Vite**         | `8.2.1`                                 | Frontend dev server & production bundler (Vite 8)      |
 | **Cargo / Rust** | `2024 edition`                          | Native system tray & background process backend        |
 
+Every layer above has its **upstream documentation vendored locally** under
+`.docs/` — pinned to the branch that describes the version we actually run
+(`tauri-docs@v2`, `solid-docs@v2-rebuild`, `bun-docs@main`,
+`TypeScript-Website@v2`, `typescript-go@main`).
+
+```bash
+bun run docs:sync                  # clone/refresh every mirror (~200 MB, gitignored)
+bun run docs:check                 # status: branch, commit, freshness
+bun run docs:find "capabilities"   # search all mirrors at once
+```
+
+Read the mirror before answering an architecture question — Solid 1.x and Solid 2
+are different runtimes, Tauri 1 and 2 have different security models, and
+TypeScript 7 changed defaults that older tutorials assume. See
+[`DOCUMENTATION.md`](DOCUMENTATION.md) for the full reading map.
+
 ### Tauri Plugins
 
 | Plugin                         | Version   | Purpose                                                                                              |
@@ -502,6 +518,8 @@ derived at runtime from `package_info()`, so it follows automatically.
 
 ## 📄 Documentation Links
 
+- [`DOCUMENTATION.md`](DOCUMENTATION.md) — **Start here for any stack question.** Where the vendored upstream docs for Tauri 2, SolidJS 2, Bun and TypeScript live locally, and which file to read for which question.
+- [`TYPESCRIPT-7.md`](TYPESCRIPT-7.md) — TypeScript 7 changed defaults, removals, behavioural diffs, and this repo's compliance audit.
 - [`BUILD.md`](BUILD.md) — Cross-platform build instructions, prerequisites & troubleshooting.
 - [`TESTING.md`](TESTING.md) — Testing & QA guide: 7-step automated gates and manual desktop verification matrix.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contribution guidelines, Conventional Commits & code quality standards.

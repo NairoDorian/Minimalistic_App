@@ -31,7 +31,11 @@ bun run format:check
 # 5. Version Synchronization Validation (Mirror drift check)
 bun run before-commit --check
 
-# 6. Live Development & Interactive Testing
+# 6. Refresh the local documentation mirrors (Tauri 2 / SolidJS 2 / Bun / TypeScript)
+bun run docs:sync
+bun run docs:check
+
+# 7. Live Development & Interactive Testing
 bun run tauri dev
 ```
 

@@ -1,11 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the minimalistic app",
+  "description": "Least-privilege capability for the main window. Autostart is granted as three explicit commands rather than `autostart:default` (which today expands to exactly these three) so a future upstream widening of that permission set cannot silently broaden this app's surface — the form the plugin docs themselves show.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "autostart:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

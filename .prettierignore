@@ -23,3 +23,6 @@ src/bindings.ts
 *.png
 *.ico
 *.icns
+
+# Vendored upstream documentation mirrors — never reformat third-party docs
+.docs/

@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.20.1",
+  "version": "0.21.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
@@ -16,6 +16,9 @@
     "before-commit": "bun scripts/before-commit.ts",
     "validate": "bun scripts/before-commit.ts --full",
     "arch": "bun scripts/generate-arch.ts",
+    "docs:sync": "bun scripts/sync-docs.ts",
+    "docs:check": "bun scripts/sync-docs.ts --check",
+    "docs:find": "bun scripts/sync-docs.ts --find",
     "create-icons": "bun scripts/create-icons.ts",
     "update-deps": "bun scripts/update-deps.ts",
     "update:rtk": "bun scripts/update-rtk.ts",
