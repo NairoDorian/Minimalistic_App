@@ -8,9 +8,9 @@ This document defines the testing strategy, automated quality gates, and manual 
 
 ```bash
 # 1. Frontend unit tests (Bun's built-in runner, everything under test/)
-bun test
-bun test test/keyboard.test.ts   # a single file
-bun test --watch                 # re-run on change
+bun run test                     # ALWAYS via the script — see the warning below
+bun run test test/keyboard.test.ts   # a single file
+bun run test -- --watch              # re-run on change
 
 # 1b. Rust unit tests (backend settings, log tailing, window geometry)
 cargo test --manifest-path src-tauri/Cargo.toml
@@ -40,6 +40,20 @@ bun run tauri dev
 ```
 
 ---
+
+> [!WARNING]
+> **Always run the tests through `bun run test`, never a bare `bun test`.**
+>
+> The script is `bun test --conditions browser`, and that flag is load-bearing.
+> `solid-js` publishes several builds and its **default** Node/Bun export
+> condition is the **SSR build** (`"main": "./dist/server.cjs"`). In that build
+> effects never run and writes never propagate through the graph — so a bare
+> `bun test` would exercise a runtime the app never ships, and a reactivity test
+> could pass by doing nothing at all. `--conditions browser` selects
+> `dist/solid.js`, the same client runtime Vite bundles into the webview.
+>
+> `bun run validate` and the CI workflow both invoke `bun run test`, so they are
+> already correct; only an ad-hoc `bun test` in a terminal is a trap.
 
 ## 🛡️ The 8-Gate Pre-Commit Quality Suite (`bun run validate`)
 
@@ -74,15 +88,17 @@ graph TD
 
 ## 🧪 Unit Test Layout
 
-| File                     | Covers                                                                                                                           |
-| :----------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
-| `test/keyboard.test.ts`  | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener. |
-| `test/shortcuts.test.ts` | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                      |
-| `test/logViewer.test.ts` | Log severity classification and live-vs-disk line reconciliation.                                                                |
-| `test/settings.test.ts`  | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation.                                         |
-| `test/theme.test.ts`     | Theme preset integrity and CSS custom-property application.                                                                      |
-| `test/version.test.ts`   | SemVer format of `APP_VERSION`.                                                                                                  |
-| `src-tauri/src/lib.rs`   | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, and window-geometry helpers.                                         |
+| File                      | Covers                                                                                                                           |
+| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------- |
+| `test/keyboard.test.ts`   | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener. |
+| `test/shortcuts.test.ts`  | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                      |
+| `test/logViewer.test.ts`  | Log severity classification and live-vs-disk line reconciliation.                                                                |
+| `test/settings.test.ts`   | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation.                                         |
+| `test/theme.test.ts`      | Theme preset integrity, pure accent resolution (`resolveThemeAccent`), and CSS custom-property application.                      |
+| `test/storage.test.ts`    | Fail-soft `localStorage` helpers — working store, a store that throws on every call, and a missing global.                       |
+| `test/reactivity.test.ts` | SolidJS 2 contracts the components depend on: writable derived signals, async-memo not-ready reads, and the effect-cleanup rule. |
+| `test/version.test.ts`    | SemVer format of `APP_VERSION`.                                                                                                  |
+| `src-tauri/src/lib.rs`    | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, and window-geometry helpers.                                         |
 
 ---
 

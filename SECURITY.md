@@ -100,11 +100,29 @@ For features requiring sensitive credentials (e.g. API tokens, encryption keys):
 
 ## 🔒 Content Security Policy (CSP)
 
-The webview enforces strict Content Security Policies in production:
+The webview enforces a strict Content Security Policy in production
+(`app.security.csp` in `src-tauri/tauri.conf.json`):
 
-- No remote script execution (`script-src 'self'`).
-- Restricted stylesheet and asset loading.
-- Inline styles are restricted to designated theme variables.
+- **No remote script execution** — `script-src 'self'`; Tauri appends its own
+  nonces and hashes for bundled assets at compile time.
+- **No outbound webview network access** — `connect-src` allows only `'self'`
+  and the Tauri IPC channels (`ipc:`, `asset:`, `http://ipc.localhost`).
+  The updater's HTTPS traffic to GitHub Releases is performed **by the Rust
+  process**, not the webview, so no GitHub origin appears here. (It used to:
+  `https://github.com` and `https://api.github.com` were allowed by an earlier
+  revision even though no frontend code ever fetched them. They were removed —
+  the Tauri CSP guidance is to allow only hosts the webview genuinely needs.)
+- **Nothing may embed or be embedded** — `object-src`, `frame-src`,
+  `frame-ancestors` and `form-action` are all `'none'`, and `base-uri 'none'`
+  prevents base-tag hijacking.
+- **Inline styles are permitted** (`style-src 'unsafe-inline'`) because SolidJS
+  writes theme accent values as inline `style` properties; inline **scripts**
+  are not.
+- **One remote origin pair remains**: `https://fonts.googleapis.com`
+  (stylesheet) and `https://fonts.gstatic.com` (woff2) for the Inter webfont
+  loaded by `index.html`. This is the only third-party content the webview
+  fetches. Self-hosting Inter under `public/fonts/` would remove both origins
+  and make the app fully offline-capable — see the note in `README.md`.
 
 ---
 

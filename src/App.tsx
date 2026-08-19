@@ -22,6 +22,7 @@ import { applyThemeAccent, DEFAULT_THEME_ACCENT } from './lib/theme';
 import { resolveShortcutAction } from './lib/shortcuts';
 import { isCapturingHotkey } from './lib/keyboard';
 import { APP_NAME, storageKey } from './lib/appMeta';
+import { readStored, writeStored } from './lib/storage';
 
 export type TabType = 'preferences' | 'about' | 'developer';
 
@@ -37,18 +38,13 @@ const TAB_ORDER: readonly TabType[] = TABS.map((tab) => tab.id);
 const ACTIVE_TAB_KEY = storageKey('active_tab');
 
 /**
- * localStorage can throw (private mode, disabled storage, quota). The persisted
- * tab is a convenience, never a correctness requirement, so failures degrade to
- * the default tab instead of crashing the app into the error boundary.
+ * The persisted tab is a convenience, never a correctness requirement:
+ * `readStored` already degrades an unavailable store to `null`, and an
+ * unrecognised value falls through to the default rather than being trusted.
  */
 function loadInitialTab(): TabType {
-  try {
-    const saved = localStorage.getItem(ACTIVE_TAB_KEY);
-    if (TAB_ORDER.includes(saved as TabType)) return saved as TabType;
-  } catch {
-    /* storage unavailable — fall through to the default */
-  }
-  return 'preferences';
+  const saved = readStored(ACTIVE_TAB_KEY);
+  return TAB_ORDER.includes(saved as TabType) ? (saved as TabType) : 'preferences';
 }
 
 /** Elements that own their keystrokes — un-modified shortcuts must not steal them. */
@@ -69,14 +65,12 @@ export function AppContent() {
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Persist the active tab so the app reopens on the same view it was closed on.
+  // An imperative boundary (browser storage), so it belongs in an effect's apply
+  // phase; a failed write simply means the tab is not restored next launch.
   createEffect(
     () => activeTab(),
     (tab) => {
-      try {
-        localStorage.setItem(ACTIVE_TAB_KEY, tab);
-      } catch {
-        /* storage unavailable — the tab simply won't be restored next launch */
-      }
+      writeStored(ACTIVE_TAB_KEY, tab);
     }
   );
 
@@ -285,10 +279,14 @@ export function AppContent() {
               settles. Shows a loading hint instead of the static "Ready". */}
           <span>Status: {isPending(appInfo) ? 'Loading system info...' : statusMessage()}</span>
         </div>
+        {/* The footer checker is mounted for the whole session, so it — not the
+            Preferences card, which unmounts whenever another tab is selected —
+            owns the tray's "Check for Updates" event. It never auto-checks on
+            mount; that remains the card's job, gated on the saved preference. */}
         <UpdateChecker
           variant="footer"
           autoCheckOnMount={() => false}
-          listenForEvents={() => false}
+          listenForEvents={() => true}
         />
       </footer>
     </div>

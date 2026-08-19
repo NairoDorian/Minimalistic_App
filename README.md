@@ -334,13 +334,25 @@ when the app is hidden in the tray and another window has focus.
 - Translucent frosted glass cards (`backdrop-filter: blur(20px)`), neon cyan (`#00f2fe`) accent glows, tactile `:active` micro-interactions, and responsive custom toggle switches.
 - Inter font with full antialiasing (`-webkit-font-smoothing` + `-moz-osx-font-smoothing`), `color-scheme: dark` for native dark scrollbars/controls, thin AMOLED scrollbars, and `prefers-reduced-motion` support.
 
+> [!NOTE]
+> **Inter is loaded from the Google Fonts CDN** (`index.html`), which is the only
+> third-party content the webview fetches. For a desktop app that has two costs:
+> the typeface silently falls back to the system sans-serif when the machine is
+> offline, and every launch opens a connection to Google. Self-hosting the woff2
+> files under `public/fonts/` with an `@font-face` rule in `src/index.css` would
+> make the app fully offline-capable and let `https://fonts.googleapis.com` and
+> `https://fonts.gstatic.com` be dropped from the CSP entirely. Inter is
+> SIL OFL-1.1 (already attributed in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)),
+> so redistribution is permitted. Left as-is deliberately — it trades installer
+> size for offline fidelity, which is a product call.
+
 ### 🔒 Security, CI/CD & TypeScript Rigor
 
 - **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun x tsc -b`), **Bun unit tests** (`bun run test`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, `cargo check`, and **Rust unit tests** (`cargo test`) — on every push and PR.
 - **Release profile tuned for distribution** (`Cargo.toml` `[profile.release]`): `opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"` — the smallest download the toolchain will produce.
 - **Settings survive schema change and corruption**: every `AppSettings` field carries a serde default, so a file written by an older or newer build still loads; an unparseable file is preserved as `settings.json.bak` instead of being silently overwritten.
 - **No window flash on launch**: the main window is declared `"visible": false` and shown from `setup()` after geometry restore, so `start_minimized` never flashes a window and a restored size/position never visibly jumps.
-- Strict **Content Security Policy** in `tauri.conf.json` — allows only Tauri IPC, asset protocol, Google Fonts, and GitHub release endpoints.
+- Strict **Content Security Policy** in `tauri.conf.json` — `connect-src` allows only `'self'` and the Tauri IPC channels; `object-src`, `frame-src`, `frame-ancestors`, `form-action` and `base-uri` are all `'none'`. The updater's HTTPS traffic happens in the Rust process, not the webview, so no GitHub origin is granted. See [`SECURITY.md`](SECURITY.md).
 - Isolated TypeScript compilation context for Node.js scripts (`tsconfig.scripts.json`) preventing DOM/Node type collisions.
 - Full type safety enforced with `noUnusedLocals: true` and `noUnusedParameters: true`.
 - Chromium 105 build target (`vite.config.ts`) matching the embedded webview baseline across Windows (WebView2), macOS (WKWebView), and Linux (WebKitGTK) — no unnecessary ES transpilation.

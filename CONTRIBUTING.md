@@ -101,7 +101,9 @@ rtk git commit -m "feat(v0.11.0): deep audit round 5 — single-instance guard, 
 - **Component Modularity**: Keep tab views, toggle switches, and update checkers decoupled in separate component files under `src/components/`.
 - **Type-Safe IPC**: All IPC calls go through the auto-generated `commands.*` wrappers in `src/bindings.ts` (produced by `tauri-specta`), never `invoke()` directly.
 - **Boundaries**: Scope `<Loading>` around the smallest region its fallback should replace — keep the header, tab bar, and footer outside it so they stay usable while data loads. `<Errored>` fallbacks receive `(err, reset)`; offer `reset()` as the primary recovery action instead of a full webview reload.
-- **Lifecycle**: `onSettled` returning a cleanup function is the SolidJS 2 component setup/teardown shape (it replaces the 1.x `onMount` + `onCleanup` pairing). `onCleanup` is reserved for library and custom-primitive internals.
+- **Lifecycle**: `onSettled` returning a cleanup function is the SolidJS 2 component setup/teardown shape (it replaces the 1.x `onMount` + `onCleanup` pairing). `onCleanup` is reserved for library and custom-primitive internals. Every timer and listener a component starts must be torn down in that returned cleanup.
+- **Async state**: persisted data is loaded with `createMemo(async …)` and consumed through writable derived signals (`createSignal(fn)`); a memo compute stays side-effect free, and anything imperative (DOM, IPC write, storage) goes in `createEffect`'s apply phase. See pattern 2 in [`CRUSH.md`](CRUSH.md).
+- **Storage**: use `readStored` / `writeStored` / `removeStored` from `src/lib/storage.ts` rather than `localStorage` directly.
 
 ### 3. Documentation-First Rule
 

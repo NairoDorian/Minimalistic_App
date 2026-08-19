@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, type Component } from 'solid-js';
+import { createSignal, onSettled, type Component } from 'solid-js';
 import { Command, RotateCcw } from '../lib/icons';
 import {
   MOD,
@@ -55,7 +55,12 @@ export const HotkeyRecorder: Component<HotkeyRecorderProps> = (props) => {
     setRecording(false);
   };
 
-  onCleanup(endRecording);
+  // Disposal must release the keyboard: a row can be unmounted mid-capture
+  // (the shortcuts modal closes, a hotkey list re-renders) and an orphaned
+  // capture would keep swallowing every keystroke in the app. `onSettled`
+  // returning a cleanup is the SolidJS 2 component teardown shape; `onCleanup`
+  // is reserved for library and custom-primitive internals.
+  onSettled(() => endRecording);
 
   const startRecording = () => {
     if (props.disabled === true || recording()) return;

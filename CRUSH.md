@@ -136,17 +136,115 @@ const handleToggle = async (nextValue: boolean) => {
 };
 ```
 
-### 2. UpdateChecker Dual-Variant Rule
+### 2. Async Data → Writable Derived Signal → Loading Boundary
+
+The SolidJS 2 shape for "read persisted state, let the user edit it". Never
+`.then()` an IPC result into a pile of signals — the window between mount and
+resolution is one where the UI shows placeholder values that a user click can
+be silently overwritten by.
 
 ```tsx
-// Card variant (Preferences tab) — owns listeners and mount auto-check
-<UpdateChecker autoCheckOnMount={checkUpdatesOnLaunch} listenForEvents={() => true} />
+// 1. One async memo for the whole read — async lives in the graph.
+const persisted = createMemo(async (): Promise<PersistedPreferences> => {
+  const settings = await commands.getAppSettings();
+  return { settings, accent: resolveThemeAccent(settings.theme_accent) };
+});
 
-// Footer variant (Status bar) — purely passive visual trigger (both false)
-<UpdateChecker autoCheckOnMount={() => false} listenForEvents={() => false} />
+// 2. Writable derived signals: persisted value is the source, a toggle is a
+//    local override on top of it.
+const [minimizeToTray, setMinimizeToTray] = createSignal(
+  () => persisted().settings.minimize_to_tray ?? false
+);
+
+// 3. Side effects live at the imperative boundary, never inside the memo.
+createEffect(
+  () => currentAccent(),
+  (accent) => applyThemeAccent(accent)
+);
+
+// 4. A boundary scoped to the data-dependent rows — NOT the whole card.
+//    Nothing inside is interactive until the read settles.
+return (
+  <div class="settings-card">
+    <div class="settings-card-header">…</div> {/* stays put */}
+    <Loading fallback={<PreferencesSkeleton />}>…rows…</Loading>
+  </div>
+);
 ```
 
-### 3. Accessible ARIA Switch Toggle
+Rules of thumb, straight from `.docs/solid-docs`:
+
+- `createMemo(async …)` for a fetch — never an effect that writes a signal.
+- `createSignal(fn)` for "derived, but locally overridable".
+- `createEffect(compute, apply)` **only** at an imperative boundary (DOM, IPC
+  write, subscription). Memo computes stay side-effect free.
+- `onSettled(() => cleanup)` for component setup/teardown. `onCleanup` is for
+  library internals now.
+- Scope `<Loading>` to the smallest region its fallback should replace.
+
+### 3. UpdateChecker Dual-Variant Rule
+
+Exactly one instance may auto-check, and exactly one may listen — but they are
+**not the same instance**, because the two jobs have different lifetimes.
+
+```tsx
+// Card variant (Preferences tab) — auto-checks on mount, gated on the saved
+// preference. Mounted inside the tab's <Loading> boundary, so by the time it
+// reads the preference the value is the persisted one, not a placeholder.
+// Does NOT listen: this card unmounts whenever another tab is selected.
+<UpdateChecker variant="card" autoCheckOnMount={checkUpdatesOnLaunch} listenForEvents={() => false} />
+
+// Footer variant (status bar) — mounted for the whole session, so it owns the
+// tray's "check-for-updates" event. Never auto-checks.
+<UpdateChecker variant="footer" autoCheckOnMount={() => false} listenForEvents={() => true} />
+```
+
+Both props are read **once**, untracked, in `onSettled`. They describe what an
+instance does when it mounts; the caller controls that by choosing when to mount
+it. Making them reactive meant that merely enabling the "check on launch"
+preference fired an immediate network check.
+
+### 4. Effect Apply Phases Take a Block Body — Always
+
+Solid calls whatever an effect's apply phase **returns** as its cleanup
+function. A concise arrow body that happens to return a value therefore halts
+the whole reactive system the next time the effect runs.
+
+```tsx
+// ❌ returns a ThemeAccent string -> "E is not a function" -> REACTIVITY_HALTED
+createEffect(
+  () => currentAccent(),
+  (accent) => applyThemeAccent(accent)
+);
+
+// ❌ returns a number (Array.prototype.push)
+createEffect(
+  () => n(),
+  (v) => seen.push(v)
+);
+
+// ✅ block body: returns undefined
+createEffect(
+  () => currentAccent(),
+  (accent) => {
+    applyThemeAccent(accent);
+  }
+);
+
+// ✅ or return a real cleanup
+createEffect(
+  () => props.roomId,
+  (id) => {
+    const conn = chat.connect(id);
+    return () => conn.close();
+  }
+);
+```
+
+The same rule applies to `onSettled` — its return value is also treated as a
+cleanup. `test/reactivity.test.ts` pins this behaviour.
+
+### 5. Accessible ARIA Switch Toggle
 
 Note SolidJS uses the DOM attribute names — `class`, `tabindex` — not React's
 `className` / `tabIndex`.
@@ -176,7 +274,7 @@ Note SolidJS uses the DOM attribute names — `class`, `tabindex` — not React'
 </label>
 ```
 
-### 4. Keyboard Shortcuts — Never Hand-Roll a Key Check
+### 6. Keyboard Shortcuts — Never Hand-Roll a Key Check
 
 All key handling goes through the registry in `src/lib/shortcuts.ts`, which sits
 on the engine in `src/lib/keyboard.ts`. Specs are portable: `Mod` resolves to ⌘

@@ -20,6 +20,7 @@ import {
   type ModifierMask,
 } from './keyboard';
 import { storageKey } from './appMeta';
+import { readStored, removeStored, writeStored } from './storage';
 
 export { IS_MAC } from './keyboard';
 
@@ -127,12 +128,7 @@ const listeners = new Set<() => void>();
 
 /** Reads persisted overrides, dropping anything that no longer parses. */
 function readOverrides(): OverrideMap {
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(OVERRIDES_STORAGE_KEY);
-  } catch {
-    return {};
-  }
+  const raw = readStored(OVERRIDES_STORAGE_KEY);
   if (raw === null) return {};
 
   let parsed: unknown;
@@ -155,12 +151,9 @@ function readOverrides(): OverrideMap {
 }
 
 function persistOverrides(): void {
-  try {
-    if (Object.keys(overrides).length === 0) localStorage.removeItem(OVERRIDES_STORAGE_KEY);
-    else localStorage.setItem(OVERRIDES_STORAGE_KEY, JSON.stringify(overrides));
-  } catch {
-    /* storage unavailable — the rebind still applies for this session */
-  }
+  // Storage failures are non-fatal: the rebind still applies for this session.
+  if (Object.keys(overrides).length === 0) removeStored(OVERRIDES_STORAGE_KEY);
+  else writeStored(OVERRIDES_STORAGE_KEY, JSON.stringify(overrides));
 }
 
 function notify(): void {

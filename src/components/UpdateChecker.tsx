@@ -1,4 +1,4 @@
-import { createSignal, createEffect, type Component } from 'solid-js';
+import { createSignal, onSettled, untrack, type Component } from 'solid-js';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { listen } from '@tauri-apps/api/event';
@@ -129,50 +129,49 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
     }
   };
 
-  /** Mount effect: auto-check on mount + listen for tray-triggered checks.
+  /**
+   * One-time owned setup: optional auto-check, optional tray-event listener,
+   * and the matching teardown — the SolidJS 2 lifecycle shape (`onSettled`
+   * returning a cleanup).
+   *
+   * Both props are read once, through `untrack`, and deliberately so. As a
+   * re-running `createEffect` this fired a fresh update check every time
+   * `autoCheckOnMount` flipped — so merely switching the "check for updates on
+   * launch" preference on triggered an immediate network check and tore down
+   * and re-registered the tray listener. Neither prop describes a value that
+   * should be re-observed; they describe what this instance does when it
+   * mounts, and the caller controls that by choosing when to mount it.
+   */
+  onSettled(() => {
+    if (!isTauri) return;
 
-   * Uses SolidJS 2 split-phase createEffect — the compute tracks the reactive
-   * autoCheckOnMount / listenForEvents accessors; the apply phase performs the
-   * side effects (initial check + event listener) and returns a cleanup. */
-  createEffect(
-    () => ({
-      auto: props.autoCheckOnMount?.() ?? true,
-      listen: props.listenForEvents?.() ?? true,
-    }),
-    (state) => {
-      let isCancelled = false;
-      let unlistenFn: (() => void) | undefined;
+    let isCancelled = false;
+    let unlistenFn: (() => void) | undefined;
 
-      if (!isTauri) return;
-
-      if (state.auto) {
-        void checkForUpdates(false);
-      }
-
-      if (state.listen) {
-        void listen('check-for-updates', () => {
-          if (!isCancelled) checkForUpdates(true);
-        })
-          .then((fn) => {
-            if (isCancelled) {
-              fn();
-            } else {
-              unlistenFn = fn;
-            }
-          })
-          .catch(() => {});
-      }
-
-      return () => {
-        isCancelled = true;
-        if (upToDateTimeout) {
-          clearTimeout(upToDateTimeout);
-          upToDateTimeout = null;
-        }
-        unlistenFn?.();
-      };
+    if (untrack(() => props.autoCheckOnMount?.() ?? true)) {
+      void checkForUpdates(false);
     }
-  );
+
+    if (untrack(() => props.listenForEvents?.() ?? true)) {
+      void listen('check-for-updates', () => {
+        if (!isCancelled) void checkForUpdates(true);
+      })
+        .then((fn) => {
+          if (isCancelled) fn();
+          else unlistenFn = fn;
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      isCancelled = true;
+      if (upToDateTimeout) {
+        clearTimeout(upToDateTimeout);
+        upToDateTimeout = null;
+      }
+      unlistenFn?.();
+    };
+  });
 
   /**
    * Downloads and installs the pending update, then relaunches the app.
@@ -326,7 +325,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
             <>
               {releaseNotes() && (
                 <button
-                  onClick={() => setShowNotes(!showNotes())}
+                  onClick={() => setShowNotes((prev) => !prev)}
                   class="btn-update-secondary"
                   aria-label="Toggle release notes"
                   aria-expanded={showNotes() ? 'true' : 'false'}

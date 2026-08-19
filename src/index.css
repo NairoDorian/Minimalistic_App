@@ -950,6 +950,40 @@ input:checked + .slider:before {
   border: 0;
 }
 
+/* Placeholder rows shown by the Preferences tab's <Loading> boundary while the
+   persisted settings are read. Sized to the real .setting-item rhythm so the
+   card does not jump when the actual rows swap in. The shimmer is a single
+   compositor-driven background animation — the global prefers-reduced-motion
+   rule above neutralizes it for users who ask for less movement. */
+.settings-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-skeleton-row {
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  background-size: 200% 100%;
+  animation: settings-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes settings-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 /* Activity Console */
 .dev-console-box {
   display: flex;

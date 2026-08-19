@@ -73,7 +73,14 @@ const parseFileLine = (raw: string): LogLine => {
   return withLineId({ raw, severity, timestamp, message, live: false });
 };
 
-/** Monotonic counter giving every rendered line a stable, unique key. */
+/**
+ * Monotonic counter giving every rendered line a stable, unique key.
+ *
+ * The `<For>` below keys on this id explicitly (`keyed={(line) => line.id}`)
+ * rather than on object identity, so a row survives being rebuilt — which is
+ * exactly what `mergeFileLines` does when a live-streamed line is superseded
+ * by its on-disk counterpart.
+ */
 let lineSeq = 0;
 
 const withLineId = (line: Omit<LogLine, 'id'>): LogLine => ({ ...line, id: lineSeq++ });
@@ -451,22 +458,25 @@ export const DevConsole: Component = () => {
               : 'No lines match the current filter.'}
           </div>
         )}
-        <For each={filteredLines()}>
+        {/* Keyed by the line's own id: with a key function the child receives an
+            accessor, so severity/message changes update the existing row in
+            place instead of tearing it down and rebuilding it. */}
+        <For each={filteredLines()} keyed={(line) => line.id}>
           {(line) => (
             <div
-              class={`dev-console-line dev-console-line-${line.severity} ${
-                line.success ? 'dev-console-line-success' : ''
+              class={`dev-console-line dev-console-line-${line().severity} ${
+                line().success ? 'dev-console-line-success' : ''
               }`}
             >
-              {line.timestamp && <span class="dev-console-time">[{line.timestamp}]</span>}
+              {line().timestamp && <span class="dev-console-time">[{line().timestamp}]</span>}
               <span
-                class={`dev-console-badge badge-${line.severity} ${
-                  line.success ? 'badge-success' : ''
+                class={`dev-console-badge badge-${line().severity} ${
+                  line().success ? 'badge-success' : ''
                 }`}
               >
-                {badgeLabel(line)}
+                {badgeLabel(line())}
               </span>
-              <span class="dev-console-message">{line.message}</span>
+              <span class="dev-console-message">{line().message}</span>
             </div>
           )}
         </For>

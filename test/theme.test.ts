@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { THEME_PRESETS, DEFAULT_THEME_ACCENT, applyThemeAccent } from '../src/lib/theme';
+import {
+  THEME_PRESETS,
+  DEFAULT_THEME_ACCENT,
+  applyThemeAccent,
+  resolveThemeAccent,
+} from '../src/lib/theme';
 
 describe('Theme Accent Engine', () => {
   it('contains the standard 5 theme presets', () => {
@@ -78,5 +83,34 @@ describe('applyThemeAccent', () => {
   it('falls back to the first preset for undefined', () => {
     const result = applyThemeAccent(undefined);
     expect(result).toBe(THEME_PRESETS[0]!.id);
+  });
+});
+
+describe('resolveThemeAccent', () => {
+  it('returns a known preset id unchanged', () => {
+    for (const preset of THEME_PRESETS) {
+      expect(resolveThemeAccent(preset.id)).toBe(preset.id);
+    }
+  });
+
+  it('falls back to the default for an unknown, null, or undefined id', () => {
+    expect(resolveThemeAccent('nonexistent-accent')).toBe(DEFAULT_THEME_ACCENT);
+    expect(resolveThemeAccent(null)).toBe(DEFAULT_THEME_ACCENT);
+    expect(resolveThemeAccent(undefined)).toBe(DEFAULT_THEME_ACCENT);
+    expect(resolveThemeAccent('')).toBe(DEFAULT_THEME_ACCENT);
+  });
+
+  it('is pure — it never touches the document', () => {
+    // The whole reason this is split out of applyThemeAccent is that a memo
+    // compute must stay side-effect free. Prove it by running with no document
+    // global at all: a DOM access would throw a ReferenceError.
+    const saved = Reflect.get(globalThis, 'document') as Document | undefined;
+    Reflect.deleteProperty(globalThis, 'document');
+    try {
+      expect(resolveThemeAccent('violet')).toBe('violet');
+      expect(resolveThemeAccent('bogus')).toBe(DEFAULT_THEME_ACCENT);
+    } finally {
+      if (saved !== undefined) Reflect.set(globalThis, 'document', saved);
+    }
   });
 });

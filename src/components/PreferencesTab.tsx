@@ -1,4 +1,4 @@
-import { createSignal, onSettled } from 'solid-js';
+import { createSignal, createEffect, createMemo, Loading } from 'solid-js';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { commands } from '../bindings';
 import type { AppSettings as BindingAppSettings } from '../bindings';
@@ -10,9 +10,11 @@ import {
   THEME_PRESETS,
   THEME_ACCENT_STORAGE_KEY,
   applyThemeAccent,
+  resolveThemeAccent,
   type ThemeAccent,
-  DEFAULT_THEME_ACCENT,
 } from '../lib/theme';
+import { FALLBACK_SETTINGS } from '../lib/settingsBackup';
+import { readStored, writeStored } from '../lib/storage';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
 
@@ -25,6 +27,21 @@ export type AppSettings = BindingAppSettings;
 
 interface PreferencesTabProps {
   onStatusChange: (status: string) => void;
+}
+
+/**
+ * Everything this panel needs from persistence, resolved by one async read.
+ *
+ * Kept as a single value so the whole panel derives from one settled result
+ * rather than from seven signals that populate at slightly different moments.
+ */
+interface PersistedPreferences {
+  /** Whether the OS launch agent is currently registered (autostart plugin). */
+  autostartEnabled: boolean;
+  /** The persisted settings struct, or factory defaults when it cannot be read. */
+  settings: AppSettings;
+  /** The accent that will be applied — falls back when the stored id is unknown. */
+  accent: ThemeAccent;
 }
 
 /** Loads persisted settings with exponential backoff retries (up to 3 attempts). */
@@ -42,68 +59,89 @@ const loadSettingsWithRetry = async (attempt: number): Promise<AppSettings | nul
 };
 
 export function PreferencesTab(props: PreferencesTabProps) {
-  const [autostart, setAutostart] = createSignal<boolean>(false);
-  const [minimizeToTray, setMinimizeToTray] = createSignal<boolean>(false);
-  const [startMinimized, setStartMinimized] = createSignal<boolean>(false);
-  const [checkUpdatesOnLaunch, setCheckUpdatesOnLaunch] = createSignal<boolean>(true);
-  const [rememberWindowSize, setRememberWindowSize] = createSignal<boolean>(false);
-  const [rememberWindowPosition, setRememberWindowPosition] = createSignal<boolean>(false);
-  const [currentAccent, setCurrentAccent] = createSignal<ThemeAccent>(DEFAULT_THEME_ACCENT);
   /**
-   * Gates the update checker's auto-check until the persisted preferences have
-   * actually been read. Without it, `checkUpdatesOnLaunch` sits at its optimistic
-   * `true` default for the duration of the settings IPC round-trip and the
-   * checker fires a launch check even when the user has the setting turned off.
+   * Persisted preferences as a SolidJS 2 async memo — "async lives in the graph".
+   *
+   * This replaces a mount-time `.then()` that pushed its result into seven
+   * separate signals. Doing it in the graph is not merely tidier: the settings
+   * rows below sit inside a `<Loading>` boundary, so they are not rendered —
+   * and therefore not clickable — until this read settles. Previously a toggle
+   * clicked during the IPC round-trip was written to disk and then silently
+   * reverted in the UI when the loader's `setX(settings.x)` landed on top of it.
    */
-  const [settingsLoaded, setSettingsLoaded] = createSignal<boolean>(false);
-
-  // Load persisted preferences on mount (one-time, not reactive).
-  onSettled(() => {
+  const persisted = createMemo(async (): Promise<PersistedPreferences> => {
     if (!isTauri) {
-      const saved = localStorage.getItem(THEME_ACCENT_STORAGE_KEY) as ThemeAccent | null;
-      if (saved) {
-        const accent = applyThemeAccent(saved);
-        setCurrentAccent(accent);
-      }
-      setSettingsLoaded(true);
-      return;
+      return {
+        autostartEnabled: false,
+        settings: FALLBACK_SETTINGS,
+        accent: resolveThemeAccent(readStored(THEME_ACCENT_STORAGE_KEY)),
+      };
     }
 
-    let isCancelled = false;
-    Promise.all([
+    const [autostartEnabled, settings] = await Promise.all([
       isEnabled().catch((err: unknown) => {
         console.warn('Autostart check failed:', err);
         return false;
       }),
       loadSettingsWithRetry(0),
-    ]).then(([autostartEnabled, settings]) => {
-      if (isCancelled) return;
-      setAutostart(autostartEnabled);
-      if (settings) {
-        // Every AppSettings field is optional: the Rust struct gives each one a
-        // serde default so an older/newer settings.json still loads, which makes
-        // them all optional in the generated bindings.
-        setMinimizeToTray(settings.minimize_to_tray ?? false);
-        setStartMinimized(settings.start_minimized ?? false);
-        setCheckUpdatesOnLaunch(settings.check_updates_on_launch ?? true);
-        setRememberWindowSize(settings.remember_window_size ?? false);
-        setRememberWindowPosition(settings.remember_window_position ?? false);
-        const applied = applyThemeAccent(settings.theme_accent);
-        setCurrentAccent(applied);
+    ]);
 
-        // Self-heal: write corrected accent back to disk if the persisted value
-        // was invalid (e.g. hand-edited JSON or a renamed preset).
-        if (applied !== settings.theme_accent) {
-          void commands.updateAppSettings({ ...settings, theme_accent: applied });
-        }
-      }
-      setSettingsLoaded(true);
-    });
-
-    return () => {
-      isCancelled = true;
+    // Every AppSettings field is optional: the Rust struct gives each one a
+    // serde default so an older/newer settings.json still loads, which makes
+    // them all optional in the generated bindings.
+    const resolved = settings ?? FALLBACK_SETTINGS;
+    return {
+      autostartEnabled,
+      settings: resolved,
+      accent: resolveThemeAccent(resolved.theme_accent),
     };
   });
+
+  /*
+   * Writable derived signals (`createSignal(fn)`): the persisted value is the
+   * source, and a toggle places a local override on top of it. This is the
+   * documented shape for "starts from a reactive source but needs a local
+   * value", and it removes the copy-async-result-into-a-signal step entirely.
+   */
+  const [autostart, setAutostart] = createSignal(() => persisted().autostartEnabled);
+  const [minimizeToTray, setMinimizeToTray] = createSignal(
+    () => persisted().settings.minimize_to_tray ?? false
+  );
+  const [startMinimized, setStartMinimized] = createSignal(
+    () => persisted().settings.start_minimized ?? false
+  );
+  const [checkUpdatesOnLaunch, setCheckUpdatesOnLaunch] = createSignal(
+    () => persisted().settings.check_updates_on_launch ?? true
+  );
+  const [rememberWindowSize, setRememberWindowSize] = createSignal(
+    () => persisted().settings.remember_window_size ?? false
+  );
+  const [rememberWindowPosition, setRememberWindowPosition] = createSignal(
+    () => persisted().settings.remember_window_position ?? false
+  );
+  const [currentAccent, setCurrentAccent] = createSignal(() => persisted().accent);
+
+  // Imperative boundary: paint the accent onto the document's CSS custom
+  // properties. Deliberately an effect rather than part of the memo, because a
+  // memo compute must stay side-effect free.
+  createEffect(
+    () => currentAccent(),
+    (accent) => {
+      applyThemeAccent(accent);
+    }
+  );
+
+  // One-shot self-heal: a persisted accent naming an unknown preset (hand-edited
+  // JSON, a renamed preset) is corrected on disk. The compute phase reads the
+  // async memo, so the apply phase runs only once that read has settled.
+  createEffect(
+    () => persisted(),
+    (loaded) => {
+      if (!isTauri) return;
+      if (loaded.settings.theme_accent === loaded.accent) return;
+      void commands.updateAppSettings({ ...loaded.settings, theme_accent: loaded.accent });
+    }
+  );
 
   /**
    * Persists the full settings struct, merging a partial patch over the current
@@ -266,8 +304,8 @@ export function PreferencesTab(props: PreferencesTabProps) {
   };
 
   const handleAccentChange = async (accent: ThemeAccent) => {
-    const active = applyThemeAccent(accent);
-    setCurrentAccent(active);
+    // Setting the signal is enough — the effect above paints it onto the DOM.
+    setCurrentAccent(accent);
 
     if (isTauri) {
       try {
@@ -278,7 +316,7 @@ export function PreferencesTab(props: PreferencesTabProps) {
         console.error('Failed to persist theme accent:', err);
       }
     } else {
-      localStorage.setItem(THEME_ACCENT_STORAGE_KEY, accent);
+      writeStored(THEME_ACCENT_STORAGE_KEY, accent);
       toast.success(`[Web Preview] Accent set to ${accent}`);
     }
   };
@@ -299,108 +337,136 @@ export function PreferencesTab(props: PreferencesTabProps) {
         </p>
       </div>
 
-      {/* Theme Accent Customization */}
-      <div class="setting-item">
-        <div class="setting-info">
-          <div class="setting-icon">
-            <Palette size={18} />
+      {/* Everything below derives from the `persisted` async memo, so it is
+          scoped in its own boundary: the card header above stays put while the
+          settings read is in flight, and no row is interactive until the real
+          values are in hand. */}
+      <Loading fallback={<PreferencesSkeleton />}>
+        {/* Theme Accent Customization */}
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-icon">
+              <Palette size={18} />
+            </div>
+            <div class="setting-text">
+              <span class="setting-title">Theme Accent Color</span>
+              <span class="setting-subtitle">
+                Choose a neon accent palette for glass highlights, badges, and focus rings.
+              </span>
+            </div>
           </div>
-          <div class="setting-text">
-            <span class="setting-title">Theme Accent Color</span>
-            <span class="setting-subtitle">
-              Choose a neon accent palette for glass highlights, badges, and focus rings.
-            </span>
+
+          <div class="theme-swatch-list" role="radiogroup" aria-label="Theme Accent Color">
+            {THEME_PRESETS.map((preset) => (
+              <button
+                type="button"
+                class={`theme-swatch-btn ${currentAccent() === preset.id ? 'selected' : ''}`}
+                style={{ '--swatch-color': preset.primary }}
+                onClick={() => void handleAccentChange(preset.id)}
+                role="radio"
+                aria-checked={currentAccent() === preset.id ? 'true' : 'false'}
+                aria-label={preset.name}
+                title={preset.name}
+              >
+                <span class="swatch-dot" />
+              </button>
+            ))}
           </div>
         </div>
 
-        <div class="theme-swatch-list" role="radiogroup" aria-label="Theme Accent Color">
-          {THEME_PRESETS.map((preset) => (
-            <button
-              type="button"
-              class={`theme-swatch-btn ${currentAccent() === preset.id ? 'selected' : ''}`}
-              style={{ '--swatch-color': preset.primary }}
-              onClick={() => void handleAccentChange(preset.id)}
-              role="radio"
-              aria-checked={currentAccent() === preset.id ? 'true' : 'false'}
-              aria-label={preset.name}
-              title={preset.name}
-            >
-              <span class="swatch-dot" />
-            </button>
-          ))}
-        </div>
-      </div>
+        {/* Toggle 1: Start at OS launch */}
+        <ToggleSwitch
+          icon={<Power size={18} />}
+          title="Start at OS launch"
+          subtitle="Automatically start this app silently in the system tray when your computer starts."
+          checked={autostart}
+          ariaLabel="Start at OS launch"
+          onToggle={handleAutostartToggle}
+        />
 
-      {/* Toggle 1: Start at OS launch */}
-      <ToggleSwitch
-        icon={<Power size={18} />}
-        title="Start at OS launch"
-        subtitle="Automatically start this app silently in the system tray when your computer starts."
-        checked={autostart}
-        ariaLabel="Start at OS launch"
-        onToggle={handleAutostartToggle}
-      />
+        {/* Toggle 2: Minimize to taskbar on close */}
+        <ToggleSwitch
+          icon={<Minimize2 size={18} />}
+          title="Minimize to taskbar on close"
+          subtitle="Closing the window keeps the app running in the taskbar tray. State persists on disk."
+          checked={minimizeToTray}
+          ariaLabel="Minimize to taskbar on close"
+          onToggle={handleMinimizeToTrayToggle}
+        />
 
-      {/* Toggle 2: Minimize to taskbar on close */}
-      <ToggleSwitch
-        icon={<Minimize2 size={18} />}
-        title="Minimize to taskbar on close"
-        subtitle="Closing the window keeps the app running in the taskbar tray. State persists on disk."
-        checked={minimizeToTray}
-        ariaLabel="Minimize to taskbar on close"
-        onToggle={handleMinimizeToTrayToggle}
-      />
+        {/* Toggle 3: Start Minimized */}
+        <ToggleSwitch
+          icon={<EyeOff size={18} />}
+          title="Start silently minimized"
+          subtitle="Launch directly into the background system tray without surfacing the main window."
+          checked={startMinimized}
+          ariaLabel="Start silently minimized"
+          onToggle={handleStartMinimizedToggle}
+        />
 
-      {/* Toggle 3: Start Minimized */}
-      <ToggleSwitch
-        icon={<EyeOff size={18} />}
-        title="Start silently minimized"
-        subtitle="Launch directly into the background system tray without surfacing the main window."
-        checked={startMinimized}
-        ariaLabel="Start silently minimized"
-        onToggle={handleStartMinimizedToggle}
-      />
+        {/* Toggle 4: Check for updates on launch */}
+        <ToggleSwitch
+          icon={<RefreshCw size={18} />}
+          title="Check for updates on launch"
+          subtitle="Automatically query GitHub Releases for a newer version when the app starts."
+          checked={checkUpdatesOnLaunch}
+          ariaLabel="Check for updates on launch"
+          onToggle={handleCheckUpdatesToggle}
+        />
 
-      {/* Toggle 4: Check for updates on launch */}
-      <ToggleSwitch
-        icon={<RefreshCw size={18} />}
-        title="Check for updates on launch"
-        subtitle="Automatically query GitHub Releases for a newer version when the app starts."
-        checked={checkUpdatesOnLaunch}
-        ariaLabel="Check for updates on launch"
-        onToggle={handleCheckUpdatesToggle}
-      />
+        {/* Toggle 5: Remember window size */}
+        <ToggleSwitch
+          icon={<Maximize2 size={18} />}
+          title="Remember window size"
+          subtitle="Reopen the main window at the size you last used."
+          checked={rememberWindowSize}
+          ariaLabel="Remember window size"
+          onToggle={handleRememberWindowSizeToggle}
+        />
 
-      {/* Toggle 5: Remember window size */}
-      <ToggleSwitch
-        icon={<Maximize2 size={18} />}
-        title="Remember window size"
-        subtitle="Reopen the main window at the size you last used."
-        checked={rememberWindowSize}
-        ariaLabel="Remember window size"
-        onToggle={handleRememberWindowSizeToggle}
-      />
+        {/* Toggle 6: Remember window position */}
+        <ToggleSwitch
+          icon={<Move3d size={18} />}
+          title="Remember window position"
+          subtitle="Reopen the main window where you last left it (guarded against off-screen placement)."
+          checked={rememberWindowPosition}
+          ariaLabel="Remember window position"
+          onToggle={handleRememberWindowPositionToggle}
+        />
 
-      {/* Toggle 6: Remember window position */}
-      <ToggleSwitch
-        icon={<Move3d size={18} />}
-        title="Remember window position"
-        subtitle="Reopen the main window where you last left it (guarded against off-screen placement)."
-        checked={rememberWindowPosition}
-        ariaLabel="Remember window position"
-        onToggle={handleRememberWindowPositionToggle}
-      />
+        {/* System-wide hotkeys, handled by the native OS keyboard hook */}
+        <GlobalHotkeysSection onStatusChange={props.onStatusChange} />
 
-      {/* System-wide hotkeys, handled by the native OS keyboard hook */}
-      <GlobalHotkeysSection onStatusChange={props.onStatusChange} />
+        {/* Auto-Update Checker Card. Mounted inside the boundary, so by the
+            time it reads `checkUpdatesOnLaunch` the preference is the persisted
+            one — the explicit "settings loaded yet?" gate this used to need is
+            now structural. Event listening lives on the always-mounted footer
+            instance in App.tsx, since this card unmounts when another tab is
+            selected and a tray-triggered check must work from any tab. */}
+        <UpdateChecker
+          onStatusChange={props.onStatusChange}
+          variant="card"
+          autoCheckOnMount={checkUpdatesOnLaunch}
+          listenForEvents={() => false}
+        />
+      </Loading>
+    </div>
+  );
+}
 
-      {/* Auto-Update Checker Card */}
-      <UpdateChecker
-        onStatusChange={props.onStatusChange}
-        variant="card"
-        autoCheckOnMount={() => settingsLoaded() && checkUpdatesOnLaunch()}
-        listenForEvents={() => true}
-      />
+/**
+ * Fallback for the settings rows while the persisted preferences load.
+ *
+ * Mirrors the row rhythm rather than the whole card, so the header does not
+ * move when the real rows swap in.
+ */
+function PreferencesSkeleton() {
+  return (
+    <div class="settings-skeleton" aria-busy="true" aria-live="polite">
+      <span class="visually-hidden">Loading saved preferences…</span>
+      <div class="settings-skeleton-row" />
+      <div class="settings-skeleton-row" />
+      <div class="settings-skeleton-row" />
     </div>
   );
 }

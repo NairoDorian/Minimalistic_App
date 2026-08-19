@@ -1,4 +1,12 @@
-import { createSignal, createEffect, onSettled, For, type Component } from 'solid-js';
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  onSettled,
+  For,
+  Show,
+  type Component,
+} from 'solid-js';
 import { listen } from '@tauri-apps/api/event';
 import { commands } from '../bindings';
 import type { GlobalHotkeyAction, GlobalHotkeyBinding, GlobalHotkeyStatus } from '../bindings';
@@ -19,6 +27,12 @@ const ACTION_LABELS: Readonly<Record<GlobalHotkeyAction, string>> = {
   show_window: 'Bring the window to the front',
   check_updates: 'Check for updates',
 };
+
+/**
+ * Action ids in render order, derived from ACTION_LABELS so the two can never
+ * drift — the same guarantee TAB_ORDER gives the tab bar in App.tsx.
+ */
+const ACTION_ORDER = Object.keys(ACTION_LABELS) as readonly GlobalHotkeyAction[];
 
 /**
  * Global hotkey configuration.
@@ -114,8 +128,15 @@ export const GlobalHotkeysSection: Component<GlobalHotkeysSectionProps> = (props
   const specFor = (action: GlobalHotkeyAction): string =>
     bindings().find((binding) => binding.action === action)?.spec ?? '';
 
-  /** Explains the listener state in one line, or null when it's simply idle. */
-  const statusLine = (): { text: string; tone: 'ok' | 'warn' | 'error' } | null => {
+  /**
+   * Explains the listener state in one line, or null when it's simply idle.
+   *
+   * A memo rather than a plain function because the JSX below reads it three
+   * times (guard, tone, text); as a function each read re-ran the whole
+   * derivation, and each needed a non-null assertion to re-narrow what the
+   * guard had already established.
+   */
+  const statusLine = createMemo((): { text: string; tone: 'ok' | 'warn' | 'error' } | null => {
     const current = status();
     if (!current) return null;
     if (current.error) return { text: current.error, tone: 'error' };
@@ -129,7 +150,7 @@ export const GlobalHotkeysSection: Component<GlobalHotkeysSectionProps> = (props
         : `Listening — ${current.registered} bound. Detect-only: matched shortcuts still reach the focused app.`,
       tone: current.blocking ? 'ok' : 'warn',
     };
-  };
+  });
 
   // macOS gates keyboard taps behind an explicit Accessibility grant; the button
   // opens the exact settings pane rather than describing where to find it.
@@ -170,16 +191,18 @@ export const GlobalHotkeysSection: Component<GlobalHotkeysSectionProps> = (props
             onToggle={(next) => void handleToggleEnabled(next)}
           />
 
-          {statusLine() && (
-            <div
-              class={`global-hotkey-status tone-${statusLine()!.tone}`}
-              role="status"
-              aria-live="polite"
-            >
-              {statusLine()!.tone === 'ok' ? <Shield size={12} /> : <AlertTriangle size={12} />}
-              <span>{statusLine()!.text}</span>
-            </div>
-          )}
+          <Show when={statusLine()}>
+            {(line) => (
+              <div
+                class={`global-hotkey-status tone-${line().tone}`}
+                role="status"
+                aria-live="polite"
+              >
+                {line().tone === 'ok' ? <Shield size={12} /> : <AlertTriangle size={12} />}
+                <span>{line().text}</span>
+              </div>
+            )}
+          </Show>
 
           {status()?.needs_accessibility && (
             <div class="global-hotkey-permission" role="alert">
@@ -202,7 +225,7 @@ export const GlobalHotkeysSection: Component<GlobalHotkeysSectionProps> = (props
           )}
 
           <div class="global-hotkey-list">
-            <For each={Object.keys(ACTION_LABELS) as GlobalHotkeyAction[]}>
+            <For each={ACTION_ORDER}>
               {(action) => (
                 <div class="shortcut-row">
                   <span class="shortcut-desc">{ACTION_LABELS[action]}</span>

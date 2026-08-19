@@ -8,6 +8,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.22.0] - 2026-08-20
+
+### Round 22 — Documentation-Driven Audit: Async State in the Graph, Lifecycle Correctness, CSP Least Privilege
+
+A full read of `src/` and `src-tauri/` against the local mirrors added in
+v0.21.0 (`bun run docs:find`), fixing four real bugs and bringing the frontend
+onto the SolidJS 2 patterns its own reference prescribes.
+
+#### 🐞 Bugs Fixed
+
+- **A toggle clicked while preferences were still loading was silently reverted.**
+  `PreferencesTab` mounted with placeholder values (all `false`, `checkUpdates`
+  `true`) and populated them from a `.then()` when the IPC settled. A click in
+  that window was written to disk by the handler and then overwritten in the UI
+  by the loader's `setX(settings.x)`, leaving screen and disk disagreeing until
+  the next launch. The rows now sit inside a `<Loading>` boundary and simply do
+  not exist until the read settles.
+- **The tray's "Check for Updates" did nothing unless the Preferences tab was
+  open.** The only instance listening for the `check-for-updates` event was the
+  `UpdateChecker` card, which is unmounted whenever another tab is selected.
+  Event listening moved to the footer instance, which is mounted for the whole
+  session; the card keeps the launch auto-check. (`src/App.tsx`,
+  `src/components/PreferencesTab.tsx`)
+- **Turning on "check for updates on launch" fired an immediate update check.**
+  `UpdateChecker` registered its setup in a re-running `createEffect` whose
+  compute tracked `autoCheckOnMount`, so flipping the preference re-ran the whole
+  block — a network check plus a teardown and re-registration of the tray
+  listener. Now one-time owned setup via `onSettled`, reading both props once
+  through `untrack`.
+- **The reset-confirmation timer outlived its component.** `DeveloperTab`'s
+  two-step "Reset All Settings" armed a 4 s `setTimeout` with no cleanup and no
+  guard against stacking, so switching tabs left a timer writing to a disposed
+  signal. Tracked and cleared on teardown, and restarted rather than stacked.
+
+#### ⚛️ SolidJS 2 Patterns (cites `.docs/solid-docs`)
+
+- **`PreferencesTab` async load moved into the reactive graph.** One
+  `createMemo(async …)` replaces the mount-time `.then()`, an `isCancelled` flag
+  and a `settingsLoaded` gate signal; the seven preference signals became
+  writable derived signals (`createSignal(fn)`) over it — the documented shape
+  for "starts from a reactive source but needs a local override"
+  (`(5)guides/(0)avoid-unnecessary-effects.mdx`). The load-gate signal is now
+  structural rather than explicit.
+- **Memo computes are side-effect free.** `applyThemeAccent` (a DOM write) and
+  the invalid-accent self-heal (an IPC write) moved out of the loader into
+  `createEffect` apply phases. New pure `resolveThemeAccent()` in
+  `src/lib/theme.ts` does the preset lookup with no DOM access, so it is safe to
+  call from a compute.
+- **`onCleanup` in a component body replaced by an `onSettled`-returned
+  cleanup** in `HotkeyRecorder` — matching `App.tsx` from v0.21.0. Per
+  `on-cleanup.mdx`, `onCleanup` is now a library/custom-primitive tool.
+- **`GlobalHotkeysSection.statusLine` is a `createMemo` behind `<Show>`.** It
+  was a plain function called four times per render, each call re-running the
+  derivation and each needing a `!` assertion to re-narrow what the guard had
+  already proven. `ACTION_ORDER` hoisted from an inline `Object.keys(...)` cast,
+  mirroring `TAB_ORDER` in `App.tsx`.
+- **`DevConsole` rows key on `LogLine.id`** (`keyed={(line) => line.id}`). The id
+  existed and was documented as the row key but nothing used it — rows were
+  keyed by object identity. With a key function the child receives an accessor,
+  so a severity or message change updates the row in place.
+- `setShowNotes(!showNotes())` → the updater form.
+
+#### 🔒 Security
+
+- **Dead CSP grants removed.** `connect-src` no longer lists
+  `https://github.com` / `https://api.github.com`: no frontend code has ever
+  fetched them, because the updater performs its HTTPS in the Rust process where
+  the webview CSP does not apply. `SECURITY.md` now documents every directive
+  and why it is there.
+- **`localStorage` is guarded everywhere.** New `src/lib/storage.ts`
+  (`readStored` / `writeStored` / `removeStored`) degrades a disabled, blocked or
+  full store to "not persisted" instead of throwing into the render tree. Two of
+  the four call sites were previously unguarded (`PreferencesTab`,
+  `DeveloperTab`); `App.tsx` and `shortcuts.ts` had hand-rolled `try`/`catch`
+  that now routes through the helper.
+
+#### 🧪 Tests & Test Infrastructure
+
+- **`bun test` was silently running against SolidJS's SSR build.** `solid-js`
+  resolves to `dist/server.cjs` under Bun's default export conditions, and in
+  that build effects never run and writes never propagate through the graph —
+  any reactivity or component test would have exercised a runtime the app never
+  ships, passing by doing nothing. The `test` script is now
+  `bun test --conditions browser`, which selects `dist/solid.js`, the same
+  client runtime Vite bundles into the webview. `bun run validate` and CI both
+  go through the script, so both were fixed by the same change.
+- `test/reactivity.test.ts` — 8 new contract tests pinning the SolidJS 2 shapes
+  the components now depend on: that the runner really resolved the client build,
+  that a writable derived signal accepts a local override, that the override is
+  discarded when a dependency of the derivation changes but survives when the
+  derivation never re-runs (the case `PreferencesTab` relies on), that an async
+  memo reads as not-ready before it settles, and that an effect's apply-phase
+  return value is called as a cleanup.
+- **The effect-cleanup hazard this exposed:** Solid calls whatever an apply
+  phase returns as its cleanup, so a concise arrow that happens to return a
+  value — `(accent) => applyThemeAccent(accent)` returns a string — halts the
+  reactive system on the effect's next run. All eight effects in `src/` were
+  audited and already use block bodies; the rule is now documented in
+  `CRUSH.md` pattern 4 and `AGENTS.md`.
+- `test/storage.test.ts` — 9 new tests covering the working store, a store that
+  throws on every operation, and a missing `localStorage` global.
+- `test/theme.test.ts` — `resolveThemeAccent` coverage, including a test that
+  runs it with no `document` global to prove it is DOM-free.
+- Suite: **110 → 130** frontend tests, 119 Rust tests.
+
+#### 🎨 UI
+
+- `.settings-skeleton` placeholder rows for the Preferences `<Loading>`
+  fallback, sized to the real `.setting-item` rhythm so the card does not jump.
+  The shimmer is a single compositor-driven background animation and is
+  neutralized by the existing `prefers-reduced-motion` rule.
+
+#### 📚 Documentation
+
+- `CRUSH.md` — new pattern 2 ("Async Data → Writable Derived Signal → Loading
+  Boundary"); the UpdateChecker dual-variant rule rewritten to explain why the
+  two jobs live on different instances.
+- `AGENTS.md`, `CONTRIBUTING.md` — async-state, side-effect, storage and
+  effect-cleanup rules.
+- `TESTING.md` — a warning that a bare `bun test` gets the SSR build, plus the
+  three new test files in the layout table.
+- `README.md` — CSP description corrected, plus a note on the one remaining
+  remote origin: Inter is loaded from the Google Fonts CDN, so the app falls
+  back to a system sans-serif offline. Self-hosting it would drop two origins
+  from the CSP; left as a product call.
+
 ## [0.21.0] - 2026-08-19
 
 ### Round 21 — Local Documentation Mirrors for the Whole Stack, SolidJS 2 Boundary Correctness & TypeScript 7 Audit

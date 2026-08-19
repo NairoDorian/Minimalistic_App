@@ -327,6 +327,11 @@ rtk git push origin main
    - Before changing anything framework-shaped — a lifecycle primitive, a boundary, a capability, a `tsconfig` flag — read the pinned local mirror (`bun run docs:find`), not memory.
    - Prefer the primitive the current major version prescribes: `onSettled` returning a cleanup (not `onMount`/`onCleanup`), two-argument `createEffect`, async `createMemo` (not `createResource`), `<Loading>`/`<Errored>` (not `<Suspense>`/`<ErrorBoundary>`).
    - Scope `<Loading>` to the smallest region its fallback should replace; keep navigation and controls outside it so they stay usable during a load.
+   - Load persisted state with `createMemo(async …)` plus writable derived signals (`createSignal(fn)`), never by `.then()`-ing an IPC result into a pile of signals — the gap between mount and resolution is a window where a user's click lands on a placeholder value and is then silently overwritten.
+   - Keep memo computes side-effect free. DOM writes, IPC writes, subscriptions and storage go in `createEffect`'s apply phase.
+   - Never touch `localStorage` directly — use `readStored` / `writeStored` / `removeStored` from `src/lib/storage.ts`, which degrade a disabled or full store to "not persisted" instead of throwing into the render tree.
+   - Give every `createEffect` apply phase and every `onSettled` callback a **block body**, unless it genuinely returns a cleanup function. Solid calls the return value as cleanup, so a concise arrow that happens to return a string or a number halts the reactive system on the effect's next run (`REACTIVITY_HALTED`).
+   - Run frontend tests with `bun run test`, never a bare `bun test`: the script passes `--conditions browser` because `solid-js` resolves to its **SSR build** by default in Bun, where effects never run.
    - Grant Tauri permissions explicitly rather than relying on a plugin's `:default` set, so an upstream widening of that set cannot silently broaden this app's surface.
 
 5. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:

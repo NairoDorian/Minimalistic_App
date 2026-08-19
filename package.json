@@ -1,7 +1,7 @@
 {
   "name": "minimalistic-app",
   "private": true,
-  "version": "0.21.0",
+  "version": "0.22.0",
   "type": "module",
   "scripts": {
     "vite": "vite",
@@ -11,7 +11,7 @@
     "typecheck": "bun x tsc -b",
     "lint": "oxlint src test scripts",
     "lint:fix": "oxlint --fix src test scripts",
-    "test": "bun test",
+    "test": "bun test --conditions browser",
     "rename-project": "bun scripts/rename-project.ts",
     "before-commit": "bun scripts/before-commit.ts",
     "validate": "bun scripts/before-commit.ts --full",
