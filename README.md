@@ -374,6 +374,66 @@ for that one process, so nothing on disk changes and a machine without LLVM
 simply gets a normal dev run. Full measurement table and the tuning knobs that
 were tested and did **not** help: [`.cargo/config.toml`](.cargo/config.toml).
 
+### 🧳 Portable Mode (`portable.rs`)
+
+Drop an empty file named `portable` beside the executable, and everything the app
+writes moves from the OS directories to `<exe dir>/Data/`:
+
+```text
+MyApp/
+  minimalistic-app.exe
+  portable            ← empty marker file: presence is the whole switch
+  Data/
+    settings.json
+    logs/
+```
+
+Runs from a USB stick, leaves no trace on the host — which matters for an app
+that can register itself at OS startup and install a global keyboard hook — and
+is the quickest way to get a clean profile for testing without disturbing your
+real one. Delete the marker to go back; the `Data/` folder is left alone. The
+About tab shows the active data directory either way. Detection happens once at
+process start and falls back to normal mode if the location is not writable.
+
+### 🚀 Autostart That Cannot Sabotage Your Install (`autostart.rs`)
+
+"Start at OS launch" registers **the path of the running executable**. Wired the
+obvious way — the frontend calling `@tauri-apps/plugin-autostart` directly — one
+click of that toggle during `bun run tauri dev` overwrites your _installed_
+app's launch entry with a path into `src-tauri/target/debug/`. You find out at
+the next reboot.
+
+So the backend owns the write:
+
+- The preference lives in `AppSettings`; the OS entry is **derived state**,
+  reconciled at startup. An entry removed externally comes back instead of the
+  preference quietly becoming a lie.
+- A **development build never writes it** (`cfg!(debug_assertions)`), records the
+  preference anyway, and tells the UI — which shows a note under the toggle
+  rather than implying something happened outside the app.
+- The webview needs **no autostart permission at all** now, so three grants left
+  `capabilities/default.json` and the JS plugin left `package.json`.
+
+### 💥 Crashes Leave Evidence (`panic_log.rs`)
+
+Rust's default panic handler writes to stderr — which a bundled desktop app does
+not have. The template installs a hook that logs the panic (message, source
+location, **thread name**) through the `log` facade first, so it reaches the
+rotating log file and the in-app Dev Console before the process dies. The thread
+name is the point: it distinguishes a UI-thread crash from one on the global
+hotkey engine's OS keyboard-hook thread. The default handler still runs
+afterwards, so terminal and `cargo test` behaviour is unchanged.
+
+### 🔗 IPC Contract Drift Is a Test (`test/bindings.test.ts`)
+
+`src/bindings.ts` is generated _at runtime_ by a debug build, so adding a Rust
+command and committing without launching the app leaves the frontend calling a
+contract the backend no longer has. A test now compares the `collect_commands![…]`
+registry against the generated wrappers as source text, and fails the commit
+instead of the user. (It has to be a source comparison: re-rendering the bindings
+from a Rust test links `tauri::Wry` and the test binary will not start on Windows
+without the webview runtime beside it.)
+
 ### 🩹 Self-Healing Settings (`settings_repair.rs`)
 
 A hand-edited or downgraded `settings.json` no longer costs the user everything.

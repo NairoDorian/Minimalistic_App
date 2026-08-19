@@ -1,5 +1,8 @@
+pub mod autostart;
 pub mod global_hotkeys;
 pub mod hotkeys;
+pub mod panic_log;
+pub mod portable;
 pub mod settings_repair;
 
 use serde::{Deserialize, Serialize};
@@ -54,6 +57,15 @@ pub struct AppSettings {
     /// Last persisted window Y in physical pixels (`i32::MIN` = unset).
     #[serde(default = "default_unset_position")]
     pub saved_window_y: i32,
+    /// Whether the app should register itself to start at OS login.
+    ///
+    /// This is the *source of truth*; the OS launch entry is a derived effect,
+    /// reconciled at startup by [`autostart::reconcile_on_startup`]. Keeping the
+    /// intent here rather than reading it back from the OS is what lets a
+    /// development build record the preference without touching the installed
+    /// application's registration — see `src/autostart.rs`.
+    #[serde(default)]
+    pub autostart_enabled: bool,
     /// Whether the OS-wide global hotkey listener runs at all. Off by default:
     /// it installs a system keyboard hook, which is opt-in behaviour.
     #[serde(default)]
@@ -91,6 +103,7 @@ impl Default for AppSettings {
             saved_window_height: 0,
             saved_window_x: i32::MIN,
             saved_window_y: i32::MIN,
+            autostart_enabled: false,
             global_hotkeys_enabled: false,
             global_hotkeys: Vec::new(),
         }
@@ -511,10 +524,10 @@ fn open_accessibility_settings() -> Result<(), String> {
 /// so the Dev Console never hardcodes a filename that drifts from the app name
 /// after a `rename-project` rebrand.
 fn log_file_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let log_dir = app
-        .path()
-        .app_log_dir()
-        .map_err(|e| format!("Failed to resolve log directory: {e}"))?;
+    // Routed through `portable` so the Dev Console reads the same file the
+    // logging plugin writes, in both normal and portable mode.
+    let log_dir =
+        portable::log_dir(app).map_err(|e| format!("Failed to resolve log directory: {e}"))?;
     Ok(log_dir
         .join(app.package_info().name.clone())
         .with_extension("log"))
@@ -552,6 +565,68 @@ fn clear_logs(app: AppHandle) -> Result<(), String> {
         fs::write(&log_file_path, "").map_err(|e| format!("Failed to clear log file: {e}"))?;
     }
     Ok(())
+}
+
+/// Tauri IPC command: reports the autostart preference and the real OS state.
+///
+/// The two can disagree in a development build, which deliberately never writes
+/// the OS entry — see `src/autostart.rs` for why.
+#[tauri::command]
+#[specta::specta]
+fn get_autostart(app: AppHandle, state: State<'_, AppState>) -> autostart::AutostartStatus {
+    let enabled = lock_guard(&state.settings).autostart_enabled;
+    autostart::status(&app, enabled)
+}
+
+/// Tauri IPC command: records the autostart preference and reconciles the OS entry.
+///
+/// Disk-first, like every other preference writer here: the setting is persisted
+/// before the OS is touched, so a failure to write the launch entry cannot leave
+/// disk and memory disagreeing. The returned status tells the UI what actually
+/// happened, including the development-build case where the OS was left alone.
+#[tauri::command]
+#[specta::specta]
+fn set_autostart(
+    app: AppHandle,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<autostart::AutostartStatus, String> {
+    {
+        // One lock across the read-modify-write, matching `set_minimize_to_tray`.
+        let mut settings = lock_guard(&state.settings);
+        let mut next = settings.clone();
+        next.autostart_enabled = enabled;
+        save_settings_to_disk(&state.settings_path, &next)?;
+        *settings = next;
+    }
+
+    // Outside the lock: the OS call can block, and nothing below needs settings.
+    autostart::reconcile(&app, enabled)?;
+    Ok(autostart::status(&app, enabled))
+}
+
+/// Tauri IPC command: reports whether the app is running in portable mode.
+///
+/// The frontend surfaces this in the About tab so a user can tell at a glance
+/// where their settings are being written.
+#[tauri::command]
+#[specta::specta]
+fn get_portable_status(app: AppHandle) -> PortableStatus {
+    PortableStatus {
+        active: portable::is_active(),
+        data_dir: portable::config_dir(&app)
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_default(),
+    }
+}
+
+/// Where the app writes, and whether that is beside the executable.
+#[derive(Serialize, Type)]
+pub struct PortableStatus {
+    /// True when a `portable` marker file was found next to the executable.
+    pub active: bool,
+    /// Absolute path of the directory holding `settings.json`.
+    pub data_dir: String,
 }
 
 /// Shows, unminimizes, and focuses the main window if it exists.
@@ -677,8 +752,12 @@ const BINDINGS_PATH: &str = "../src/bindings.ts";
 
 /// Tauri Specta command registry — the single definition of the IPC surface.
 ///
-/// Extracted from `run()` so the binding-freshness test can render exactly the
-/// TypeScript a dev build exports, and fail if `src/bindings.ts` has drifted.
+/// Extracted from `run()` so the command list has one home rather than being
+/// buried in the builder chain. Drift between this registry and the committed
+/// `src/bindings.ts` is caught by `test/bindings.test.ts`, which compares the two
+/// as source text — a Rust test cannot re-render the bindings, because
+/// referencing the builder links `tauri::Wry` and the resulting test executable
+/// will not start on Windows without the webview runtime beside it.
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -698,13 +777,23 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             validate_hotkey_spec,
             set_global_hotkey,
             set_global_hotkeys_enabled,
-            open_accessibility_settings
+            open_accessibility_settings,
+            get_autostart,
+            set_autostart,
+            get_portable_status
         ])
 }
 
 /// Main entry point for Rust / Tauri backend application runtime.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything else. The panic hook must be in place to catch a crash
+    // during startup itself, and portable detection must precede the first path
+    // resolution — which the logging plugin performs while the builder is being
+    // assembled, a few lines below.
+    panic_log::install();
+    portable::init();
+
     let builder = specta_builder();
 
     // Export TypeScript bindings in dev mode so the frontend can import
@@ -740,11 +829,19 @@ pub fn run() {
                 .rotation_strategy(RotationStrategy::KeepOne)
                 .targets([
                     Target::new(TargetKind::Stdout),
-                    // Leave `file_name` as None so the plugin derives the log file
-                    // from `app.package_info().name` — a single source of truth the
-                    // IPC readers (`get_recent_logs`/`clear_logs`) mirror, keeping the
-                    // Dev Console valid after `rename-project` rebrands the app.
-                    Target::new(TargetKind::LogDir { file_name: None }),
+                    // In portable mode the file target is an explicit folder
+                    // beside the executable; otherwise it is the OS log directory.
+                    // Either way `file_name` stays None so the plugin derives it
+                    // from `package_info().name` — a single source of truth that
+                    // `log_file_path()` mirrors, keeping the Dev Console correct
+                    // after `rename-project` rebrands the app.
+                    match portable::log_dir_preinit() {
+                        Some(path) => Target::new(TargetKind::Folder {
+                            path,
+                            file_name: None,
+                        }),
+                        None => Target::new(TargetKind::LogDir { file_name: None }),
+                    },
                     Target::new(TargetKind::Webview),
                 ])
                 .build(),
@@ -760,7 +857,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let config_dir = app.path().app_config_dir().unwrap_or_else(|err| {
+            let config_dir = portable::config_dir(app.handle()).unwrap_or_else(|err| {
                 log::error!(
                     "[settings] Failed to resolve app config dir: {err} — falling back to current directory"
                 );
@@ -770,6 +867,13 @@ pub fn run() {
             let settings_path = config_dir.join("settings.json");
             let initial_settings = load_settings_from_disk(&settings_path);
             let start_minimized = initial_settings.start_minimized;
+            let autostart_enabled = initial_settings.autostart_enabled;
+
+            // The OS launch entry is derived state: re-assert it from the stored
+            // preference so an entry removed externally (reinstall, cleanup tool)
+            // comes back, instead of the preference quietly becoming a lie. A
+            // development build logs and skips — see `src/autostart.rs`.
+            autostart::reconcile_on_startup(app.handle(), autostart_enabled);
 
             // Manage global application state container
             app.manage(AppState {
@@ -965,6 +1069,7 @@ mod tests {
             saved_window_height: 768,
             saved_window_x: 100,
             saved_window_y: 200,
+            autostart_enabled: true,
             global_hotkeys_enabled: true,
             global_hotkeys: vec![GlobalHotkeyBinding {
                 action: GlobalHotkeyAction::CheckUpdates,
@@ -996,6 +1101,7 @@ mod tests {
             saved_window_height: 768,
             saved_window_x: 100,
             saved_window_y: 200,
+            autostart_enabled: true,
             global_hotkeys_enabled: true,
             global_hotkeys: vec![GlobalHotkeyBinding {
                 action: GlobalHotkeyAction::ToggleWindow,

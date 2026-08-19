@@ -1,4 +1,4 @@
-import { createSignal, untrack } from 'solid-js';
+import { createSignal, createMemo, Show, untrack } from 'solid-js';
 import { commands } from '../bindings';
 import type { AppInfo } from '../bindings';
 import {
@@ -10,6 +10,7 @@ import {
   Check,
   FolderOpen,
   Download,
+  Package,
 } from '../lib/icons';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
@@ -34,6 +35,28 @@ interface AboutTabProps {
 
 export function AboutTab(props: AboutTabProps) {
   const [copied, setCopied] = createSignal(false);
+
+  /**
+   * Where the app is actually writing settings and logs.
+   *
+   * Worth surfacing because it is not always the OS config directory: dropping a
+   * file named `portable` beside the executable redirects everything into
+   * `<exe dir>/Data`, and a user who does that (or receives a pre-configured
+   * portable copy) should be able to confirm it without hunting through the
+   * filesystem. Falls back to a neutral placeholder in the browser preview,
+   * where there is no backend to ask.
+   */
+  const storage = createMemo(async () => {
+    if (!isTauri) {
+      return { active: false, data_dir: 'Browser preview — nothing is written to disk' };
+    }
+    try {
+      return await commands.getPortableStatus();
+    } catch (err: unknown) {
+      console.warn('Portable status query failed:', err);
+      return { active: false, data_dir: 'unavailable' };
+    }
+  });
 
   /**
    * Builds the shared markdown diagnostics block used by both copy and report export.
@@ -187,6 +210,26 @@ export function AboutTab(props: AboutTabProps) {
             <span class="tile-title">Tech Stack Standards</span>
           </div>
           <span class="tile-value">Bun 1.3+ | SolidJS 2 | Rust 2024</span>
+        </div>
+
+        <div class="info-tile info-tile-wide">
+          <div class="tile-header">
+            <Package size={16} color="var(--accent-cyan)" />
+            <span class="tile-title">
+              Data Location {storage().active ? '(Portable)' : '(System)'}
+            </span>
+          </div>
+          {/* The path can be long, so it gets the full grid width and its own
+              wrapping rule rather than being truncated into uselessness. */}
+          <span class="tile-value tile-value-path" title={storage().data_dir}>
+            {storage().data_dir}
+          </span>
+          <Show when={storage().active}>
+            <span class="tile-hint">
+              A <code>portable</code> marker file beside the executable is redirecting settings and
+              logs here instead of the OS directories.
+            </span>
+          </Show>
         </div>
       </div>
 

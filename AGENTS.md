@@ -333,7 +333,10 @@ rtk git push origin main
    - Never touch `localStorage` directly — use `readStored` / `writeStored` / `removeStored` from `src/lib/storage.ts`, which degrade a disabled or full store to "not persisted" instead of throwing into the render tree.
    - Give every `createEffect` apply phase and every `onSettled` callback a **block body**, unless it genuinely returns a cleanup function. Solid calls the return value as cleanup, so a concise arrow that happens to return a string or a number halts the reactive system on the effect's next run (`REACTIVITY_HALTED`).
    - Run frontend tests with `bun run test`, never a bare `bun test`: the script passes `--conditions browser` because `solid-js` resolves to its **SSR build** by default in Bun, where effects never run.
-   - Grant Tauri permissions explicitly rather than relying on a plugin's `:default` set, so an upstream widening of that set cannot silently broaden this app's surface.
+   - Grant Tauri permissions explicitly rather than relying on a plugin's `:default` set, so an upstream widening of that set cannot silently broaden this app's surface. Better still, keep the capability out of the webview entirely when a Rust command can own it — autostart needs no webview permission at all now.
+   - Anything whose effect depends on the **path of the running executable** — OS autostart being the canonical case — must be guarded by `cfg!(debug_assertions)`, because a development binary lives in `target/debug` and would otherwise overwrite the installed app's registration.
+   - Resolve every app-written path through `portable::config_dir()` / `portable::log_dir()`, never `app.path().app_config_dir()` directly, or portable mode silently writes half its state to the OS directories.
+   - Adding, renaming or removing an IPC command means running `bun run tauri dev` once so `src/bindings.ts` regenerates; `test/bindings.test.ts` fails the commit otherwise.
 
 5. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:
    - **Component separation** (Round 14 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.

@@ -56,6 +56,29 @@ export const commands = {
 	 *  can grant the permission global hotkeys need there. A no-op elsewhere.
 	 */
 	openAccessibilitySettings: () => __TAURI_INVOKE<null>("open_accessibility_settings"),
+	/**
+	 *  Tauri IPC command: reports the autostart preference and the real OS state.
+	 * 
+	 *  The two can disagree in a development build, which deliberately never writes
+	 *  the OS entry — see `src/autostart.rs` for why.
+	 */
+	getAutostart: () => __TAURI_INVOKE<AutostartStatus>("get_autostart"),
+	/**
+	 *  Tauri IPC command: records the autostart preference and reconciles the OS entry.
+	 * 
+	 *  Disk-first, like every other preference writer here: the setting is persisted
+	 *  before the OS is touched, so a failure to write the launch entry cannot leave
+	 *  disk and memory disagreeing. The returned status tells the UI what actually
+	 *  happened, including the development-build case where the OS was left alone.
+	 */
+	setAutostart: (enabled: boolean) => __TAURI_INVOKE<AutostartStatus>("set_autostart", { enabled }),
+	/**
+	 *  Tauri IPC command: reports whether the app is running in portable mode.
+	 * 
+	 *  The frontend surfaces this in the About tab so a user can tell at a glance
+	 *  where their settings are being written.
+	 */
+	getPortableStatus: () => __TAURI_INVOKE<PortableStatus>("get_portable_status"),
 };
 
 /* Types */
@@ -99,6 +122,16 @@ export type AppSettings = {
 	/**  Last persisted window Y in physical pixels (`i32::MIN` = unset). */
 	saved_window_y?: number,
 	/**
+	 *  Whether the app should register itself to start at OS login.
+	 * 
+	 *  This is the *source of truth*; the OS launch entry is a derived effect,
+	 *  reconciled at startup by [`autostart::reconcile_on_startup`]. Keeping the
+	 *  intent here rather than reading it back from the OS is what lets a
+	 *  development build record the preference without touching the installed
+	 *  application's registration — see `src/autostart.rs`.
+	 */
+	autostart_enabled?: boolean,
+	/**
 	 *  Whether the OS-wide global hotkey listener runs at all. Off by default:
 	 *  it installs a system keyboard hook, which is opt-in behaviour.
 	 */
@@ -108,6 +141,25 @@ export type AppSettings = {
 	 *  no entry (or an empty spec) are unbound.
 	 */
 	global_hotkeys?: GlobalHotkeyBinding[],
+};
+
+/**  What the frontend needs to render the autostart toggle honestly. */
+export type AutostartStatus = {
+	/**  The user's stored preference — the source of truth for the toggle. */
+	enabled: boolean,
+	/**
+	 *  Whether the OS launch entry is actually registered right now.
+	 * 
+	 *  In a release build this tracks `enabled`. In a dev build it reports the
+	 *  *installed* application's state, which is deliberately left alone, so the
+	 *  two can legitimately disagree.
+	 */
+	os_registered: boolean,
+	/**
+	 *  True when this build refuses to write the OS entry, so the UI can explain
+	 *  why flipping the switch had no effect outside the app.
+	 */
+	dev_build: boolean,
 };
 
 /**
@@ -146,6 +198,14 @@ export type GlobalHotkeyStatus = {
 	error: string | null,
 	/**  macOS: the Accessibility permission is missing and must be granted. */
 	needs_accessibility: boolean,
+};
+
+/**  Where the app writes, and whether that is beside the executable. */
+export type PortableStatus = {
+	/**  True when a `portable` marker file was found next to the executable. */
+	active: boolean,
+	/**  Absolute path of the directory holding `settings.json`. */
+	data_dir: string,
 };
 
 /**  System and process diagnostic telemetry returned by `get_system_stats`. */

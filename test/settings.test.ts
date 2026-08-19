@@ -13,6 +13,7 @@ const valid: Required<AppSettings> = {
   saved_window_height: 720,
   saved_window_x: 50,
   saved_window_y: 75,
+  autostart_enabled: true,
   global_hotkeys_enabled: true,
   global_hotkeys: [{ action: 'toggle_window', spec: 'Ctrl+Opt+Space' }],
 };

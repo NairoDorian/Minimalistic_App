@@ -34,6 +34,7 @@ export const FALLBACK_SETTINGS: Required<AppSettings> = {
   saved_window_height: 0,
   saved_window_x: UNSET_WINDOW_POSITION,
   saved_window_y: UNSET_WINDOW_POSITION,
+  autostart_enabled: false,
   global_hotkeys_enabled: false,
   global_hotkeys: [],
 };
@@ -98,6 +99,7 @@ export function sanitizeSettings(input: unknown, fallback: AppSettings): Require
     check_updates_on_launch:
       fallback.check_updates_on_launch ?? FALLBACK_SETTINGS.check_updates_on_launch,
     theme_accent: fallback.theme_accent ?? FALLBACK_SETTINGS.theme_accent,
+    autostart_enabled: fallback.autostart_enabled ?? FALLBACK_SETTINGS.autostart_enabled,
     remember_window_size: fallback.remember_window_size ?? FALLBACK_SETTINGS.remember_window_size,
     remember_window_position:
       fallback.remember_window_position ?? FALLBACK_SETTINGS.remember_window_position,
@@ -142,6 +144,12 @@ export function sanitizeSettings(input: unknown, fallback: AppSettings): Require
       typeof raw.theme_accent === 'string' && THEME_PRESETS.some((p) => p.id === raw.theme_accent)
         ? raw.theme_accent
         : base.theme_accent,
+    // Importing a backup can therefore ask the app to start at OS login. That
+    // is intentional and matches every other preference, but it is a
+    // security-relevant one, so it goes through the same strict boolean check
+    // and — crucially — the backend still refuses to write the OS entry from a
+    // development build (`src-tauri/src/autostart.rs`).
+    autostart_enabled: bool('autostart_enabled', base.autostart_enabled),
     remember_window_size: bool('remember_window_size', base.remember_window_size),
     remember_window_position: bool('remember_window_position', base.remember_window_position),
     saved_window_width: int('saved_window_width', base.saved_window_width, 0),

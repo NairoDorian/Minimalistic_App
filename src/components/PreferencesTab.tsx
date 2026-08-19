@@ -1,7 +1,6 @@
-import { createSignal, createEffect, createMemo, Loading } from 'solid-js';
-import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
+import { createSignal, createEffect, createMemo, Loading, Show } from 'solid-js';
 import { commands } from '../bindings';
-import type { AppSettings as BindingAppSettings } from '../bindings';
+import type { AppSettings as BindingAppSettings, AutostartStatus } from '../bindings';
 import { Power, Minimize2, Maximize2, Move3d, Palette, EyeOff, RefreshCw } from '../lib/icons';
 import { ToggleSwitch } from './ToggleSwitch';
 import { UpdateChecker } from './UpdateChecker';
@@ -36,8 +35,17 @@ interface PreferencesTabProps {
  * rather than from seven signals that populate at slightly different moments.
  */
 interface PersistedPreferences {
-  /** Whether the OS launch agent is currently registered (autostart plugin). */
-  autostartEnabled: boolean;
+  /**
+   * The stored "start at OS login" preference, plus whether the OS entry is
+   * actually registered and whether this build refuses to write it.
+   *
+   * Autostart is deliberately NOT driven through `@tauri-apps/plugin-autostart`
+   * from here. That plugin registers the path of the *running* executable, so a
+   * click during `tauri dev` would point the OS at `src-tauri/target/debug` and
+   * overwrite the installed app's launch entry. The backend owns the write and
+   * skips it in a development build — see `src-tauri/src/autostart.rs`.
+   */
+  autostart: AutostartStatus;
   /** The persisted settings struct, or factory defaults when it cannot be read. */
   settings: AppSettings;
   /** The accent that will be applied — falls back when the stored id is unknown. */
@@ -72,16 +80,16 @@ export function PreferencesTab(props: PreferencesTabProps) {
   const persisted = createMemo(async (): Promise<PersistedPreferences> => {
     if (!isTauri) {
       return {
-        autostartEnabled: false,
+        autostart: { enabled: false, os_registered: false, dev_build: false },
         settings: FALLBACK_SETTINGS,
         accent: resolveThemeAccent(readStored(THEME_ACCENT_STORAGE_KEY)),
       };
     }
 
-    const [autostartEnabled, settings] = await Promise.all([
-      isEnabled().catch((err: unknown) => {
-        console.warn('Autostart check failed:', err);
-        return false;
+    const [autostart, settings] = await Promise.all([
+      commands.getAutostart().catch((err: unknown) => {
+        console.warn('Autostart status query failed:', err);
+        return { enabled: false, os_registered: false, dev_build: false } satisfies AutostartStatus;
       }),
       loadSettingsWithRetry(0),
     ]);
@@ -91,7 +99,7 @@ export function PreferencesTab(props: PreferencesTabProps) {
     // them all optional in the generated bindings.
     const resolved = settings ?? FALLBACK_SETTINGS;
     return {
-      autostartEnabled,
+      autostart,
       settings: resolved,
       accent: resolveThemeAccent(resolved.theme_accent),
     };
@@ -103,7 +111,13 @@ export function PreferencesTab(props: PreferencesTabProps) {
    * documented shape for "starts from a reactive source but needs a local
    * value", and it removes the copy-async-result-into-a-signal step entirely.
    */
-  const [autostart, setAutostart] = createSignal(() => persisted().autostartEnabled);
+  const [autostart, setAutostart] = createSignal(() => persisted().autostart.enabled);
+  /**
+   * True when this build records the preference but deliberately does not write
+   * the OS launch entry. Surfaced under the toggle so the switch is never
+   * silently lying about what the operating system will do.
+   */
+  const isDevBuild = () => persisted().autostart.dev_build;
   const [minimizeToTray, setMinimizeToTray] = createSignal(
     () => persisted().settings.minimize_to_tray ?? false
   );
@@ -169,26 +183,32 @@ export function PreferencesTab(props: PreferencesTabProps) {
   const handleAutostartToggle = async (newValue: boolean) => {
     setAutostart(newValue);
 
-    if (isTauri) {
-      try {
-        if (newValue) {
-          await enable();
-          toast.success('Autostart on OS launch enabled');
-          props.onStatusChange('Autostart enabled for OS startup');
-        } else {
-          await disable();
-          toast.info('Autostart disabled');
-          props.onStatusChange('Autostart disabled');
-        }
-      } catch (error: unknown) {
-        console.error('Failed to toggle autostart:', error);
-        setAutostart(!newValue);
-        toast.error('Failed to update autostart setting');
-        props.onStatusChange('Error setting autostart');
-      }
-    } else {
+    if (!isTauri) {
       toast.info(`[Web Preview] Autostart set to ${newValue}`);
       props.onStatusChange(`[Web Preview] Autostart set to ${newValue}`);
+      return;
+    }
+
+    try {
+      // The backend persists the preference first and only then touches the OS,
+      // and it reports back whether the OS entry was actually written.
+      const status = await commands.setAutostart(newValue);
+
+      if (status.dev_build) {
+        toast.warning('Preference saved — a dev build never writes the OS launch entry');
+        props.onStatusChange('Autostart preference saved (dev build: OS entry untouched)');
+      } else if (newValue) {
+        toast.success('Autostart on OS launch enabled');
+        props.onStatusChange('Autostart enabled for OS startup');
+      } else {
+        toast.info('Autostart disabled');
+        props.onStatusChange('Autostart disabled');
+      }
+    } catch (error: unknown) {
+      console.error('Failed to toggle autostart:', error);
+      setAutostart(!newValue);
+      toast.error('Failed to update autostart setting');
+      props.onStatusChange('Error setting autostart');
     }
   };
 
@@ -383,6 +403,17 @@ export function PreferencesTab(props: PreferencesTabProps) {
           ariaLabel="Start at OS launch"
           onToggle={handleAutostartToggle}
         />
+
+        {/* A development binary lives in target/debug, so registering it with the
+            OS would replace the installed app's launch entry with a path into a
+            build directory. The backend refuses; say so rather than letting the
+            toggle imply something happened outside the app. */}
+        <Show when={isDevBuild()}>
+          <p class="setting-note" role="note">
+            Development build — the preference is saved, but the OS launch entry is left untouched
+            so it cannot overwrite the installed app's registration.
+          </p>
+        </Show>
 
         {/* Toggle 2: Minimize to taskbar on close */}
         <ToggleSwitch

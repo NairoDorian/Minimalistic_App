@@ -88,17 +88,22 @@ graph TD
 
 ## 🧪 Unit Test Layout
 
-| File                      | Covers                                                                                                                           |
-| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------- |
-| `test/keyboard.test.ts`   | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener. |
-| `test/shortcuts.test.ts`  | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                      |
-| `test/logViewer.test.ts`  | Log severity classification and live-vs-disk line reconciliation.                                                                |
-| `test/settings.test.ts`   | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation.                                         |
-| `test/theme.test.ts`      | Theme preset integrity, pure accent resolution (`resolveThemeAccent`), and CSS custom-property application.                      |
-| `test/storage.test.ts`    | Fail-soft `localStorage` helpers — working store, a store that throws on every call, and a missing global.                       |
-| `test/reactivity.test.ts` | SolidJS 2 contracts the components depend on: writable derived signals, async-memo not-ready reads, and the effect-cleanup rule. |
-| `test/version.test.ts`    | SemVer format of `APP_VERSION`.                                                                                                  |
-| `src-tauri/src/lib.rs`    | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, and window-geometry helpers.                                         |
+| File                               | Covers                                                                                                                           |
+| :--------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| `test/keyboard.test.ts`            | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener. |
+| `test/shortcuts.test.ts`           | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                      |
+| `test/logViewer.test.ts`           | Log severity classification and live-vs-disk line reconciliation.                                                                |
+| `test/settings.test.ts`            | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation.                                         |
+| `test/theme.test.ts`               | Theme preset integrity, pure accent resolution (`resolveThemeAccent`), and CSS custom-property application.                      |
+| `test/storage.test.ts`             | Fail-soft `localStorage` helpers — working store, a store that throws on every call, and a missing global.                       |
+| `test/reactivity.test.ts`          | SolidJS 2 contracts the components depend on: writable derived signals, async-memo not-ready reads, and the effect-cleanup rule. |
+| `test/bindings.test.ts`            | Rust ↔ TypeScript IPC contract — the `collect_commands![…]` registry must match the generated wrappers in `src/bindings.ts`.     |
+| `test/version.test.ts`             | SemVer format of `APP_VERSION`.                                                                                                  |
+| `src-tauri/src/lib.rs`             | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, window geometry, and end-to-end settings repair.                     |
+| `src-tauri/src/settings_repair.rs` | Field-level repair — wrong types, missing keys, unknown keys preserved, nested collections, path parsing, default merging.       |
+| `src-tauri/src/portable.rs`        | Portable-mode marker detection and data-directory resolution.                                                                    |
+| `src-tauri/src/autostart.rs`       | Development-build detection and the IPC status shape.                                                                            |
+| `src-tauri/src/panic_log.rs`       | Panic description — string, formatted and non-string payloads, and named background threads.                                     |
 
 ---
 

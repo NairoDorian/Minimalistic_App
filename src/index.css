@@ -748,6 +748,34 @@ input:checked + .slider:before {
   user-select: text;
 }
 
+/* A tile whose content is a filesystem path needs the full grid width — the
+   two-column layout would otherwise force a useless truncation. */
+.info-tile-wide {
+  grid-column: 1 / -1;
+}
+
+/* Paths are read character by character, so they get a monospace face and are
+   allowed to wrap mid-string rather than overflowing the tile. */
+.tile-value-path {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--text-muted);
+}
+
+.tile-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.tile-hint code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--accent-cyan);
+}
+
 .about-notes-box {
   background: rgba(0, 242, 254, 0.03);
   border: 1px solid rgba(0, 242, 254, 0.15);
@@ -1895,4 +1923,17 @@ input:checked + .slider:before {
   .modal-close-btn {
     border: 1px solid ButtonText;
   }
+}
+
+/* Explanatory note under a setting whose effect is conditional — currently the
+   development-build autostart guard. Indented to the setting row's text column
+   so it reads as belonging to the row above it rather than as a new section. */
+.setting-note {
+  margin: -2px 12px 6px 54px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent-cyan);
+  padding-left: 8px;
+  opacity: 0.85;
 }

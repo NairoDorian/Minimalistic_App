@@ -658,3 +658,25 @@ export const AlertOctagon: LucideIcon = (props) => (
     <path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z" />
   </svg>
 );
+
+/** Lucide `package` — a shipping box. Used for the data-location tile, where it
+ *  reads as "where this app's contents live", and carries the portable-mode
+ *  connotation of something self-contained you can pick up and move. */
+export const Package: LucideIcon = (props) => (
+  <svg
+    width={props.size ?? 24}
+    height={props.size ?? 24}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={props.color ?? 'currentColor'}
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <path d="m7.5 4.27 9 5.15" />
+    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+    <path d="m3.3 7 8.7 5 8.7-5" />
+    <path d="M12 22V12" />
+  </svg>
+);

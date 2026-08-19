@@ -8,6 +8,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.24.0] - 2026-08-20
+
+### Round 24 — More From the Reference Implementation: Autostart Safety, Portable Mode, Crash Evidence, IPC Contract Test
+
+Second pass through [AIVORelay](https://github.com/MaxITService/AIVORelay). One
+of its guards turned out to describe a **real bug in this template**; the rest
+are capabilities a starting point should ship.
+
+#### 🐞 Fixed: a dev session could sabotage your installed app's autostart
+
+- **`@tauri-apps/plugin-autostart`'s `enable()` registers the path of the
+  _running_ executable.** The Preferences toggle called it directly from the
+  frontend, so one click during `bun run tauri dev` replaced the installed
+  application's OS launch entry with a path into `src-tauri/target/debug/`. The
+  user finds out at the next reboot — either nothing starts, because the target
+  directory was cleaned, or a stale debug build starts instead of the app they
+  installed. Nothing about it is visible while it happens, and developing a
+  desktop app means toggling its preferences.
+- **New `src-tauri/src/autostart.rs`** takes ownership of the write:
+  - the user's intent is stored in `AppSettings.autostart_enabled`, and the OS
+    entry is **derived state** reconciled at startup — so an entry removed
+    externally (reinstall, cleanup tool) comes back instead of the preference
+    quietly becoming a lie;
+  - a **development build never writes it** (`cfg!(debug_assertions)`), records
+    the preference anyway so it survives into the release build, and reports
+    `dev_build: true` to the UI, which shows a note under the toggle rather than
+    implying something happened outside the app;
+  - new `get_autostart` / `set_autostart` IPC commands, disk-first like every
+    other preference writer here.
+- **The webview now needs no autostart permission at all.**
+  `autostart:allow-enable` / `allow-disable` / `allow-is-enabled` are gone from
+  `capabilities/default.json` and `@tauri-apps/plugin-autostart` is gone from
+  `package.json` — the capability surface and the hazard were removed together.
+- Verified live: launching the debug build logs
+  `[autostart] Development build: leaving the OS launch entry untouched`.
+
+#### 🧳 Portable Mode — `src-tauri/src/portable.rs` (new)
+
+- An empty file named `portable` beside the executable redirects settings and
+  logs to `<exe dir>/Data/`. Runs from removable media, leaves no trace on the
+  host — which matters for an app that can register itself at OS startup and
+  install a global keyboard hook — and is the quickest way to get a clean
+  profile for testing without disturbing your real one.
+- Resolved **once** at process start, before the logging plugin is registered, so
+  both `settings.json` and the rotating log file follow it. An unwritable
+  location falls back to the OS directories with a message rather than failing to
+  launch.
+- New `get_portable_status` IPC command; the About tab gained a full-width
+  **Data Location** tile showing the active directory and whether it is portable.
+- Verified live: with a marker present, the app logged
+  `[portable] Portable mode active`, wrote `Data/settings.json` and
+  `Data/logs/Minimalistic App.log`, and created nothing in the OS directories.
+
+#### 💥 Crashes Leave Evidence — `src-tauri/src/panic_log.rs` (new)
+
+- Rust's default panic handler writes to **stderr**, which a bundled desktop app
+  does not have: Windows builds with `windows_subsystem = "windows"` precisely so
+  no console appears, and a macOS `.app` from Finder has nowhere for it to go. So
+  the one message explaining a crash went to a stream nobody reads.
+- Two things made that worse here: the release profile sets `panic = "abort"`, so
+  there is no unwinding and no second chance; and the global hotkey engine runs an
+  OS keyboard hook on a **background thread**, where a panic never reaches a
+  user-facing error boundary.
+- A hook now logs the panic — message, source location, and **thread name** —
+  through the `log` facade before the process dies, so it reaches the rotating log
+  file the bug-report template already asks users to attach, and the in-app Dev
+  Console live. The default handler still runs afterwards, so terminal and
+  `cargo test` behaviour is unchanged.
+
+#### 🔗 IPC Contract Drift Is Now a Test — `test/bindings.test.ts` (new)
+
+- `src/bindings.ts` is generated **at runtime** by the debug build, so adding a
+  Rust command and committing without launching the app leaves the frontend
+  calling a contract the backend no longer has. A comment in `lib.rs` claimed a
+  freshness test existed; none did.
+- The test compares the `collect_commands![…]` registry against the generated
+  wrappers **as source text**. It caught real drift on its first run (the three
+  commands added above).
+- It has to be a source comparison, and the reason is worth recording: a Rust test
+  that re-renders the bindings from `specta_builder()` links `tauri::Wry`, and the
+  resulting test executable fails to start on Windows with
+  `STATUS_ENTRYPOINT_NOT_FOUND` because the webview runtime is not beside it. That
+  approach was implemented, diagnosed, and abandoned; the stale comment in
+  `lib.rs` now says so.
+- Honest limitation, stated in the test: it catches a command added, renamed or
+  removed — not a changed _signature_.
+
+#### 🧪 Tests
+
+- **Rust 132 → 143**, **frontend 130 → 135**. New coverage for portable-mode
+  resolution, dev-build detection, panic description (including from a named
+  background thread), and the IPC contract.
+- `Required<AppSettings>` made the compiler enumerate every place the new
+  `autostart_enabled` field had to be handled, including the untrusted-backup
+  sanitizer in `src/lib/settingsBackup.ts`.
+
+#### 📖 Documentation
+
+- `README.md` — four new capability sections.
+- `SECURITY.md` — autostart's removal from the capability list explained; new
+  §2 on portable mode, with its limits stated plainly (it is not encryption, and
+  the OS autostart entry is inherently not portable); IPC table updated to
+  nineteen commands.
+- `AGENTS.md` — new rules: guard anything that depends on the running
+  executable's path behind `cfg!(debug_assertions)`; resolve app-written paths
+  through `portable::`; regenerate bindings when the command surface changes.
+- `TESTING.md` — the five new test files in the layout table.
+
 ## [0.23.0] - 2026-08-20
 
 ### Round 23 — Practices Borrowed From a Production Tauri App: 2.6× Faster Dev Loop, Self-Healing Settings
