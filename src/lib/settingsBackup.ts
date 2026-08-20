@@ -19,11 +19,25 @@ export const SETTINGS_BACKUP_MIME = 'application/json';
 const UNSET_WINDOW_POSITION = -2147483648;
 
 /**
+ * The version a document carries when it predates schema versioning.
+ *
+ * Mirrors the `#[serde(default)]` on `AppSettings::settings_version` in
+ * `src-tauri/src/lib.rs`, which is `0` for the same reason: "no version
+ * recorded" and "version 0" are the same statement.
+ */
+const UNVERSIONED = 0;
+
+/**
  * Factory defaults used when the import fallback itself is unavailable.
  * Typed `Required<AppSettings>` so every field is guaranteed present — this is
  * the terminal fallback the sanitizer resolves to.
  */
 export const FALLBACK_SETTINGS: Required<AppSettings> = {
+  // Deliberately the legacy value, not the current schema version. This
+  // constant is the fallback for an *imported document of unknown provenance*,
+  // and claiming such a document is current would make the backend skip
+  // migrations it may genuinely need. See `sanitizeSettings`.
+  settings_version: UNVERSIONED,
   minimize_to_tray: false,
   start_minimized: false,
   check_updates_on_launch: true,
@@ -94,6 +108,7 @@ export function sanitizeSettings(input: unknown, fallback: AppSettings): Require
   // pass structs straight from the backend, where every field but one is
   // optional, so a missing field must never leak `undefined` into the result.
   const base: Required<AppSettings> = {
+    settings_version: fallback.settings_version ?? FALLBACK_SETTINGS.settings_version,
     minimize_to_tray: fallback.minimize_to_tray ?? FALLBACK_SETTINGS.minimize_to_tray,
     start_minimized: fallback.start_minimized ?? FALLBACK_SETTINGS.start_minimized,
     check_updates_on_launch:
@@ -137,6 +152,27 @@ export function sanitizeSettings(input: unknown, fallback: AppSettings): Require
   };
 
   return {
+    // Carried through from the backup rather than stamped to the current
+    // schema, and the distinction matters.
+    //
+    // An imported file has the same unknown provenance as a `settings.json`
+    // found on disk: it may have been exported by an older build. Overwriting
+    // its version with "current" would tell the backend there is nothing to
+    // migrate, and every future migration step would then be skipped for
+    // exactly the documents that need it most. Preserving it means the file is
+    // written back as-is and the migration ladder in
+    // `src-tauri/src/settings_migrate.rs` picks it up on the next launch — the
+    // same path a legacy file on disk takes.
+    //
+    // A missing or unusable value becomes `UNVERSIONED`, which is the
+    // conservative reading: re-running an idempotent migration costs nothing,
+    // skipping a needed one leaves a broken document.
+    settings_version:
+      typeof raw.settings_version === 'number' &&
+      Number.isInteger(raw.settings_version) &&
+      raw.settings_version >= 0
+        ? raw.settings_version
+        : UNVERSIONED,
     minimize_to_tray: bool('minimize_to_tray', base.minimize_to_tray),
     start_minimized: bool('start_minimized', base.start_minimized),
     check_updates_on_launch: bool('check_updates_on_launch', base.check_updates_on_launch),

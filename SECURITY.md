@@ -99,6 +99,15 @@ Caveats worth stating plainly:
 - Detection is by file presence only, resolved once at startup. A location that
   cannot be written to falls back to the OS directories with a message on stdout
   rather than failing to launch.
+- **The webview engine has its own storage, and it only follows on Windows.**
+  Redirecting what the app writes says nothing about what WebView2 / WKWebView /
+  WebKitGTK write underneath it — localStorage, IndexedDB, cookies, caches.
+  `src-tauri/src/webview_runtime.rs` points WebView2's user-data folder into
+  `Data/EBWebView/` via `WEBVIEW2_USER_DATA_FOLDER`. WKWebView exposes a
+  `dataStoreIdentifier` UUID rather than a path and WebKitGTK has no documented
+  override, so **on macOS and Linux the engine still writes into the user
+  profile**. If "leaves nothing behind" is a requirement you are making to
+  someone, that is the limit to state.
 
 ### 3. Global Hotkeys — a System-Wide Keyboard Hook
 
@@ -140,6 +149,53 @@ For features requiring sensitive credentials (e.g. API tokens, encryption keys):
   - **Windows**: Use Windows Data Protection API (**DPAPI**) (`CryptProtectData` / `CryptUnprotectData`).
   - **macOS**: Use Apple **Keychain Services**.
   - **Linux**: Use **Secret Service API** / Freedesktop Keyring (`libsecret`).
+- The [`keyring`](https://docs.rs/keyring) crate wraps all three behind one API;
+  the reference implementation this template borrows from uses it exactly that
+  way (`.docs/aivorelay/src-tauri/src/secure_keys.rs`). This template ships no
+  such module because it stores no secrets — but note that if you add one,
+  `settings.json` is the wrong home for it, and the backup export in
+  `src/lib/settingsBackup.ts` would happily write it to a file the user emails
+  to someone.
+
+### 7. Untrusted Command-Line Input
+
+`src-tauri/src/cli.rs` parses the process arguments, and — through
+`tauri-plugin-single-instance` — the arguments of any _other_ process that tried
+to launch the app. Any local user or process able to start the binary can
+therefore reach that surface, so it is deliberately kept to the smallest set that
+carries no payload:
+
+- **No argument names a path, a URL, or a script.** The five behavioural flags
+  (`--autostart`, `--hidden`, `--show`, `--toggle`, `--quit`) are booleans; the
+  only value-taking flag, `--log-level`, accepts a fixed enumeration and treats
+  anything else as an ignorable typo. There is nothing to inject.
+- **The worst a forwarded argument can do is toggle or close the window.** That
+  is the same authority as clicking the tray icon, which the same local user
+  already has.
+- **Unrecognized arguments are ignored, not executed and not echoed to a shell.**
+  They are logged verbatim so a typo is discoverable, and go nowhere else.
+- If you add a flag that _does_ carry a payload — a file to open, a deep link to
+  follow — treat it as untrusted input from that moment on: validate it in Rust
+  before it reaches the webview, and remember that the forwarding path means the
+  value did not necessarily come from the user who is looking at the window.
+
+### 8. Webview Hardening in Release Builds
+
+`src-tauri/src/webview_hardening.rs` (Windows, engine level) and
+`src/lib/hardening.ts` (all platforms, DOM level) remove browser affordances that
+have no place in a shipped desktop application. The security-relevant one is
+**drag-and-drop navigation**: dropping any file onto an un-guarded webview makes
+it navigate to that file, replacing the application UI with rendered content
+from an arbitrary local path in the app's own window and origin. Both `dragover`
+and `drop` are cancelled — cancelling only `drop` leaves the behaviour intact,
+because without a cancelled `dragover` the element was never a drop target.
+
+Reload suppression (`F5`, `Ctrl+R`) is a robustness measure rather than a
+security one, but it is worth noting that a reload re-runs the whole frontend
+against the same live IPC surface, which is not a state most apps have tested.
+
+Both halves are compiled out / disabled in development builds so devtools and
+hot reload keep working.
 
 ---
 

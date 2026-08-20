@@ -3,6 +3,8 @@ import { sanitizeSettings, FALLBACK_SETTINGS, serializeSettings } from '../src/l
 import type { AppSettings } from '../src/bindings';
 
 const valid: Required<AppSettings> = {
+  // A backup exported by the current build records the schema it came from.
+  settings_version: 1,
   minimize_to_tray: true,
   start_minimized: false,
   check_updates_on_launch: true,
@@ -130,5 +132,38 @@ describe('Settings Backup Sanitizer', () => {
     const json = serializeSettings(valid);
     const parsed = JSON.parse(json) as unknown;
     expect(sanitizeSettings(parsed, FALLBACK_SETTINGS)).toEqual(valid);
+  });
+
+  describe('schema version', () => {
+    test('is carried through from the backup, not stamped to the current one', () => {
+      // The trap this guards: stamping "current" on import tells the backend
+      // there is nothing to migrate, so every future migration step is skipped
+      // for exactly the old documents that need it. Preserving the recorded
+      // version lets the ladder in `settings_migrate.rs` run on next launch.
+      const result = sanitizeSettings({ ...valid, settings_version: 0 }, FALLBACK_SETTINGS);
+      expect(result.settings_version).toBe(0);
+    });
+
+    test('treats a missing version as unversioned rather than current', () => {
+      // A backup exported before the field existed. `0` is the conservative
+      // reading — re-running an idempotent migration is free, skipping one is not.
+      const { settings_version: _omitted, ...withoutVersion } = valid;
+      const result = sanitizeSettings(withoutVersion, FALLBACK_SETTINGS);
+      expect(result.settings_version).toBe(0);
+    });
+
+    test('rejects a version that is not a non-negative integer', () => {
+      for (const bad of ['1', 1.5, -3, null, {}, Number.NaN]) {
+        const result = sanitizeSettings({ ...valid, settings_version: bad }, FALLBACK_SETTINGS);
+        expect(result.settings_version).toBe(0);
+      }
+    });
+
+    test('preserves a version from a newer build so it is not silently downgraded', () => {
+      // The backend refuses to migrate a document from the future; flattening
+      // the version here would hide that from it.
+      const result = sanitizeSettings({ ...valid, settings_version: 99 }, FALLBACK_SETTINGS);
+      expect(result.settings_version).toBe(99);
+    });
   });
 });

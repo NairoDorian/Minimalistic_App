@@ -8,6 +8,257 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.26.0] - 2026-08-20
+
+### Round 26 — Full Bun 1.4 Port: Prerelease Dependency Sweep
+
+#### 📦 Dependencies
+
+- **Upgrade**: All direct and transitive dependencies swept to their latest
+  prerelease versions via `bun run update-deps --prerelease` (TypeScript
+  7.1.0-dev, SolidJS 2 RC, oxlint, prettier, vite, etc.).
+- **Upgrade**: Replaced `@types/bun@^1.3.14` with `bun-types@^1.4.0` for
+  Bun 1.4 compatibility. `@types/bun` is a one-line DefinitelyTyped wrapper
+  that just does `/// <reference types="bun-types" />`, so depending on
+  `bun-types` directly gives the same type surface with the correct version.
+  `tsconfig.json` `"types"` array updated from `"bun"` to `"bun-types"` to
+  match.
+- **Added**: `bunfig.toml` with `env = false` (top-level) to disable automatic
+  `.env` file loading, and `linker = "isolated"` to enable Bun 1.4's global
+  virtual store (up to 7x faster warm installs after `rm -rf node_modules`).
+  Corrected Handy_V2's two `bunfig.toml` mistakes: the invalid
+  `globalVirtualStore` key and the mis-placed `env = false` under `[env]`.
+
+## [0.25.1] - 2026-08-20
+
+### Chore — Bun 1.4 type definitions upgrade
+
+#### 📦 Dependencies
+
+- **Upgrade**: Replaced `@types/bun@^1.3.14` with `bun-types@^1.4.0` for
+  Bun 1.4 compatibility. `@types/bun` is a one-line DefinitelyTyped wrapper
+  that just does `/// <reference types="bun-types" />`, so depending on
+  `bun-types` directly gives the same type surface with the correct version.
+  `tsconfig.json` `"types"` array updated from `"bun"` to `"bun-types"` to
+  match.
+- **Upgrade**: Bun runtime is `v1.4.0-canary.1`. `bun install` regenerated
+  the lockfile with `bun-types@1.4.0` replacing the old `@types/bun@1.3.14`;
+  lockfile format remains v1 (the canary does not yet auto-migrate to
+  `lockfileVersion: 2` — stable will migrate on next install).
+- **Added**: `bunfig.toml` with `env = false` to disable automatic `.env`
+  file loading — the Minimalistic App is a Tauri desktop app that manages its
+  own environment variables via `tauri.conf.json` build scripts. This prevents
+  stray `.env` files from injecting variables into the dev server / build.
+  Set to use `linker = "isolated"` to enable Bun 1.4's global virtual store
+  (up to 7x faster warm installs after `rm -rf node_modules`), replacing the
+  default `"hoisted"` linker. See: <https://bun.com/docs/pm/global-store>.
+  Note: Handy_V2's initial attempt used `globalVirtualStore` (invalid key)
+  and `env = false` under `[env]` (wrong syntax); Bun 1.4's strict TOML
+  parser rejects unknown keys, so the correction was `linker = "isolated"`
+  at top-level `env = false`.
+
+## [0.25.0] - 2026-08-20
+
+### Round 25 — The Dead Flag, the Reload Key, and the Leaky Portable Mode
+
+Third pass through [AIVORelay](https://github.com/MaxITService/AIVORelay), synced
+to `v1.0.32` (`708a7f3`). Two of its modules turned out to describe **live
+defects in this template** rather than missing features, which is the most useful
+thing a reference implementation can do for you.
+
+#### 🐞 Fixed: `--autostart` was registered and never read
+
+- `tauri_plugin_autostart::init(…, Some(vec!["--autostart"]))` has been in
+  `run()` since the autostart work in Round 24. It writes that argument into the
+  OS launch entry — and **nothing in the app ever looked at it**. A launch at
+  login was therefore indistinguishable from a double-click, so the window
+  appeared in the user's face at every boot unless they had separately turned on
+  `start_minimized`.
+- **New `src-tauri/src/cli.rs`** parses the flags a desktop app actually
+  receives, and `--autostart` now implies "start hidden". The two facts are kept
+  distinct (`launched_by_autostart` vs. `start_hidden`), because "we were
+  auto-started" is the fact and "do not show a window" is only one consequence of
+  it — a later feature that wants to skip the update check on a login launch
+  needs the fact.
+- The flag ORs with the `start_minimized` preference rather than replacing it, so
+  a user who wants a visible window on a manual launch still gets a quiet login.
+
+#### 🐞 Fixed: a second launch could not talk to the first
+
+- The single-instance callback took `|app, _args, _cwd|` and unconditionally
+  showed the window. The plugin was handing us the blocked process's argv and we
+  were throwing it away.
+- Now the forwarded argv is re-parsed and acted on: **`--show`**, **`--toggle`**,
+  **`--quit`**. That is what makes `app.exe --toggle` work from a desktop
+  shortcut, a scheduled task, a stream-deck button, or a script — the standard
+  way a tray application is driven from outside itself.
+- A duplicate `--autostart` launch (fast user switch, session restore) is now
+  ignored instead of raising the window, and anything unrecognized still falls
+  back to "show me", which is why most second launches happen at all.
+- `request_quit()` extracted so the tray menu and a forwarded `--quit` share one
+  ordering: set `is_quitting` **first** (or `CloseRequested` just hides the
+  window and leaves a headless process behind), detach the OS keyboard hook, then
+  close.
+
+#### 🐞 Fixed: portable mode was not portable on Windows
+
+- `portable.rs` redirected everything **this app** writes. It had no effect on
+  what the **webview engine** writes underneath it — WebView2 kept creating
+  `%LOCALAPPDATA%\<identifier>\EBWebView\` for localStorage, IndexedDB, cookies
+  and caches. Since this template's localStorage holds the active tab, theme and
+  shortcut overrides, "run it from a USB stick, leave no trace" was false.
+- **New `src-tauri/src/webview_runtime.rs`** points the engine's user-data folder
+  into `<exe dir>/Data/EBWebView/` when the portable marker is present.
+- The obvious route does not work and the module says why: `data_directory` in
+  `tauri.conf.json` is resolved by Tauri **relative to the OS local-data
+  directory** and absolute paths are rejected outright, so a declaratively
+  configured window can never point outside the user profile. Only the
+  `WEBVIEW2_USER_DATA_FOLDER` loader variable can, set before the first window
+  exists.
+- **Verified empirically, not assumed**: with the variable set the `EBWebView`
+  folder appears at the requested path and the default location is left untouched.
+- macOS and Linux are documented as **not** covered, with the reason (WKWebView
+  offers a `dataStoreIdentifier` UUID rather than a path; WebKitGTK has no
+  documented override). A template that implies a guarantee it cannot keep is
+  worse than one that states the limit.
+
+#### 🛡️ A shipped build no longer behaves like a web browser
+
+Left at defaults, a release Tauri app answers `F5` and `Ctrl+R` by **reloading
+the webview and destroying every bit of in-memory state**, `Ctrl+P` with a print
+dialog for its own UI, `Ctrl+F` with the engine's find bar drawn over the app,
+and `Ctrl+±` by zooming the layout apart. Users find these by accident, because
+they are muscle memory from the browser next door.
+
+- **`src-tauri/src/webview_hardening.rs` (new)** switches the accelerators off
+  inside WebView2 (`AreBrowserAcceleratorKeysEnabled`). This is the real fix —
+  the keystroke never becomes a browser command — but the switch exists only on
+  Windows.
+- **`src/lib/hardening.ts` (new)** does the same job with `preventDefault`, which
+  is the only option on macOS (WKWebView) and Linux (WebKitGTK), and additionally
+  covers what no engine flag addresses:
+  - **a dropped file navigating the app away.** Drag any file onto a webview and
+    it navigates to it: the entire UI is replaced by a PDF viewer with no back
+    button, recoverable only by restarting. Both `dragover` and `drop` must be
+    cancelled — cancelling only `drop` looks right and does nothing, because
+    without a cancelled `dragover` the element was never a drop target.
+  - the browser context menu (Reload / Back / View Source), with a
+    `data-context-menu` opt-out for a future custom menu.
+- **What is deliberately not blocked**: `Ctrl+C/V/X/Z/A` are OS text-editing
+  shortcuts, not browser ones; and nothing at all is intercepted while focus is
+  in a text field, where `Ctrl+F` means "find in this box".
+- **Development builds are untouched.** The Rust half is `#[cfg]`-compiled out
+  and the TypeScript half checks `import.meta.env.PROD`, so `F5` and devtools
+  still work while you are building the frontend. A plain browser preview is also
+  left alone — swallowing `F5` there would be baffling.
+
+#### 🗂️ Versioned settings migration — `src-tauri/src/settings_migrate.rs` (new)
+
+`settings_repair.rs` (Round 23) heals a document whose **types** are wrong. It is
+structurally blind to the other failure mode, which is the more common one in a
+long-lived app: _the document deserializes perfectly and means the wrong thing._
+
+- **A worked first step, not a placeholder.** `global_hotkeys` has always been a
+  map in disguise — at most one binding per action — and nothing enforced that on
+  the way in from disk. The two consumers disagreed about what a duplicate means:
+  `bindings_for_ui` uses `.find()` (**first wins**, and that is what Preferences
+  shows), while `GlobalHotkeys::apply` registers **every** entry. So a settings
+  file with two `toggle_window` entries gave the user two live system-wide
+  chords while the UI showed one, and the second was invisible and unremovable.
+  The v0 → v1 step enforces one binding per action and one action per chord.
+- The asymmetry is instructive: `set_global_hotkey` already rejected a chord
+  bound to another action, and `sanitizeGlobalHotkeys` in
+  `src/lib/settingsBackup.ts` already dropped duplicate actions on import. Only
+  the disk loader had no opinion — which is how this survives review, because
+  each path looks correct on its own.
+- **`settings_version` had to be added before it was needed.** A file written by
+  a build with no version field is indistinguishable from one written at whatever
+  version the field was introduced. Note the deliberate asymmetry:
+  `#[serde(default)]` yields `0` ("predates versioning") while
+  `AppSettings::default()` yields the current version ("fresh install, nothing to
+  migrate"). Collapsing the two would make every legacy file look up to date.
+- **Ordering is not negotiable**: `read → parse → migrate → repair → deserialize`.
+  Migration runs on the raw `serde_json::Value`, because once repair has merged
+  the document over current defaults a renamed key has already been replaced by
+  its default and there is nothing left to migrate.
+- A document from a **newer** build is detected and left completely alone —
+  neither migrated nor stamped downward — so a user running two versions against
+  one profile does not lose the newer version's data.
+- An imported backup **carries its recorded version through** rather than being
+  stamped current, so the ladder still runs on it at next launch. Stamping would
+  make every future migration skip exactly the old documents that need it.
+
+#### 🔍 Diagnostics and CLI ergonomics
+
+- **`--log-level=<level>`**, then `RUST_LOG`, then `info`. Talking a user through
+  one flag beats talking them through an environment variable, and `RUST_LOG` is
+  the spelling every Rust developer already has muscle memory for.
+- **`--help` and `--version` print on Windows.** They previously wrote into the
+  void: `windows_subsystem = "windows"` means a release binary starts with no
+  standard handles, so the command returned instantly with no output and the flag
+  looked broken. `cli::print_and_exit` now attaches to the parent console
+  (`AttachConsole(ATTACH_PARENT_PROCESS)`) before writing.
+- **Unknown arguments are never fatal.** A CLI tool should reject
+  `--frobnicate`; a GUI application must not, because desktop shells inject
+  arguments it never asked for — macOS passes `-psn_0_1234567` when the app is
+  opened from Finder. They are collected and logged once the logger exists.
+
+#### 🐧 Conditional Linux graphics workaround
+
+- `apply_linux_graphics_workarounds()` in `main.rs` sets
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` for the WebKitGTK blank-window /
+  flicker / crash-on-resize bug (tauri-apps/tauri#9394) — but **only** on an X11
+  session with a DRI device present, and never over a value the user or their
+  distro already set.
+- The blanket version found in most issue threads is what Tauri's own guide warns
+  against: _"Only ship an unconditional override like this if you have verified
+  your app is affected. It disables a faster path for everyone."_
+
+#### 🐞 Fixed: a randomly aborting Rust test suite
+
+- `panic_log.rs`'s test helper installed the **process-global** panic hook while
+  `cargo test` was running tests on several threads. Two concurrent calls
+  interleaved so that one uninstalled the other's hook mid-flight, and the
+  resulting `.expect()` panicked _inside_ a panic hook. That is not a test
+  failure — it is `STATUS_STACK_BUFFER_OVERRUN` and the **entire test binary
+  aborts**, taking every unrelated result with it and blaming a line that had
+  nothing to do with it.
+- Surfaced by adding tests elsewhere, which is exactly how a load-dependent race
+  behaves: it looks like the new tests' fault. Fixed with one process-wide lock
+  and poison-recovering `lock()` calls. Stress-checked over repeated parallel
+  runs.
+
+#### 🧹 Smaller things
+
+- **Backup rotation for quarantined settings.** `quarantine_unreadable_settings`
+  used one fixed `settings.json.bak`. Corruption is rarely a single event — a
+  failing disk, a sync client, a script writing bad JSON in a loop — and the
+  second quarantine overwrote the backup taken from the first, which was the one
+  still holding the user's real settings. Now takes the first free slot of five
+  before reusing the oldest: never clobber while an alternative exists, never
+  grow without bound.
+- **`isTextEntryTarget` deduplicated** into `src/lib/keyboard.ts`, and rewritten
+  from an `instanceof HTMLInputElement` chain to duck typing. `instanceof`
+  compares against _this_ window's constructors, so an element from an
+  `<iframe>` or another document silently fails the check while being a perfectly
+  real text field — and the DOM constructors do not exist in a bare Bun test
+  process, which is what forced the rule to be untestable before.
+- `BINDINGS_PATH` gated to `#[cfg(debug_assertions)]`, matching its only use;
+  it was a dead-code warning in a release build.
+
+#### ✅ Verification
+
+- `bun test` **156 pass / 0 fail** (10 files; new `test/hardening.test.ts`,
+  extended `test/settings.test.ts`).
+- `cargo test` **178 pass / 0 fail**, stable across repeated parallel runs.
+- `cargo clippy --all-targets -- -D warnings` clean; `cargo check --release`
+  clean (which is where a `webview2-com` / `windows-core` version skew against
+  Tauri's own would have surfaced — both are pinned to what wry links and cost no
+  extra compilation).
+- `tsc -b` and `oxlint` clean; `bun run before-commit --check` in sync.
+
+---
+
 ## [0.24.0] - 2026-08-20
 
 ### Round 24 — More From the Reference Implementation: Autostart Safety, Portable Mode, Crash Evidence, IPC Contract Test

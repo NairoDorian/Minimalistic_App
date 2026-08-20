@@ -386,6 +386,7 @@ MyApp/
   Data/
     settings.json
     logs/
+    EBWebView/        ← the webview engine's own storage (Windows)
 ```
 
 Runs from a USB stick, leaves no trace on the host — which matters for an app
@@ -394,6 +395,24 @@ is the quickest way to get a clean profile for testing without disturbing your
 real one. Delete the marker to go back; the `Data/` folder is left alone. The
 About tab shows the active data directory either way. Detection happens once at
 process start and falls back to normal mode if the location is not writable.
+
+**`EBWebView/` is the half that is easy to miss** (`webview_runtime.rs`).
+Redirecting what _your app_ writes does nothing about what the _webview engine_
+writes underneath it: WebView2 keeps localStorage, IndexedDB, cookies and caches
+in `%LOCALAPPDATA%\<identifier>\EBWebView\`, and this template's localStorage
+holds the active tab, theme and shortcut overrides. So "leaves no trace" was
+false until the engine's user-data folder followed the marker too.
+
+The route is not the obvious one, and the module explains why: `data_directory`
+in `tauri.conf.json` is resolved by Tauri **relative to the OS local-data
+directory** and absolute paths are rejected, so a declaratively configured window
+can never point beside the executable. Only the `WEBVIEW2_USER_DATA_FOLDER`
+loader variable can, set before the first window exists.
+
+> **Stated limit:** this is Windows-only. WKWebView offers a
+> `dataStoreIdentifier` UUID rather than a path, and WebKitGTK has no documented
+> override — so on macOS and Linux, portable mode moves the app's own files and
+> nothing more.
 
 ### 🚀 Autostart That Cannot Sabotage Your Install (`autostart.rs`)
 
@@ -443,6 +462,95 @@ serde rejected (`theme_accent`, `global_hotkeys[2].spec`), resets just that
 field, retries, and writes the healed file back. A stray
 `"minimize_to_tray": "yes"` costs you that one toggle — not your accent colour,
 hotkeys and window geometry too. Covered by 11 Rust tests.
+
+### 🗂️ Versioned Settings Migration (`settings_migrate.rs`)
+
+Repair fixes a document whose **types** are wrong. It is structurally blind to
+the failure that actually bites a long-lived app: _the document deserializes
+perfectly and means the wrong thing._ A renamed field, a unit change from seconds
+to milliseconds, an invariant broken by values that are each individually valid.
+
+`AppSettings.settings_version` records which schema wrote the file, and a ladder
+of steps brings an old document forward one version at a time.
+
+**Add the version field before you need it.** This is the part that cannot be
+retrofitted: a file written by a build with no version field is
+indistinguishable from one written at whatever version you eventually add it.
+Note the deliberate asymmetry — `#[serde(default)]` gives `0` ("predates
+versioning") while `AppSettings::default()` gives the current version ("fresh
+install, nothing to migrate"). Collapsing them makes every legacy file look
+current.
+
+Order matters and the module says so: `read → parse → migrate → repair →
+deserialize`. Migration runs on the raw `serde_json::Value`, because once repair
+has merged the document over current defaults, a renamed key has already been
+replaced by its default and there is nothing left to migrate.
+
+The shipped v0 → v1 step is a real fix, not a placeholder: `global_hotkeys` is a
+map in disguise (one binding per action), and nothing enforced that on the way in
+from disk. `bindings_for_ui` uses `.find()` — first wins, and that is what
+Preferences displays — while `GlobalHotkeys::apply` registers **every** entry. A
+file with two `toggle_window` entries therefore gave you two live system-wide
+chords and showed one. A document from a _newer_ build is detected and left
+entirely alone rather than downgraded.
+
+### 🖱️ A Shipped Build Is Not a Web Browser (`webview_hardening.rs`, `hardening.ts`)
+
+Left at defaults, a release Tauri app answers `F5` and `Ctrl+R` by **reloading
+the webview and destroying every bit of in-memory state**, `Ctrl+P` with a print
+dialog for its own UI, `Ctrl+F` with the engine's find bar over the app, and
+`Ctrl+±` by zooming the layout apart. Drag any file onto the window and it
+navigates there — the whole UI replaced by a PDF viewer, no back button, restart
+to recover.
+
+Two halves, because one is not enough:
+
+- **Native (Windows)** — WebView2's `AreBrowserAcceleratorKeysEnabled` is turned
+  off, so the keystrokes never become browser commands at all.
+- **Frontend (all platforms)** — `preventDefault` in a capture-phase listener,
+  which is the only option on macOS (WKWebView) and Linux (WebKitGTK), plus the
+  drag-drop and context-menu cases no engine flag covers. Both `dragover` **and**
+  `drop` are cancelled: cancelling only `drop` looks correct and does nothing.
+
+`Ctrl+C/V/X/Z/A` are never touched — those are OS text-editing shortcuts — and
+nothing at all is intercepted while focus is in a text field. **Development
+builds are left alone** (the Rust half is `#[cfg]`-compiled out, the TS half
+checks `import.meta.env.PROD`), so `F5` and devtools still work while you build.
+
+### ⌨️ A Command Line, and a Second Launch That Talks to the First (`cli.rs`)
+
+```bash
+minimalistic-app --help              # prints, even on Windows — see below
+minimalistic-app --hidden            # start in the tray
+minimalistic-app --toggle            # show/hide the window of a RUNNING instance
+minimalistic-app --quit              # ask a running instance to exit
+minimalistic-app --log-level=debug   # one run, no environment variable
+```
+
+`tauri-plugin-single-instance` hands the running process the argv of the copy it
+just blocked. Re-parsing it there is what makes `app.exe --toggle` work from a
+desktop shortcut, a scheduled task, or a stream-deck button — the standard way a
+tray application is driven from outside itself.
+
+`--autostart` is the flag the autostart launch entry is registered with, and it
+implies "start hidden", so a login launch does not put a window in the user's
+face. It is kept distinct from `--hidden` in the parsed struct because "we were
+auto-started" is the fact and "do not show a window" is only one consequence.
+
+Two details worth stealing:
+
+- **`--help` and `--version` print on Windows.** `windows_subsystem = "windows"`
+  means a release binary starts with **no standard handles**, so `println!` goes
+  nowhere and the flag looks broken. The app attaches to the parent console
+  (`AttachConsole(ATTACH_PARENT_PROCESS)`) before writing.
+- **Unknown arguments are never fatal.** A CLI tool should reject
+  `--frobnicate`; a GUI app must not, because desktop shells inject arguments it
+  never asked for — macOS passes `-psn_0_1234567` when you open the app from
+  Finder. They are collected and logged, not treated as an error.
+
+Hand-written rather than `clap`: six flags do not justify a proc-macro dependency
+in a template. The seam is deliberate — `cli::parse` takes an iterator and
+returns an `Outcome`, so swapping in `CliArgs::try_parse_from` touches one file.
 
 ## 🛠️ Tech Stack & Absolute @latest Versions
 
@@ -494,18 +602,21 @@ Minimalistic_App/
 │   │   ├── tauri.ts              # isTauri runtime detection (single shared check)
 │   │   ├── keyboard.ts           # Cross-platform hotkey engine (parse/format/match/listen)
 │   │   ├── shortcuts.ts          # App shortcut registry + user rebindings + conflicts
+│   │   ├── hardening.ts          # Release-only: no browser reload/print/zoom/drop-navigate
 │   │   ├── theme.ts              # Accent palette engine (CSS custom-property injection)
 │   │   ├── toast.ts              # Toast notification event bus
 │   │   ├── console.ts            # In-memory dev-log event bus
 │   │   ├── logViewer.ts          # Pure log parsing & live/disk reconciliation helpers
 │   │   ├── settingsBackup.ts     # Settings export/import + strict import sanitizer
+│   │   ├── storage.ts            # localStorage access that degrades instead of throwing
 │   │   ├── download.ts           # Blob download helper (deferred object-URL revocation)
 │   │   └── icons.tsx             # Self-contained SVG icon set (no icon dependency)
 │   ├── components/
 │   │   ├── ToggleSwitch.tsx      # Accessible ARIA switch (Space/Enter, focus ring)
 │   │   ├── UpdateChecker.tsx     # Auto-update UI (card + footer variants)
 │   │   ├── PreferencesTab.tsx    # Preferences panel: toggles + theme + update card
-│   │   ├── AboutTab.tsx          # System & About panel (diagnostics, config dir, report)
+│   │   ├── GlobalHotkeysSection.tsx # OS-wide hotkey binding UI + listener status
+│   │   ├── AboutTab.tsx          # System & About panel (diagnostics, data location, report)
 │   │   ├── DeveloperTab.tsx      # Developer hub: IPC playground, backup/restore, toast bench
 │   │   ├── DevConsole.tsx        # Live log viewer (bus + log:// events + polled file tail)
 │   │   ├── HotkeyRecorder.tsx    # "Press a shortcut" capture control
@@ -514,11 +625,21 @@ Minimalistic_App/
 │   │   └── ErrorBoundary.tsx     # Top-level crash screen with copyable report
 │   ├── bindings.ts               # AUTO-GENERATED tauri-specta IPC bindings (do not edit)
 │   ├── App.tsx                   # Application shell: tabs, header, footer, status bar
-│   ├── main.tsx                  # SolidJS 2 entry point (render to #root, HMR dispose)
+│   ├── main.tsx                  # SolidJS 2 entry point (render, hardening, HMR dispose)
 │   └── index.css                 # AMOLED black design system (design tokens, glassmorphism)
 ├── src-tauri/                    # Rust backend (Tauri 2)
+│   ├── src/main.rs               # Process entry: subsystem, Linux graphics fix, CLI parse
 │   ├── src/lib.rs                # Tray, IPC commands, window lifecycle, settings persistence
-│   ├── src/main.rs               # Entry point (no Windows console in release)
+│   ├── src/cli.rs                # Flag parsing + forwarding a second launch to the first
+│   ├── src/portable.rs           # `portable` marker → write everything beside the exe
+│   ├── src/webview_runtime.rs    # Webview engine storage follows portable mode (Windows)
+│   ├── src/webview_hardening.rs  # Release-only: disable WebView2 accelerator keys
+│   ├── src/autostart.rs          # OS launch entry as derived state; never written in dev
+│   ├── src/panic_log.rs          # Panic hook → log file + Dev Console (thread name included)
+│   ├── src/settings_repair.rs    # Field-level healing of a wrong-typed settings document
+│   ├── src/settings_migrate.rs   # Versioned schema migration ladder (runs before repair)
+│   ├── src/global_hotkeys.rs     # Binding registry, listener supervision, action dispatch
+│   ├── src/hotkeys/              # Hand-written OS keyboard-hook engine (win/mac/linux)
 │   ├── capabilities/default.json # Tauri v2 capability permissions
 │   ├── Cargo.toml                # Rust manifest (version synced by before-commit.ts)
 │   ├── build.rs                  # tauri-build bootstrap
@@ -527,13 +648,19 @@ Minimalistic_App/
 ├── test/                         # Bun unit tests (`bun test`)
 │   ├── keyboard.test.ts          # Hotkey parsing, formatting, matching, listener
 │   ├── shortcuts.test.ts         # Registry, rebinding, conflicts, action resolution
+│   ├── hardening.test.ts         # Which browser shortcuts are swallowed, and which are not
 │   ├── logViewer.test.ts         # Severity classification & line reconciliation
-│   ├── settings.test.ts          # Settings backup sanitizer
+│   ├── settings.test.ts          # Settings backup sanitizer + schema-version handling
+│   ├── storage.test.ts           # Storage helper degradation paths
+│   ├── reactivity.test.ts        # SolidJS 2 graph behaviour the app depends on
+│   ├── bindings.test.ts          # IPC contract drift: Rust registry vs generated wrappers
 │   ├── theme.test.ts             # Theme presets & CSS variable application
 │   └── version.test.ts           # APP_VERSION SemVer format
 ├── scripts/                      # Node.js tooling (isolated tsconfig.scripts.json)
 │   ├── version.ts                # APP_VERSION — global single source of truth
 │   ├── before-commit.ts          # Version sync & 8-gate suite (--check / --bump / --full)
+│   ├── dev-fast.ts               # Fast Rust dev loop (measured linker configuration)
+│   ├── sync-docs.ts              # Local documentation mirrors (.docs/) sync & search
 │   ├── rename-project.ts         # 1-command rebranding CLI
 │   ├── generate-arch.ts          # ARCHITECTURE.md generator (Repomix pack() API)
 │   ├── create-icons.ts           # Cross-platform PNG/ICO/ICNS icon generator

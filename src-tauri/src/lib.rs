@@ -1,9 +1,29 @@
 pub mod autostart;
+pub mod cli;
 pub mod global_hotkeys;
 pub mod hotkeys;
 pub mod panic_log;
 pub mod portable;
+pub mod settings_migrate;
 pub mod settings_repair;
+pub mod webview_hardening;
+pub mod webview_runtime;
+
+/// Product name used where the app has to identify itself before a Tauri
+/// `AppHandle` exists — `--help`, `--version`, early diagnostics.
+///
+/// Derived from the Cargo package name rather than `tauri.conf.json`'s
+/// `productName` because it must be a compile-time constant, and because
+/// `scripts/rename-project.ts` rewrites both together. A CLI name is
+/// conventionally the slug (`minimalistic-app`) rather than the display name
+/// ("Minimalistic App") anyway — it is what the user types.
+pub const APP_DISPLAY_NAME: &str = env!("CARGO_PKG_NAME");
+
+/// Version reported by `--version`.
+///
+/// `scripts/before-commit.ts` checks that this Cargo version, `package.json`,
+/// and `tauri.conf.json` never drift apart, so one constant is enough.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -26,6 +46,22 @@ use crate::global_hotkeys::{
 /// Persistent application preferences saved as JSON in the OS app configuration directory.
 #[derive(Serialize, Deserialize, Clone, Type, Debug, PartialEq, Eq)]
 pub struct AppSettings {
+    /// Schema version of the document this struct was loaded from.
+    ///
+    /// Not a user preference — bookkeeping for [`settings_migrate`]. It is the
+    /// only thing that distinguishes "a field is missing because the user never
+    /// set it" from "a field is missing because it used to be called something
+    /// else", and it cannot be added retroactively: a file with no version
+    /// field is indistinguishable from one written at whatever version the
+    /// field was introduced.
+    ///
+    /// Note the asymmetry that makes this work. `#[serde(default)]` gives `0`
+    /// for a file written before versioning existed, while
+    /// [`AppSettings::default`] gives [`settings_migrate::CURRENT_SETTINGS_VERSION`]
+    /// so a *fresh install* starts current and never walks the ladder. Both are
+    /// correct; they answer different questions.
+    #[serde(default)]
+    pub settings_version: u32,
     /// Controls whether closing the main GUI window minimizes the app to the system tray
     /// instead of terminating the application process. Default is false.
     #[serde(default)]
@@ -93,6 +129,11 @@ fn default_unset_position() -> i32 {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            // A fresh install is already at the current schema — there is
+            // nothing older to migrate from. This is deliberately *not* the
+            // same as the serde field default (`0`), which means "this file
+            // predates versioning". See the field's documentation.
+            settings_version: settings_migrate::CURRENT_SETTINGS_VERSION,
             minimize_to_tray: false,
             start_minimized: false,
             check_updates_on_launch: true,
@@ -159,12 +200,71 @@ pub(crate) fn lock_guard<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Moves an unparseable settings file aside to `settings.json.bak` before the
-/// app falls back to defaults, so a corrupt (or hand-edited) file is recoverable
-/// instead of being silently overwritten by the next save. Every field carries a
-/// serde default, so this only triggers on genuinely malformed JSON.
+/// How many quarantined settings files to keep before reusing a slot.
+///
+/// Small on purpose. The interesting backup is nearly always the most recent
+/// one, and an unbounded series of `.bak` files in the user's config directory
+/// is litter, not a safety net.
+const MAX_SETTINGS_BACKUPS: u32 = 5;
+
+/// Picks the first free `settings.json.bak`, `.bak.1`, … `.bak.4` slot.
+///
+/// Returns `None` when every slot is taken, which the caller treats as "reuse
+/// the oldest". Split out from [`quarantine_unreadable_settings`] so the naming
+/// scheme can be tested without touching a real settings file.
+fn next_free_backup_path(path: &Path) -> Option<PathBuf> {
+    let base = path.with_extension("json.bak");
+    if !base.exists() {
+        return Some(base);
+    }
+    (1..MAX_SETTINGS_BACKUPS)
+        .map(|n| path.with_extension(format!("json.bak.{n}")))
+        .find(|candidate| !candidate.exists())
+}
+
+/// Moves an unparseable settings file aside before the app falls back to
+/// defaults, so a corrupt (or hand-edited) file is recoverable instead of being
+/// silently overwritten by the next save. Every field carries a serde default,
+/// so this only triggers on genuinely malformed JSON.
+///
+/// # Why the backup name is not fixed
+///
+/// The obvious implementation renames to `settings.json.bak` every time, and it
+/// has a nasty failure mode. Corruption is rarely a single event: a failing
+/// disk, a sync client fighting over the file, or a script writing bad JSON in
+/// a loop produces *several* bad files in a row. With one fixed name, the
+/// second corruption overwrites the backup taken from the first — and the first
+/// was the one containing the user's real settings. The rescue destroys the
+/// thing it was rescuing.
+///
+/// So each quarantine takes the first free slot and never overwrites an
+/// existing backup while one is available. Once all
+/// [`MAX_SETTINGS_BACKUPS`] slots are used the oldest is reused, because
+/// growing without bound is its own kind of user-hostile.
+///
+/// The no-clobber principle is borrowed from `no_clobber.rs` in
+/// [AIVORelay](https://github.com/MaxITService/AIVORelay), which uses the OS
+/// primitives (`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING`, `hard_link`)
+/// to make "publish only if absent" atomic against a concurrent writer. That
+/// strength is not needed here: two copies of this app cannot race, because
+/// `tauri-plugin-single-instance` guarantees only one is running.
 fn quarantine_unreadable_settings(path: &Path) {
-    let backup = path.with_extension("json.bak");
+    let backup = next_free_backup_path(path).unwrap_or_else(|| {
+        // Every slot is full. Reuse the oldest by modification time, falling
+        // back to slot 0 if the times cannot be read.
+        let oldest = (0..MAX_SETTINGS_BACKUPS)
+            .map(|n| match n {
+                0 => path.with_extension("json.bak"),
+                n => path.with_extension(format!("json.bak.{n}")),
+            })
+            .min_by_key(|candidate| {
+                fs::metadata(candidate)
+                    .and_then(|meta| meta.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            });
+        oldest.unwrap_or_else(|| path.with_extension("json.bak"))
+    });
+
     match fs::rename(path, &backup) {
         Ok(()) => log::warn!(
             "[settings] Preserved the unreadable settings file at {}",
@@ -185,13 +285,18 @@ fn quarantine_unreadable_settings(path: &Path) {
 ///    and renaming it would turn a transient error into permanent data loss.
 /// 3. **Not valid JSON** — genuinely unsalvageable. Quarantine as `.bak` so the
 ///    user can recover by hand, then start from defaults.
-/// 4. **Valid JSON, but some field is wrong** — the common case for a
+/// 4. **Valid JSON from an older schema** — [`settings_migrate`] brings it
+///    forward one version at a time. This runs on the *raw* document, before
+///    anything below, because a renamed key only still exists at this point.
+/// 5. **Valid JSON, but some field is wrong** — the common case for a
 ///    hand-edited or downgraded file. [`settings_repair`] resets exactly the
 ///    fields serde rejected and keeps everything else. Each repair is logged by
 ///    path, and the healed struct is written back so the next launch is clean.
 ///
-/// Step 4 is why a single `"minimize_to_tray": "yes"` no longer costs the user
-/// their accent colour, hotkeys and window geometry.
+/// Step 5 is why a single `"minimize_to_tray": "yes"` no longer costs the user
+/// their accent colour, hotkeys and window geometry. Step 4 is why a value that
+/// is *validly typed and semantically wrong* — two hotkey bindings claiming one
+/// action — is fixed at all, since no amount of type checking can see it.
 fn load_settings_from_disk(path: &Path) -> AppSettings {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
@@ -205,7 +310,7 @@ fn load_settings_from_disk(path: &Path) -> AppSettings {
         }
     };
 
-    let stored = match serde_json::from_str::<serde_json::Value>(&content) {
+    let mut stored = match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(value) => value,
         Err(err) => {
             log::error!(
@@ -216,6 +321,16 @@ fn load_settings_from_disk(path: &Path) -> AppSettings {
             return AppSettings::default();
         }
     };
+
+    // Schema migration, on the raw document. Anything that renames or re-means a
+    // field has to happen here, before the merge in `settings_repair` fills the
+    // gaps from current defaults and erases the evidence of the old shape.
+    let migration = settings_migrate::migrate(&mut stored);
+    if let Some(outcome) = &migration {
+        for change in &outcome.changes {
+            log::warn!("[settings] Migrated from v{}: {change}", outcome.from);
+        }
+    }
 
     let defaults = AppSettings::default();
     let Some(outcome) = settings_repair::deserialize_with_repair(&stored, &defaults) else {
@@ -231,7 +346,11 @@ fn load_settings_from_disk(path: &Path) -> AppSettings {
         log::warn!("[settings] Reset invalid field '{repaired}' to its default");
     }
 
-    if outcome.needs_rewrite {
+    // A migration counts as a reason to rewrite even when repair found nothing:
+    // the version stamp has to reach disk, or the ladder is walked again on
+    // every single launch.
+    let migrated = migration.is_some_and(|outcome| outcome.changed);
+    if outcome.needs_rewrite || migrated {
         // Persist the healed document so the repair happens once rather than on
         // every launch, and so the file on disk matches what the app is using.
         // A failed rewrite is not fatal: the in-memory settings are already correct.
@@ -660,6 +779,62 @@ pub(crate) fn toggle_window_visibility(app: &AppHandle) {
     }
 }
 
+/// Shuts the application down deliberately, as opposed to the window being
+/// closed (which may only mean "minimize to tray").
+///
+/// The order matters and is the reason this is one function rather than a
+/// sequence repeated at each call site:
+///
+/// 1. **Set `is_quitting` first.** The `CloseRequested` handler reads it to
+///    decide whether to honour the close or hide the window instead. Closing
+///    the window before setting the flag would just hide it and leave a
+///    headless process behind — the classic "app won't quit from the tray" bug.
+/// 2. **Detach the OS keyboard hook.** A global hook is process-wide state the
+///    OS holds on our behalf; dropping it explicitly before teardown means no
+///    system-wide hook can outlive the process even briefly.
+/// 3. **Close the window, or exit outright if there is none.** Closing lets the
+///    normal path flush window geometry to disk; `app.exit` is the fallback for
+///    a window that was never created or has already gone.
+///
+/// Reached from the tray menu, from a `--quit` forwarded by a second launch,
+/// and from the `Quit` global hotkey action.
+pub(crate) fn request_quit(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    *lock_guard(&state.is_quitting) = true;
+
+    state.global_hotkeys.shutdown();
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    } else {
+        app.exit(0);
+    }
+}
+
+/// Carries out what a second launch asked the running instance to do.
+///
+/// This is the whole point of forwarding argv through
+/// `tauri-plugin-single-instance`: a desktop shortcut, a scheduled task, or a
+/// stream-deck button runs `app.exe --toggle`, the OS blocks the second copy,
+/// and the *running* copy acts. Without it, every one of those launches would
+/// either do nothing or spawn a duplicate tray icon.
+pub(crate) fn handle_instance_request(app: &AppHandle, request: cli::InstanceRequest) {
+    match request {
+        cli::InstanceRequest::Show => {
+            log::info!("[cli] Second launch requested --show");
+            show_and_focus_window(app);
+        }
+        cli::InstanceRequest::Toggle => {
+            log::info!("[cli] Second launch requested --toggle");
+            toggle_window_visibility(app);
+        }
+        cli::InstanceRequest::Quit => {
+            log::info!("[cli] Second launch requested --quit");
+            request_quit(app);
+        }
+    }
+}
+
 /// Borrowed from the AIVORelay reference app: Windows reports a minimized window as
 /// position `(-32000, -32000)` ("hottracked" out of bounds), so treat those as unusable.
 fn is_windows_minimized_position(x: i32, y: i32) -> bool {
@@ -748,6 +923,12 @@ fn flush_window_geometry(window: &tauri::Window) {
 }
 
 /// Path of the generated TypeScript IPC bindings, relative to `src-tauri/`.
+///
+/// Only the debug build exports bindings — a shipped binary has no source tree
+/// to write into — so the constant is gated to match its single use. Without
+/// the gate a release build warns about dead code, and `cargo clippy -D
+/// warnings` in a release-profile CI job would fail on it.
+#[cfg(debug_assertions)]
 const BINDINGS_PATH: &str = "../src/bindings.ts";
 
 /// Tauri Specta command registry — the single definition of the IPC surface.
@@ -784,17 +965,74 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         ])
 }
 
+/// Resolves the log level for this run, most specific source first.
+///
+/// 1. `--log-level=debug` — one run, no shell setup, the thing you can talk a
+///    user through over a support channel.
+/// 2. `RUST_LOG=debug` — the convention every Rust developer already has muscle
+///    memory for. Only a bare level is honoured here, not the full
+///    `env_logger` target syntax (`my_crate::module=trace`), because
+///    `tauri-plugin-log` takes a single [`log::LevelFilter`] and silently
+///    ignoring the rest of a per-target filter string would be worse than not
+///    accepting it.
+/// 3. `Info` — the default. Quiet enough not to fill a rotating log with noise,
+///    detailed enough that the lifecycle breadcrumbs this app emits are there
+///    when something goes wrong.
+fn resolve_log_level(cli: &cli::CliArgs) -> log::LevelFilter {
+    if let Some(level) = cli.log_level {
+        return level;
+    }
+
+    match std::env::var("RUST_LOG") {
+        Ok(spec) if !spec.trim().is_empty() => match spec.trim().parse::<log::LevelFilter>() {
+            Ok(level) => level,
+            Err(_) => {
+                // The logger does not exist yet, so this cannot be `log::warn!`.
+                eprintln!(
+                    "[log] RUST_LOG='{spec}' is not a plain level (off/error/warn/info/debug/trace) \
+                     — falling back to info. Use --log-level for a one-off override."
+                );
+                log::LevelFilter::Info
+            }
+        },
+        _ => log::LevelFilter::Info,
+    }
+}
+
 /// Main entry point for Rust / Tauri backend application runtime.
+///
+/// Takes the already-parsed command line rather than reading `std::env::args`
+/// itself, so that startup is a pure function of its input and `main` stays the
+/// only place that touches the process environment. It also means an
+/// integration test can drive `run` with a synthetic [`cli::CliArgs`].
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(cli: cli::CliArgs) {
     // Before anything else. The panic hook must be in place to catch a crash
     // during startup itself, and portable detection must precede the first path
     // resolution — which the logging plugin performs while the builder is being
     // assembled, a few lines below.
     panic_log::install();
     portable::init();
+    // Depends on `portable::init()` having run, and must precede the Tauri
+    // builder: the webview engine reads its data-directory override when the
+    // first window is created, which happens before `setup()`.
+    webview_runtime::init();
 
+    let log_level = resolve_log_level(&cli);
     let builder = specta_builder();
+
+    // `request` is only meaningful for a *second* launch — the running instance
+    // receives it through the single-instance callback below. On a cold start
+    // there is nothing to talk to, and the flags either describe the state the
+    // app is already starting in (`--show`) or would mean "start, then
+    // immediately quit" (`--quit`), which no caller wants. Honouring `--quit`
+    // here would also make `app.exe --quit` a no-op that leaves the user
+    // unsure whether anything happened, so say so instead.
+    if let Some(request) = cli.request
+        && request == cli::InstanceRequest::Quit
+    {
+        eprintln!("[cli] --quit had no effect: no other instance of this app is running.");
+    }
 
     // Export TypeScript bindings in dev mode so the frontend can import
     // type-safe command wrappers from `../src/bindings.ts`.
@@ -804,9 +1042,56 @@ pub fn run() {
         .expect("Failed to export typescript bindings");
 
     tauri::Builder::default()
-        // Single-Instance Guard: prevents duplicate tray icons
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_and_focus_window(app);
+        // Single-instance guard: prevents duplicate tray icons — and, more
+        // usefully, turns a second launch into a message to the first.
+        //
+        // The plugin blocks the new process and hands us its `argv`. Re-parsing
+        // it here (rather than in the new process, which is about to die) is
+        // what makes `app.exe --toggle` work from a shortcut, a scheduled task,
+        // or a script. `args` includes argv[0], so it is skipped to match what
+        // `cli::parse_env` does.
+        //
+        // Two deliberate behaviours:
+        //
+        // * **`--autostart` on a second launch shows nothing.** The OS
+        //   occasionally re-runs a login entry (a fast user switch, a session
+        //   restore). Raising a window because of that would be a jump-scare.
+        // * **No recognized request falls back to "show me".** Double-clicking
+        //   the icon of a running app should surface it, which is the single
+        //   most common reason a second launch happens at all.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let forwarded = match cli::parse(
+                args.into_iter().skip(1),
+                APP_DISPLAY_NAME,
+                APP_VERSION,
+            ) {
+                cli::Outcome::Run(parsed) => parsed,
+                // `--help`/`--version` from a second launch: the process that
+                // could have printed them is already gone, so there is nothing
+                // to do but leave the running instance undisturbed.
+                cli::Outcome::Exit { .. } => return,
+            };
+
+            // Logged here as well as at startup, and for the same reason: the
+            // process that could have complained is already gone, so this is the
+            // only place a typo like `--tgogle` leaves any trace at all. Without
+            // it, a mistyped shortcut just silently raises the window and the
+            // user has nothing to look at.
+            if !forwarded.unknown.is_empty() {
+                log::warn!(
+                    "[cli] Second launch passed {} unrecognized argument(s): {}",
+                    forwarded.unknown.len(),
+                    forwarded.unknown.join(" ")
+                );
+            }
+
+            match forwarded.request {
+                Some(request) => handle_instance_request(app, request),
+                None if forwarded.launched_by_autostart => {
+                    log::debug!("[cli] Ignoring a duplicate autostart launch");
+                }
+                None => show_and_focus_window(app),
+            }
         }))
         // Autostart Plugin for OS startup management
         .plugin(tauri_plugin_autostart::init(
@@ -824,7 +1109,8 @@ pub fn run() {
         // from `package_info().name`; `get_recent_logs`/`clear_logs` mirror that.
         .plugin(
             LogBuilder::new()
-                .level(log::LevelFilter::Info)
+                // `--log-level`, then `RUST_LOG`, then Info. See `resolve_log_level`.
+                .level(log_level)
                 .max_file_size(500_000)
                 .rotation_strategy(RotationStrategy::KeepOne)
                 .targets([
@@ -864,9 +1150,30 @@ pub fn run() {
                 PathBuf::from(".")
             });
 
+            // Now that the logger exists, report anything the command line
+            // contained that we did not understand. Deliberately a warning and
+            // not a startup failure — see the module docs on `cli.rs` — but
+            // still visible, so a genuine typo does not vanish.
+            if !cli.unknown.is_empty() {
+                log::warn!(
+                    "[cli] Ignored {} unrecognized argument(s): {} — run with --help for the \
+                     supported flags.",
+                    cli.unknown.len(),
+                    cli.unknown.join(" ")
+                );
+            }
+            if cli.launched_by_autostart {
+                log::info!("[lifecycle] Started by the OS launch entry (--autostart)");
+            }
+
             let settings_path = config_dir.join("settings.json");
             let initial_settings = load_settings_from_disk(&settings_path);
-            let start_minimized = initial_settings.start_minimized;
+            // Two independent reasons to stay out of the user's way, OR'd:
+            // the stored preference, and this launch's `--hidden`/`--autostart`.
+            // Keeping them separate means a user who wants a window on a manual
+            // launch still gets a quiet login, without either setting having to
+            // override the other.
+            let start_minimized = initial_settings.start_minimized || cli.start_hidden;
             let autostart_enabled = initial_settings.autostart_enabled;
 
             // The OS launch entry is derived state: re-assert it from the stored
@@ -924,18 +1231,7 @@ pub fn run() {
                     }
                     "quit" => {
                         log::info!("[tray] Quit requested — closing window");
-                        let state = app.state::<AppState>();
-                        *lock_guard(&state.is_quitting) = true;
-
-                        // Detach the OS keyboard hook before teardown so no
-                        // system-wide hook outlives the process.
-                        app.state::<AppState>().global_hotkeys.shutdown();
-
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.close();
-                        } else {
-                            app.exit(0);
-                        }
+                        request_quit(app);
                     }
                     _ => {}
                 })
@@ -962,6 +1258,13 @@ pub fn run() {
             // reference app) before the window is first shown, so the app
             // reopens at its last size and on the correct monitor.
             if let Some(main_window) = app.get_webview_window("main") {
+                // Take away the browser's own keyboard shortcuts before the
+                // window is ever shown, so there is no window in which F5 can
+                // reload the app out from under the user. A no-op in dev builds
+                // and on platforms without an engine-level switch — the
+                // frontend guard in `src/lib/hardening.ts` covers those.
+                webview_hardening::disable_browser_accelerator_keys(&main_window);
+
                 let settings = lock_guard(&app.state::<AppState>().settings).clone();
                 if settings.remember_window_size
                     && settings.saved_window_width > 0
@@ -1091,6 +1394,7 @@ mod tests {
         let settings_path = temp_dir.join("test_settings.json");
 
         let initial = AppSettings {
+            settings_version: settings_migrate::CURRENT_SETTINGS_VERSION,
             minimize_to_tray: true,
             start_minimized: false,
             check_updates_on_launch: true,
@@ -1149,9 +1453,28 @@ mod tests {
         );
         assert!(decoded.check_updates_on_launch);
 
-        // An entirely empty object must yield exactly the factory defaults.
+        // An entirely empty object must yield the factory defaults for every
+        // *preference*…
         let empty: AppSettings = serde_json::from_str("{}").expect("empty parse failed");
-        assert_eq!(empty, AppSettings::default());
+        assert_eq!(
+            AppSettings {
+                settings_version: AppSettings::default().settings_version,
+                ..empty.clone()
+            },
+            AppSettings::default()
+        );
+
+        // …but deliberately NOT for the schema version, and this asymmetry is
+        // the whole mechanism, not an oversight. A document with no
+        // `settings_version` was written before versioning existed, so it must
+        // deserialize as 0 and walk the migration ladder. `AppSettings::default`
+        // is a *fresh install*, which has nothing to migrate and starts current.
+        // Collapsing the two would make every legacy file look up to date.
+        assert_eq!(empty.settings_version, 0);
+        assert_eq!(
+            AppSettings::default().settings_version,
+            settings_migrate::CURRENT_SETTINGS_VERSION
+        );
     }
 
     #[test]
@@ -1279,6 +1602,154 @@ mod tests {
         assert!(!settings_path.with_extension("json.bak").exists());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_loader_migrates_a_legacy_document_and_stamps_it() {
+        // End-to-end for the migrate → repair → rewrite pipeline. The unit
+        // tests in `settings_migrate` cover the rules; this covers the wiring,
+        // which is where the ordering mistake would actually be made — running
+        // migration after the repair merge would find nothing to migrate.
+        let temp_dir = std::env::temp_dir().join(format!("tauri_migrate_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        // A file from before versioning, carrying the duplicate-action bug: two
+        // live system-wide chords while Preferences shows one.
+        fs::write(
+            &settings_path,
+            r#"{
+                "theme_accent": "violet",
+                "global_hotkeys": [
+                    { "action": "toggle_window", "spec": "Ctrl+Alt+A" },
+                    { "action": "toggle_window", "spec": "Ctrl+Alt+B" }
+                ]
+            }"#,
+        )
+        .expect("write failed");
+
+        let loaded = load_settings_from_disk(&settings_path);
+
+        assert_eq!(loaded.global_hotkeys.len(), 1, "the duplicate must be gone");
+        assert_eq!(loaded.global_hotkeys[0].spec, "Ctrl+Alt+A");
+        assert_eq!(loaded.theme_accent, "violet", "settings must survive");
+        assert_eq!(
+            loaded.settings_version,
+            settings_migrate::CURRENT_SETTINGS_VERSION
+        );
+
+        // The healed document reached disk, so the next launch is a no-op…
+        let rewritten: AppSettings =
+            serde_json::from_str(&fs::read_to_string(&settings_path).expect("read back"))
+                .expect("rewritten file must parse");
+        assert_eq!(rewritten, loaded);
+
+        // …and a migrated file is never quarantined. It was salvaged in place.
+        assert!(!settings_path.with_extension("json.bak").exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_a_second_corruption_does_not_destroy_the_first_backup() {
+        // The regression this pins is subtle and expensive: with a single fixed
+        // `.bak` name, a run of bad writes (failing disk, a sync client, a
+        // script looping over the file) overwrites the backup taken from the
+        // *first* corruption — which is the one that still held the user's real
+        // settings. The rescue eats the thing it rescued.
+        let temp_dir = std::env::temp_dir().join(format!("tauri_bakrot_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        fs::write(&settings_path, "{ first corruption").expect("write failed");
+        quarantine_unreadable_settings(&settings_path);
+        fs::write(&settings_path, "{ second corruption").expect("write failed");
+        quarantine_unreadable_settings(&settings_path);
+
+        assert_eq!(
+            fs::read_to_string(settings_path.with_extension("json.bak")).expect("first backup"),
+            "{ first corruption",
+            "the earliest backup must survive a later corruption"
+        );
+        assert_eq!(
+            fs::read_to_string(settings_path.with_extension("json.bak.1")).expect("second backup"),
+            "{ second corruption"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_backup_slots_are_bounded() {
+        // The other half of the trade-off: never clobbering would litter the
+        // user's config directory forever. Past the cap, a slot is reused.
+        let temp_dir = std::env::temp_dir().join(format!("tauri_bakcap_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        for round in 0..(MAX_SETTINGS_BACKUPS + 3) {
+            fs::write(&settings_path, format!("{{ corruption {round}")).expect("write failed");
+            quarantine_unreadable_settings(&settings_path);
+        }
+
+        let backups = fs::read_dir(&temp_dir)
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".bak"))
+            .count();
+        assert_eq!(
+            backups as u32, MAX_SETTINGS_BACKUPS,
+            "backups must not grow without bound"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_next_free_backup_path_prefers_the_unsuffixed_name() {
+        let temp_dir = std::env::temp_dir().join(format!("tauri_bakname_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::create_dir_all(&temp_dir);
+        let settings_path = temp_dir.join("settings.json");
+
+        // Nothing taken yet: the plain `.bak` name is the friendly one, and the
+        // one a user is most likely to find and rename back.
+        assert_eq!(
+            next_free_backup_path(&settings_path),
+            Some(settings_path.with_extension("json.bak"))
+        );
+
+        fs::write(settings_path.with_extension("json.bak"), "taken").expect("write failed");
+        assert_eq!(
+            next_free_backup_path(&settings_path),
+            Some(settings_path.with_extension("json.bak.1"))
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_log_level_precedence_puts_the_flag_above_the_environment() {
+        // `--log-level` is what a user gets talked through during a support
+        // conversation, so it has to win over whatever their shell already has.
+        let cli_with_flag = cli::CliArgs {
+            log_level: Some(log::LevelFilter::Trace),
+            ..Default::default()
+        };
+        assert_eq!(resolve_log_level(&cli_with_flag), log::LevelFilter::Trace);
+
+        // No flag and (in a normal test process) no RUST_LOG: the quiet default.
+        // Guarded so the assertion is still meaningful for someone running the
+        // suite with RUST_LOG exported.
+        if std::env::var_os("RUST_LOG").is_none() {
+            assert_eq!(
+                resolve_log_level(&cli::CliArgs::default()),
+                log::LevelFilter::Info
+            );
+        }
     }
 
     #[test]

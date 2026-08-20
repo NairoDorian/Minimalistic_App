@@ -114,7 +114,7 @@ Audited against the TS7 default/removal list above.
 | `target: ES2022`                                                                                                               | ✅ Allowed — only `es5` was removed                        |
 | `module: ESNext`                                                                                                               | ✅                                                         |
 | `moduleResolution: bundler`                                                                                                    | ✅ The supported replacement for `node`/`node10`/`classic` |
-| `types: ["vite/client", "node", "bun"]`                                                                                        | ✅ **Explicit** — required now that the default is `[]`    |
+| `types: ["vite/client", "node", "bun-types"]`                                                                                  | ✅ **Explicit** — required now that the default is `[]`    |
 | `strict: true`                                                                                                                 | ✅ Matches the new default; kept explicit for clarity      |
 | `jsx: preserve` + `jsxImportSource: "@solidjs/web"`                                                                            | ✅ Vite's Solid plugin performs the JSX transform          |
 | `noEmit`, `isolatedModules`, `allowImportingTsExtensions`, `resolveJsonModule`, `skipLibCheck`, `useDefineForClassFields`      | ✅ All still supported                                     |

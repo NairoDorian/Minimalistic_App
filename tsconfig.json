@@ -14,7 +14,7 @@
     "noEmit": true,
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web",
-    "types": ["vite/client", "node", "bun"],
+    "types": ["vite/client", "node", "bun-types"],
 
     /* Linting — enforce clean code, no dead locals/parameters */
     "strict": true,

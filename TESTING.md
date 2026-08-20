@@ -88,22 +88,26 @@ graph TD
 
 ## 🧪 Unit Test Layout
 
-| File                               | Covers                                                                                                                           |
-| :--------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
-| `test/keyboard.test.ts`            | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener. |
-| `test/shortcuts.test.ts`           | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                      |
-| `test/logViewer.test.ts`           | Log severity classification and live-vs-disk line reconciliation.                                                                |
-| `test/settings.test.ts`            | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation.                                         |
-| `test/theme.test.ts`               | Theme preset integrity, pure accent resolution (`resolveThemeAccent`), and CSS custom-property application.                      |
-| `test/storage.test.ts`             | Fail-soft `localStorage` helpers — working store, a store that throws on every call, and a missing global.                       |
-| `test/reactivity.test.ts`          | SolidJS 2 contracts the components depend on: writable derived signals, async-memo not-ready reads, and the effect-cleanup rule. |
-| `test/bindings.test.ts`            | Rust ↔ TypeScript IPC contract — the `collect_commands![…]` registry must match the generated wrappers in `src/bindings.ts`.     |
-| `test/version.test.ts`             | SemVer format of `APP_VERSION`.                                                                                                  |
-| `src-tauri/src/lib.rs`             | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, window geometry, and end-to-end settings repair.                     |
-| `src-tauri/src/settings_repair.rs` | Field-level repair — wrong types, missing keys, unknown keys preserved, nested collections, path parsing, default merging.       |
-| `src-tauri/src/portable.rs`        | Portable-mode marker detection and data-directory resolution.                                                                    |
-| `src-tauri/src/autostart.rs`       | Development-build detection and the IPC status shape.                                                                            |
-| `src-tauri/src/panic_log.rs`       | Panic description — string, formatted and non-string payloads, and named background threads.                                     |
+| File                                | Covers                                                                                                                                                    |
+| :---------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test/keyboard.test.ts`             | Hotkey spec parsing/formatting, platform modifier resolution (`Mod` → ⌘/Ctrl), layout-independent matching, side-aware listener.                          |
+| `test/shortcuts.test.ts`            | Shortcut registry integrity, rebinding + override persistence, conflict detection, event→action resolution.                                               |
+| `test/logViewer.test.ts`            | Log severity classification and live-vs-disk line reconciliation.                                                                                         |
+| `test/settings.test.ts`             | Settings backup sanitizer — type coercion, unknown-field rejection, geometry validation, schema-version passthrough.                                      |
+| `test/hardening.test.ts`            | Which browser shortcuts are swallowed in a release build and — just as important — which are never touched (copy/paste, and anything typed into a field). |
+| `test/theme.test.ts`                | Theme preset integrity, pure accent resolution (`resolveThemeAccent`), and CSS custom-property application.                                               |
+| `test/storage.test.ts`              | Fail-soft `localStorage` helpers — working store, a store that throws on every call, and a missing global.                                                |
+| `test/reactivity.test.ts`           | SolidJS 2 contracts the components depend on: writable derived signals, async-memo not-ready reads, and the effect-cleanup rule.                          |
+| `test/bindings.test.ts`             | Rust ↔ TypeScript IPC contract — the `collect_commands![…]` registry must match the generated wrappers in `src/bindings.ts`.                              |
+| `test/version.test.ts`              | SemVer format of `APP_VERSION`.                                                                                                                           |
+| `src-tauri/src/lib.rs`              | (`#[cfg(test)] mod tests`) Rust-side settings, persistence, window geometry, and end-to-end settings repair.                                              |
+| `src-tauri/src/settings_repair.rs`  | Field-level repair — wrong types, missing keys, unknown keys preserved, nested collections, path parsing, default merging.                                |
+| `src-tauri/src/settings_migrate.rs` | Schema-version ladder — legacy stamping, idempotency, a document from a newer build, and the v0→v1 hotkey normalization rules.                            |
+| `src-tauri/src/cli.rs`              | Flag parsing — `--autostart` implying hidden, request precedence, log-level spellings, and the rule that unknown arguments never abort a launch.          |
+| `src-tauri/src/portable.rs`         | Portable-mode marker detection and data-directory resolution.                                                                                             |
+| `src-tauri/src/webview_runtime.rs`  | The engine folder name and override variable, which fail _open_ (app works, portable mode leaks) if they drift.                                           |
+| `src-tauri/src/autostart.rs`        | Development-build detection and the IPC status shape.                                                                                                     |
+| `src-tauri/src/panic_log.rs`        | Panic description — string, formatted and non-string payloads, and named background threads.                                                              |
 
 ---
 
@@ -153,3 +157,25 @@ Run through this test matrix when testing native desktop features:
 | **Global Hotkey — Teardown** | Disable the toggle, then quit from the tray.                               | Listener stops and the OS keyboard hook is released before the process exits.                                                                     |
 | **Global Hotkey — macOS**    | Enable on macOS without Accessibility granted.                             | An inline prompt appears with a button that opens the Accessibility settings pane directly.                                                       |
 | **Tray "Quit"**              | Click "Quit" from the tray context menu.                                   | Sets `is_quitting = true` and performs graceful Win32 window class teardown without errors.                                                       |
+| **CLI — help / version**     | From a terminal, run `minimalistic-app --version` and `--help`.            | Output appears **in that terminal**, in a release build too. If nothing prints on Windows, the parent-console attach in `cli.rs` has regressed.   |
+| **CLI — start hidden**       | Launch with `--hidden`.                                                    | No window; the tray icon appears. `--autostart` behaves the same and additionally logs `Started by the OS launch entry`.                          |
+| **CLI — second launch**      | With the app running, launch it again with `--toggle`, then `--show`.      | The **existing** window toggles / raises. No second window, no second tray icon, and the second process exits immediately.                        |
+| **CLI — remote quit**        | With the app running, launch it again with `--quit`.                       | The running instance shuts down exactly as the tray "Quit" does. With nothing running, the message says so instead of silently doing nothing.     |
+| **CLI — junk arguments**     | Launch with `--frobnicate /some/path`.                                     | The app starts normally and logs one warning naming the ignored arguments. A GUI app must never fail to launch over an argument a shell injected. |
+| **CLI — log level**          | Launch with `--log-level=debug`, open the Dev Console.                     | Debug-level backend lines appear. `RUST_LOG=debug` does the same; the flag wins when both are set.                                                |
+| **Autostart — login launch** | Enable autostart in a **release** build, reboot, log in.                   | The app starts into the tray **without** showing a window, even with "Start silently minimized" off — that is `--autostart` being read.           |
+
+### Release-only webview hardening
+
+These behave differently in `bun run tauri dev` **on purpose** — a dev build keeps
+its browser keys. Verify against a real release build (`bun run build`).
+
+| Feature Area               | Action / Test Step                                                | Expected Behavior                                                                                                         |
+| :------------------------- | :---------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| **No reload**              | Press `F5`, then `Ctrl/Cmd+R`.                                    | Nothing happens. The active tab, status message and any open modal are unchanged — a reload would have reset all of them. |
+| **No print / find / zoom** | Press `Ctrl/Cmd+P`, `Ctrl/Cmd+F`, `Ctrl/Cmd+±`, `Ctrl/Cmd+0`.     | No print dialog, no browser find bar over the UI, and the layout does not scale.                                          |
+| **Editing still works**    | Focus a text field. Type, then `Ctrl/Cmd+A`, `+C`, `+V`, `+Z`.    | All normal. Select-all, copy, paste and undo are OS text editing, and are never intercepted.                              |
+| **Field owns its keys**    | With focus in a text field, press `Ctrl/Cmd+F` and `F5`.          | Still nothing — but for the _other_ reason: input targets are skipped before any rule is consulted.                       |
+| **No drop-navigation**     | Drag any file (a PDF, an image) onto the window and release.      | Nothing happens. Un-guarded, the whole UI is replaced by that file with no way back except restarting.                    |
+| **No browser menu**        | Right-click the window background, then right-click a text field. | Background: no menu. Text field: the native cut/copy/paste menu still appears.                                            |
+| **Dev build is exempt**    | Repeat the above under `bun run tauri dev`.                       | `F5` reloads and devtools open, as they must while you are working on the frontend.                                       |

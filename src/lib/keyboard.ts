@@ -695,6 +695,48 @@ export interface MatchableKeyEvent extends ModifierFlags {
 }
 
 /**
+ * True when the event target owns its own keystrokes — a field the user is
+ * typing into.
+ *
+ * Every keyboard feature in this app has to ask this before acting. An
+ * un-modified app shortcut (`?` opens the cheat sheet) must not fire while the
+ * user is typing a question mark; the webview hardening in `./hardening` must
+ * not swallow `Ctrl+F` inside a search box.
+ *
+ * ## Why duck typing rather than `instanceof HTMLInputElement`
+ *
+ * Two reasons, one practical and one correctness:
+ *
+ * - **Realms.** `instanceof` compares against *this* window's constructors. An
+ *   element from an `<iframe>`, a `<template>`'s document fragment, or any
+ *   other document fails the check while being a perfectly real text field.
+ *   Reading `tagName` has no such blind spot.
+ * - **Testability.** The DOM constructors do not exist in a bare Bun test
+ *   process, so an `instanceof` chain forces a headless-DOM dependency on the
+ *   whole test suite to assert one boolean. Duck typing keeps the rule a pure
+ *   function of a plain object.
+ *
+ * The trade-off — a non-element object with a `tagName` of `'INPUT'` would pass
+ * — is not reachable from a real event target.
+ */
+export function isTextEntryTarget(target: unknown): boolean {
+  if (target === null || typeof target !== 'object') return false;
+
+  const candidate = target as { tagName?: unknown; isContentEditable?: unknown };
+
+  // `contenteditable` makes any element a text field, so it is checked first
+  // and independently of the tag.
+  if (candidate.isContentEditable === true) return true;
+
+  return (
+    typeof candidate.tagName === 'string' &&
+    (candidate.tagName === 'INPUT' ||
+      candidate.tagName === 'TEXTAREA' ||
+      candidate.tagName === 'SELECT')
+  );
+}
+
+/**
  * Tests whether a `keydown` event triggers a hotkey.
  *
  * Pass `stateMask` to match against side-aware modifier state tracked by

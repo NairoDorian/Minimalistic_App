@@ -1,6 +1,6 @@
 [package]
 name = "minimalistic-app"
-version = "0.24.0"
+version = "0.26.0"
 description = "Minimalistic cross-platform desktop application based on Tauri 2, Bun, SolidJS 2, and TypeScript"
 authors = ["Z"]
 edition = "2024"
@@ -55,7 +55,24 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
     # GetCurrentThreadId — used by the listener's session-change unit tests.
     "Win32_System_Threading",
+    # AttachConsole/WriteConsole — lets `--version` and `--help` reach the
+    # terminal that launched a `windows_subsystem = "windows"` binary. See
+    # src/cli.rs::print_and_exit for why this is not optional.
+    "Win32_System_Console",
 ] }
+
+# ── WebView2 hardening (src/webview_hardening.rs) ─────────────────────────────
+# Both crates are already in the dependency graph — wry and tauri link them —
+# so listing them here costs no extra compilation, only the obligation to keep
+# the versions matched. `tauri::webview::PlatformWebview::controller()` returns
+# *tauri's* `ICoreWebView2Controller`, so a version skew here is a type error,
+# not a runtime surprise. Check tauri's own Cargo.toml before bumping.
+#
+# Note these deliberately track a different `windows` generation than the
+# keyboard hook above (0.61 vs 0.58): the hook code is ours and pinned for
+# stability, while these must follow whatever Tauri links. Cargo builds both.
+webview2-com = "0.38"
+windows-core = "0.61"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # CGEventTap-based tap; requires the Accessibility permission at runtime.

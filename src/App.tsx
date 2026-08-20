@@ -20,7 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { isTauri } from './lib/tauri';
 import { applyThemeAccent, DEFAULT_THEME_ACCENT } from './lib/theme';
 import { resolveShortcutAction } from './lib/shortcuts';
-import { isCapturingHotkey } from './lib/keyboard';
+import { isCapturingHotkey, isTextEntryTarget } from './lib/keyboard';
 import { APP_NAME, storageKey } from './lib/appMeta';
 import { readStored, writeStored } from './lib/storage';
 
@@ -45,16 +45,6 @@ const ACTIVE_TAB_KEY = storageKey('active_tab');
 function loadInitialTab(): TabType {
   const saved = readStored(ACTIVE_TAB_KEY);
   return TAB_ORDER.includes(saved as TabType) ? (saved as TabType) : 'preferences';
-}
-
-/** Elements that own their keystrokes — un-modified shortcuts must not steal them. */
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
 }
 
 export function AppContent() {

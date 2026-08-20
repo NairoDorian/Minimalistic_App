@@ -23,6 +23,12 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": ["src/lib/hardening.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off"
+      }
     }
   ]
 }

@@ -91,18 +91,64 @@ mod tests {
 
     /// Captures the description of a real panic without leaving a hook installed
     /// for the rest of the test binary.
+    ///
+    /// # Why this is serialized, and why that is not paranoia
+    ///
+    /// The panic hook is **process-global**, and `cargo test` runs tests on
+    /// several threads by default. Two concurrent calls to this helper
+    /// interleave into a genuinely broken state:
+    ///
+    /// ```text
+    /// A: take_hook()  -> default        A installs hook A
+    /// B: take_hook()  -> hook A         B installs hook B
+    /// A: body panics                    hook B runs, B's slot is filled by A's panic
+    /// A: set_hook(default)              hook B is now uninstalled, mid-flight
+    /// B: body panics                    the default hook runs; nothing is captured
+    /// B: .expect("hook must have run")  panics — inside whatever hook is current
+    /// ```
+    ///
+    /// That last panic-inside-a-panic is not a test failure. It is
+    /// `STATUS_STACK_BUFFER_OVERRUN` and the **entire test binary aborts**,
+    /// taking every unrelated result with it and reporting a location that has
+    /// nothing to do with the cause. It is also load-dependent, so it surfaces
+    /// when someone adds tests elsewhere and looks like their fault.
+    ///
+    /// One process-wide lock removes the interleaving entirely. Poisoning is
+    /// recovered from rather than unwrapped, for the same reason
+    /// [`crate::lock_guard`] does it: the protected data is a plain `Option`
+    /// that is valid whatever happened to the previous holder, and a second
+    /// panic here would restart the cascade this lock exists to prevent.
     fn describe_panic(body: impl FnOnce() + std::panic::UnwindSafe) -> String {
+        static SERIAL: Mutex<()> = Mutex::new(());
         static CAPTURED: Mutex<Option<String>> = Mutex::new(None);
+
+        // Held for the whole swap-run-restore sequence. `catch_unwind` below
+        // stops the body's panic before it can unwind through this frame, so
+        // the guard is released normally and the lock is not poisoned.
+        let _serial = SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(|info: &PanicHookInfo<'_>| {
-            *CAPTURED.lock().unwrap() = Some(describe(info));
+            let mut slot = CAPTURED
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *slot = Some(describe(info));
         }));
 
         let _ = std::panic::catch_unwind(body);
 
+        // Restore before reading, so the `expect` below — which panics on a
+        // genuine failure — is reported by the normal test harness hook rather
+        // than by ours.
         std::panic::set_hook(previous);
-        CAPTURED.lock().unwrap().take().expect("hook must have run")
+
+        CAPTURED
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+            .expect("hook must have run")
     }
 
     #[test]

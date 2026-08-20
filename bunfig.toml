@@ -1,0 +1,29 @@
+# bunfig.toml — Bun 1.4 configuration
+# See: https://bun.com/docs/runtime/bunfig
+#
+# Bun 1.4 rewrites Bun in Rust, adds a global virtual store for faster installs,
+# native streams, Bun.Image, Bun.markdown, Bun.cron, Bun.Terminal, and Node.js
+# 26.x compatibility with 1,517 newly passing Node.js test suite tests.
+
+# Skip automatic .env file loading. The Minimalistic App is a Tauri desktop
+# application that uses Tauri's own env/secret management
+# (tauri.conf.json build scripts). This prevents stray .env files from
+# injecting variables into the dev server / build. System environment
+# variables (e.g. TAURI_DEV_HOST) are unaffected.
+# Files passed explicitly with --env-file are still loaded.
+# See: https://bun.com/docs/runtime/bunfig#env
+env = false
+
+[install]
+# Use the isolated linker (Bun 1.4 default for new projects), which activates
+# the shared global virtual store — packages are extracted once into Bun's
+# cache and symlinked into node_modules/.bun/ instead of being copied per
+# install. Warm installs after `rm -rf node_modules` are roughly 7x faster.
+# See: https://bun.com/docs/pm/global-store
+linker = "isolated"
+
+# Peer dependency auto-install (Bun 1.4 default for new projects).
+peer = true
+
+[run]
+# No overrides needed — defaults are sane for a Tauri + Vite project.

@@ -99,6 +99,23 @@ export type AppInfo = {
 /**  Persistent application preferences saved as JSON in the OS app configuration directory. */
 export type AppSettings = {
 	/**
+	 *  Schema version of the document this struct was loaded from.
+	 * 
+	 *  Not a user preference — bookkeeping for [`settings_migrate`]. It is the
+	 *  only thing that distinguishes "a field is missing because the user never
+	 *  set it" from "a field is missing because it used to be called something
+	 *  else", and it cannot be added retroactively: a file with no version
+	 *  field is indistinguishable from one written at whatever version the
+	 *  field was introduced.
+	 * 
+	 *  Note the asymmetry that makes this work. `#[serde(default)]` gives `0`
+	 *  for a file written before versioning existed, while
+	 *  [`AppSettings::default`] gives [`settings_migrate::CURRENT_SETTINGS_VERSION`]
+	 *  so a *fresh install* starts current and never walks the ladder. Both are
+	 *  correct; they answer different questions.
+	 */
+	settings_version?: number,
+	/**
 	 *  Controls whether closing the main GUI window minimizes the app to the system tray
 	 *  instead of terminating the application process. Default is false.
 	 */
