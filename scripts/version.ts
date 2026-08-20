@@ -7,7 +7,7 @@
  *  - `src-tauri/Cargo.toml`      — synced by `scripts/before-commit.ts`
  *  - `src-tauri/tauri.conf.json` — synced by `scripts/before-commit.ts` (drives
  *                                  the bundled artifact + updater feed version)
- *  - `src-tauri/Cargo.lock`      — refreshed by `cargo update` when Cargo.toml
+ *  - `src-tauri/Cargo.lock`      — refreshed by `cargo generate-lockfile` when Cargo.toml
  *                                  changes (run from before-commit.ts)
  *  - `__APP_VERSION__`           — injected into the frontend at build time by
  *                                  Vite's `define` (see vite.config.ts); SolidJS
@@ -19,4 +19,4 @@
  * script propagate it — this is what prevents silent version drift between the
  * package manager, the Cargo crate, and the Tauri bundle config.
  */
-export const APP_VERSION = '0.19.0';
+export const APP_VERSION = '0.24.0';

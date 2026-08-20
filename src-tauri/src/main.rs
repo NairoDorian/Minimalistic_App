@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    minimalistic_app::run();
+    minimalistic_app_lib::run();
 }

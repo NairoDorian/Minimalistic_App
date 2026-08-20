@@ -1,16 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the minimalistic app",
+  "description": "Least-privilege capability for the main window. Autostart permissions are deliberately absent: the webview no longer calls the autostart plugin at all, because a direct enable()/disable() registers the path of the *running* executable and a click during `tauri dev` would point the OS at src-tauri/target/debug and overwrite the installed app's launch entry. The Rust side owns that write and refuses it in a development build (src-tauri/src/autostart.rs), so the frontend needs no plugin permission for it — the surface shrinks and the hazard disappears together.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "autostart:default",
-    "autostart:allow-enable",
-    "autostart:allow-disable",
-    "autostart:allow-is-enabled",
-    "updater:default",
-    "process:default",
-    "notification:default"
-  ]
+  "permissions": ["core:default", "updater:default", "process:default", "notification:default"]
 }

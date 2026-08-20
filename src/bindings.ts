@@ -6,7 +6,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Tauri IPC command: Retrieves current minimize-to-tray preference. */
 	getMinimizeToTray: () => __TAURI_INVOKE<boolean>("get_minimize_to_tray"),
-	/**  Tauri IPC command: Updates current minimize-to-tray preference and persists to disk. */
+	/**
+	 *  Tauri IPC command: Updates current minimize-to-tray preference and persists to disk.
+	 * 
+	 *  The settings lock is held across the whole read-modify-write. Taking it three
+	 *  separate times would let a concurrent writer (`update_app_settings`, or a
+	 *  window move updating the in-memory geometry) slip in between the clone and
+	 *  the write-back, silently discarding its change.
+	 */
 	setMinimizeToTray: (enabled: boolean) => __TAURI_INVOKE<null>("set_minimize_to_tray", { enabled }),
 	/**  Tauri IPC command: Retrieves the entire persisted `AppSettings` struct. */
 	getAppSettings: () => __TAURI_INVOKE<AppSettings>("get_app_settings"),
@@ -28,6 +35,50 @@ export const commands = {
 	getRecentLogs: (maxLines: number) => __TAURI_INVOKE<string>("get_recent_logs", { maxLines }),
 	/**  Truncates the backend log file so the Dev Console starts clean. */
 	clearLogs: () => __TAURI_INVOKE<null>("clear_logs"),
+	/**  Tauri IPC command: Lists every global hotkey action and its current binding. */
+	getGlobalHotkeys: () => __TAURI_INVOKE<GlobalHotkeyBinding[]>("get_global_hotkeys"),
+	/**  Tauri IPC command: Reports whether the OS listener is running, and why not. */
+	getGlobalHotkeyStatus: () => __TAURI_INVOKE<GlobalHotkeyStatus>("get_global_hotkey_status"),
+	/**
+	 *  Tauri IPC command: Validates and canonicalizes a hotkey spec without binding
+	 *  it — lets the recorder UI reject an unusable chord before it is saved.
+	 */
+	validateHotkeySpec: (spec: string) => __TAURI_INVOKE<string>("validate_hotkey_spec", { spec }),
+	/**
+	 *  Tauri IPC command: Binds (or, with an empty spec, clears) one global hotkey,
+	 *  persists it, and restarts the listener.
+	 */
+	setGlobalHotkey: (action: GlobalHotkeyAction, spec: string) => __TAURI_INVOKE<null>("set_global_hotkey", { action, spec }),
+	/**  Tauri IPC command: Turns the global hotkey listener on or off and persists it. */
+	setGlobalHotkeysEnabled: (enabled: boolean) => __TAURI_INVOKE<null>("set_global_hotkeys_enabled", { enabled }),
+	/**
+	 *  Tauri IPC command: Opens the macOS Accessibility settings pane so the user
+	 *  can grant the permission global hotkeys need there. A no-op elsewhere.
+	 */
+	openAccessibilitySettings: () => __TAURI_INVOKE<null>("open_accessibility_settings"),
+	/**
+	 *  Tauri IPC command: reports the autostart preference and the real OS state.
+	 * 
+	 *  The two can disagree in a development build, which deliberately never writes
+	 *  the OS entry — see `src/autostart.rs` for why.
+	 */
+	getAutostart: () => __TAURI_INVOKE<AutostartStatus>("get_autostart"),
+	/**
+	 *  Tauri IPC command: records the autostart preference and reconciles the OS entry.
+	 * 
+	 *  Disk-first, like every other preference writer here: the setting is persisted
+	 *  before the OS is touched, so a failure to write the launch entry cannot leave
+	 *  disk and memory disagreeing. The returned status tells the UI what actually
+	 *  happened, including the development-build case where the OS was left alone.
+	 */
+	setAutostart: (enabled: boolean) => __TAURI_INVOKE<AutostartStatus>("set_autostart", { enabled }),
+	/**
+	 *  Tauri IPC command: reports whether the app is running in portable mode.
+	 * 
+	 *  The frontend surfaces this in the About tab so a user can tell at a glance
+	 *  where their settings are being written.
+	 */
+	getPortableStatus: () => __TAURI_INVOKE<PortableStatus>("get_portable_status"),
 };
 
 /* Types */
@@ -51,7 +102,7 @@ export type AppSettings = {
 	 *  Controls whether closing the main GUI window minimizes the app to the system tray
 	 *  instead of terminating the application process. Default is false.
 	 */
-	minimize_to_tray: boolean,
+	minimize_to_tray?: boolean,
 	/**  Controls whether the application starts silently minimized to the system tray on launch. */
 	start_minimized?: boolean,
 	/**  Controls whether the application checks for updates on startup. */
@@ -70,6 +121,91 @@ export type AppSettings = {
 	saved_window_x?: number,
 	/**  Last persisted window Y in physical pixels (`i32::MIN` = unset). */
 	saved_window_y?: number,
+	/**
+	 *  Whether the app should register itself to start at OS login.
+	 * 
+	 *  This is the *source of truth*; the OS launch entry is a derived effect,
+	 *  reconciled at startup by [`autostart::reconcile_on_startup`]. Keeping the
+	 *  intent here rather than reading it back from the OS is what lets a
+	 *  development build record the preference without touching the installed
+	 *  application's registration — see `src/autostart.rs`.
+	 */
+	autostart_enabled?: boolean,
+	/**
+	 *  Whether the OS-wide global hotkey listener runs at all. Off by default:
+	 *  it installs a system keyboard hook, which is opt-in behaviour.
+	 */
+	global_hotkeys_enabled?: boolean,
+	/**
+	 *  User-configured global hotkeys, one entry per bound action. Actions with
+	 *  no entry (or an empty spec) are unbound.
+	 */
+	global_hotkeys?: GlobalHotkeyBinding[],
+};
+
+/**  What the frontend needs to render the autostart toggle honestly. */
+export type AutostartStatus = {
+	/**  The user's stored preference — the source of truth for the toggle. */
+	enabled: boolean,
+	/**
+	 *  Whether the OS launch entry is actually registered right now.
+	 * 
+	 *  In a release build this tracks `enabled`. In a dev build it reports the
+	 *  *installed* application's state, which is deliberately left alone, so the
+	 *  two can legitimately disagree.
+	 */
+	os_registered: boolean,
+	/**
+	 *  True when this build refuses to write the OS entry, so the UI can explain
+	 *  why flipping the switch had no effect outside the app.
+	 */
+	dev_build: boolean,
+};
+
+/**
+ *  What triggering a global hotkey does.
+ * 
+ *  Deliberately a small, safe set: a global hotkey fires from anywhere in the
+ *  OS, so destructive actions (quit, reset) are not offered.
+ */
+export type GlobalHotkeyAction = 
+/**  Show the window if hidden, hide it if visible. */
+"toggle_window" | 
+/**  Always bring the window to the foreground. */
+"show_window" | 
+/**  Surface the window and run an update check. */
+"check_updates";
+
+/**  One persisted global hotkey binding. */
+export type GlobalHotkeyBinding = {
+	action: GlobalHotkeyAction,
+	/**  Hotkey spec string, e.g. `"Mod+Alt+Space"`. Empty means unbound. */
+	spec: string,
+};
+
+/**  Runtime state of the global hotkey listener, surfaced to the UI. */
+export type GlobalHotkeyStatus = {
+	/**  True when the OS listener is running. */
+	active: boolean,
+	/**  Number of hotkeys currently registered with the OS. */
+	registered: number,
+	/**
+	 *  True when matched hotkeys are also withheld from other applications.
+	 *  False means they are detected but still reach the focused app.
+	 */
+	blocking: boolean,
+	/**  Why the listener could not start, shown verbatim in the UI. */
+	error: string | null,
+	/**  macOS: the Accessibility permission is missing and must be granted. */
+	needs_accessibility: boolean,
+};
+
+/**  Where the app writes, and whether that is beside the executable. */
+export type PortableStatus = {
+	/**  True when a `portable` marker file was found next to the executable. */
+	active: boolean,
+	/**  Absolute path of the directory holding `settings.json`. */
+	data_dir: string,
 };
 
 /**  System and process diagnostic telemetry returned by `get_system_stats`. */

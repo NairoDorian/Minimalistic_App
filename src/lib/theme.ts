@@ -5,7 +5,15 @@
  * to CSS custom properties (--accent-cyan, --accent-blue, --accent-glow) on the document root.
  */
 
+import { storageKey } from './appMeta';
+
 export type ThemeAccent = 'cyan' | 'emerald' | 'violet' | 'amber' | 'rose';
+
+/**
+ * localStorage key backing the accent in browser-preview mode. The desktop
+ * build persists the accent through `AppSettings` on the Rust side instead.
+ */
+export const THEME_ACCENT_STORAGE_KEY = storageKey('theme_accent');
 
 export interface ThemePreset {
   id: ThemeAccent;
@@ -62,7 +70,21 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
 export const DEFAULT_THEME_ACCENT: ThemeAccent = 'cyan';
 
 /**
+ * Resolves a stored accent id to a known preset, falling back to the default.
+ *
+ * Pure — no DOM access — so it is safe to call from a `createMemo` compute,
+ * which must stay side-effect free. `applyThemeAccent` is the effectful half.
+ */
+export function resolveThemeAccent(accent: string | null | undefined): ThemeAccent {
+  return (THEME_PRESETS.find((p) => p.id === accent) ?? THEME_PRESETS[0]!).id;
+}
+
+/**
  * Applies the selected theme accent preset to document CSS variables.
+ *
+ * This is an imperative boundary (the document's style object), so it belongs
+ * in an effect's apply phase rather than in a memo — see
+ * `.docs/solid-docs/src/routes/(5)guides/(0)avoid-unnecessary-effects.mdx`.
  */
 export function applyThemeAccent(accent: string | undefined): ThemeAccent {
   const selected = THEME_PRESETS.find((p) => p.id === accent) ?? THEME_PRESETS[0]!;

@@ -748,6 +748,34 @@ input:checked + .slider:before {
   user-select: text;
 }
 
+/* A tile whose content is a filesystem path needs the full grid width — the
+   two-column layout would otherwise force a useless truncation. */
+.info-tile-wide {
+  grid-column: 1 / -1;
+}
+
+/* Paths are read character by character, so they get a monospace face and are
+   allowed to wrap mid-string rather than overflowing the tile. */
+.tile-value-path {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--text-muted);
+}
+
+.tile-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.tile-hint code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--accent-cyan);
+}
+
 .about-notes-box {
   background: rgba(0, 242, 254, 0.03);
   border: 1px solid rgba(0, 242, 254, 0.15);
@@ -882,21 +910,6 @@ input:checked + .slider:before {
   color: var(--text-main);
 }
 
-.ipc-output-box {
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-family: 'Fira Code', monospace, Consolas, monospace;
-  font-size: 11px;
-  color: var(--accent-cyan);
-  max-height: 110px;
-  overflow-y: auto;
-  user-select: text;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
 .toast-bench-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -963,6 +976,40 @@ input:checked + .slider:before {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Placeholder rows shown by the Preferences tab's <Loading> boundary while the
+   persisted settings are read. Sized to the real .setting-item rhythm so the
+   card does not jump when the actual rows swap in. The shimmer is a single
+   compositor-driven background animation — the global prefers-reduced-motion
+   rule above neutralizes it for users who ask for less movement. */
+.settings-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-skeleton-row {
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  background-size: 200% 100%;
+  animation: settings-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes settings-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 /* Activity Console */
@@ -1181,11 +1228,14 @@ input:checked + .slider:before {
   outline-offset: -1px;
 }
 
+/* Empty state shown when the stream has no lines, or none match the filter. */
 .dev-console-empty {
-  color: var(--text-dim);
-  font-style: italic;
+  margin: auto;
+  padding: 12px;
   text-align: center;
-  padding: 24px 0;
+  color: #52525b;
+  font-style: italic;
+  user-select: none;
 }
 
 .dev-console-line {
@@ -1398,10 +1448,23 @@ input:checked + .slider:before {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Compositor-driven drain: `animation-duration` is bound inline to the toast's
+   own lifetime (see Toast.tsx), so no timer has to re-render the bar. */
 .toast-progress-fill {
   height: 100%;
+  width: 100%;
   background: var(--accent-cyan);
-  transition: width 0.05s linear;
+  transform-origin: left center;
+  animation: toast-progress-drain linear forwards;
+}
+
+@keyframes toast-progress-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
 }
 
 /* =========================================================================
@@ -1505,15 +1568,24 @@ input:checked + .slider:before {
   gap: 6px;
 }
 
+.shortcuts-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
 .shortcut-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 10px;
   font-size: 11px;
 }
 
 .shortcut-desc {
   color: var(--text-muted);
+  padding-top: 3px;
 }
 
 .shortcut-kbd {
@@ -1525,6 +1597,165 @@ input:checked + .slider:before {
   font-size: 10px;
   color: var(--text-main);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* =========================================================================
+   Global Hotkeys (system-wide) section
+   ========================================================================= */
+.global-hotkey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px 2px;
+}
+
+.global-hotkey-note,
+.global-hotkey-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+}
+
+.global-hotkey-status.tone-ok {
+  border-color: rgba(16, 185, 129, 0.28);
+  color: #34d399;
+}
+
+.global-hotkey-status.tone-warn {
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #f59e0b;
+}
+
+.global-hotkey-status.tone-error {
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+}
+
+.global-hotkey-permission {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.06);
+  color: var(--text-muted);
+}
+
+/* =========================================================================
+   Hotkey Recorder ("press a shortcut" capture control)
+   ========================================================================= */
+.hotkey-recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.hotkey-recorder-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hotkey-recorder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 1px 3px;
+  color: var(--accent-cyan);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.hotkey-recorder-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hotkey-recorder-btn:focus-visible {
+  outline: 1px solid var(--accent-cyan);
+  outline-offset: 1px;
+}
+
+.hotkey-recorder-btn:disabled {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+/* Armed: the control owns the keyboard until a chord is pressed or Escape. */
+.hotkey-recorder-btn.recording {
+  border-color: var(--accent-cyan);
+  background: var(--accent-badge-bg);
+  animation: hotkeyRecordPulse 1.4s ease-in-out infinite;
+}
+
+.hotkey-recorder-btn.recording .shortcut-kbd {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  min-width: 92px;
+  text-align: center;
+}
+
+@keyframes hotkeyRecordPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.hotkey-recorder-reset {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.hotkey-recorder-reset:hover:not(:disabled) {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hotkey-recorder-reset:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.hotkey-recorder-warning {
+  font-size: 9.5px;
+  color: #f59e0b;
+  text-align: right;
+  max-width: 190px;
 }
 
 /* =========================================================================
@@ -1692,4 +1923,17 @@ input:checked + .slider:before {
   .modal-close-btn {
     border: 1px solid ButtonText;
   }
+}
+
+/* Explanatory note under a setting whose effect is conditional — currently the
+   development-build autostart guard. Indented to the setting row's text column
+   so it reads as belonging to the row above it rather than as a new section. */
+.setting-note {
+  margin: -2px 12px 6px 54px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent-cyan);
+  padding-left: 8px;
+  opacity: 0.85;
 }

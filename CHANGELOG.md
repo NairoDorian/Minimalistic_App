@@ -8,6 +8,481 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.24.0] - 2026-08-20
+
+### Round 24 — More From the Reference Implementation: Autostart Safety, Portable Mode, Crash Evidence, IPC Contract Test
+
+Second pass through [AIVORelay](https://github.com/MaxITService/AIVORelay). One
+of its guards turned out to describe a **real bug in this template**; the rest
+are capabilities a starting point should ship.
+
+#### 🐞 Fixed: a dev session could sabotage your installed app's autostart
+
+- **`@tauri-apps/plugin-autostart`'s `enable()` registers the path of the
+  _running_ executable.** The Preferences toggle called it directly from the
+  frontend, so one click during `bun run tauri dev` replaced the installed
+  application's OS launch entry with a path into `src-tauri/target/debug/`. The
+  user finds out at the next reboot — either nothing starts, because the target
+  directory was cleaned, or a stale debug build starts instead of the app they
+  installed. Nothing about it is visible while it happens, and developing a
+  desktop app means toggling its preferences.
+- **New `src-tauri/src/autostart.rs`** takes ownership of the write:
+  - the user's intent is stored in `AppSettings.autostart_enabled`, and the OS
+    entry is **derived state** reconciled at startup — so an entry removed
+    externally (reinstall, cleanup tool) comes back instead of the preference
+    quietly becoming a lie;
+  - a **development build never writes it** (`cfg!(debug_assertions)`), records
+    the preference anyway so it survives into the release build, and reports
+    `dev_build: true` to the UI, which shows a note under the toggle rather than
+    implying something happened outside the app;
+  - new `get_autostart` / `set_autostart` IPC commands, disk-first like every
+    other preference writer here.
+- **The webview now needs no autostart permission at all.**
+  `autostart:allow-enable` / `allow-disable` / `allow-is-enabled` are gone from
+  `capabilities/default.json` and `@tauri-apps/plugin-autostart` is gone from
+  `package.json` — the capability surface and the hazard were removed together.
+- Verified live: launching the debug build logs
+  `[autostart] Development build: leaving the OS launch entry untouched`.
+
+#### 🧳 Portable Mode — `src-tauri/src/portable.rs` (new)
+
+- An empty file named `portable` beside the executable redirects settings and
+  logs to `<exe dir>/Data/`. Runs from removable media, leaves no trace on the
+  host — which matters for an app that can register itself at OS startup and
+  install a global keyboard hook — and is the quickest way to get a clean
+  profile for testing without disturbing your real one.
+- Resolved **once** at process start, before the logging plugin is registered, so
+  both `settings.json` and the rotating log file follow it. An unwritable
+  location falls back to the OS directories with a message rather than failing to
+  launch.
+- New `get_portable_status` IPC command; the About tab gained a full-width
+  **Data Location** tile showing the active directory and whether it is portable.
+- Verified live: with a marker present, the app logged
+  `[portable] Portable mode active`, wrote `Data/settings.json` and
+  `Data/logs/Minimalistic App.log`, and created nothing in the OS directories.
+
+#### 💥 Crashes Leave Evidence — `src-tauri/src/panic_log.rs` (new)
+
+- Rust's default panic handler writes to **stderr**, which a bundled desktop app
+  does not have: Windows builds with `windows_subsystem = "windows"` precisely so
+  no console appears, and a macOS `.app` from Finder has nowhere for it to go. So
+  the one message explaining a crash went to a stream nobody reads.
+- Two things made that worse here: the release profile sets `panic = "abort"`, so
+  there is no unwinding and no second chance; and the global hotkey engine runs an
+  OS keyboard hook on a **background thread**, where a panic never reaches a
+  user-facing error boundary.
+- A hook now logs the panic — message, source location, and **thread name** —
+  through the `log` facade before the process dies, so it reaches the rotating log
+  file the bug-report template already asks users to attach, and the in-app Dev
+  Console live. The default handler still runs afterwards, so terminal and
+  `cargo test` behaviour is unchanged.
+
+#### 🔗 IPC Contract Drift Is Now a Test — `test/bindings.test.ts` (new)
+
+- `src/bindings.ts` is generated **at runtime** by the debug build, so adding a
+  Rust command and committing without launching the app leaves the frontend
+  calling a contract the backend no longer has. A comment in `lib.rs` claimed a
+  freshness test existed; none did.
+- The test compares the `collect_commands![…]` registry against the generated
+  wrappers **as source text**. It caught real drift on its first run (the three
+  commands added above).
+- It has to be a source comparison, and the reason is worth recording: a Rust test
+  that re-renders the bindings from `specta_builder()` links `tauri::Wry`, and the
+  resulting test executable fails to start on Windows with
+  `STATUS_ENTRYPOINT_NOT_FOUND` because the webview runtime is not beside it. That
+  approach was implemented, diagnosed, and abandoned; the stale comment in
+  `lib.rs` now says so.
+- Honest limitation, stated in the test: it catches a command added, renamed or
+  removed — not a changed _signature_.
+
+#### 🧪 Tests
+
+- **Rust 132 → 143**, **frontend 130 → 135**. New coverage for portable-mode
+  resolution, dev-build detection, panic description (including from a named
+  background thread), and the IPC contract.
+- `Required<AppSettings>` made the compiler enumerate every place the new
+  `autostart_enabled` field had to be handled, including the untrusted-backup
+  sanitizer in `src/lib/settingsBackup.ts`.
+
+#### 📖 Documentation
+
+- `README.md` — four new capability sections.
+- `SECURITY.md` — autostart's removal from the capability list explained; new
+  §2 on portable mode, with its limits stated plainly (it is not encryption, and
+  the OS autostart entry is inherently not portable); IPC table updated to
+  nineteen commands.
+- `AGENTS.md` — new rules: guard anything that depends on the running
+  executable's path behind `cfg!(debug_assertions)`; resolve app-written paths
+  through `portable::`; regenerate bindings when the command surface changes.
+- `TESTING.md` — the five new test files in the layout table.
+
+## [0.23.0] - 2026-08-20
+
+### Round 23 — Practices Borrowed From a Production Tauri App: 2.6× Faster Dev Loop, Self-Healing Settings
+
+Read the source of [AIVORelay](https://github.com/MaxITService/AIVORelay) — a
+production Tauri 2 desktop app with a 100-plus-module Rust backend — and adopted
+the practices that fit a starting-point template. Each was re-derived and
+re-measured here rather than copied; the full adopted/rejected ledger with
+reasoning is [`DOCUMENTATION.md`](DOCUMENTATION.md) §6.
+
+#### ⚡ Fast Dev Loop — `bun run dev:fast` (new)
+
+- **A one-line Rust edit now goes from 10.17 s to 3.92 s — 2.6× — back to a
+  running binary.** Measured on this repository (Windows 11, warm target dir),
+  not quoted: the slow half of a Tauri edit→relaunch loop is _linking_, and two
+  settings dominate it — LLVM's `lld` (which links in parallel) and
+  `CARGO_PROFILE_DEV_DEBUG=limited` (which keeps file/line info in backtraces
+  while dropping the expensive rest).
+- **New `scripts/dev-fast.ts`** detects the best available fast linker per
+  platform — `lld-link` on Windows, `mold` then `ld.lld` on Linux, `ld64.lld` on
+  macOS — and applies both settings as **environment variables for that one
+  process**. Nothing is written to disk, so there is nothing to revert and
+  nothing that can leak into a commit. With no fast linker installed it prints
+  an install hint and runs an ordinary dev session, so it is always safe to use
+  as the default dev command. `--check` reports the detected configuration
+  without launching; `--debug <level>` overrides the debuginfo level.
+- **New `.cargo/config.toml`** carries the measurement table, per-platform
+  `linker`/`rustflags` snippets (**commented out** — an uncommented entry would
+  break the build for every contributor and CI runner without LLVM, and a
+  template must clone-and-build on a bare toolchain), and the tuning knobs that
+  were tested and found **not** to help: forcing `CARGO_BUILD_JOBS` above the
+  logical CPU count, explicit `codegen-units`, and `profile.dev.build-override`
+  all lost to Cargo's defaults. It also enables
+  `[future-incompat-report] frequency = "always"`.
+- ⚠️ Documented caveat: changing the debuginfo level invalidates the dependency
+  cache, so alternating `tauri dev` with `dev:fast` costs a full rebuild each
+  way. `dev:fast --debug full` takes the linker win without that.
+
+#### 🩹 Self-Healing Settings — `src-tauri/src/settings_repair.rs` (new)
+
+- **A single wrong-typed field no longer costs the user every other setting.**
+  `#[serde(default)]` covers a _missing_ field but does nothing for one that is
+  present with the wrong type: one `"minimize_to_tray": "yes"` made
+  `from_str::<AppSettings>` fail for the whole document, and the old response —
+  quarantine the file, start from defaults — discarded the accent colour,
+  hotkeys, window geometry and tray behaviour along with it.
+- The loader now merges the stored JSON over the serialized defaults, uses
+  **`serde_path_to_error`** to learn the exact JSON path serde rejected
+  (`theme_accent`, `global_hotkeys[2].spec`), resets that field alone, and
+  retries under a bounded attempt budget. Each repair is logged by path, and the
+  healed document is written back so the next launch starts clean.
+- Failure handling is now a graded ladder rather than one branch: missing file →
+  silent defaults; **unreadable** file → defaults for this session but
+  deliberately **no** quarantine (renaming would turn a transient permissions or
+  I/O error into permanent data loss); not-valid-JSON → quarantine to `.bak`;
+  valid JSON with bad fields → repair in place.
+- **11 new Rust tests**: wrong types, several broken fields at once, missing
+  keys, unknown keys preserved for downgrade-safety, a broken element nested in
+  a collection, an out-of-range integer, a scalar where an object belongs, plus
+  path-parsing and merge unit tests. Two end-to-end tests assert the file is
+  repaired _and not quarantined_, and that a valid hotkey binding survives a
+  malformed neighbour.
+
+#### 📱 Mobile-Capable Library Target
+
+- `src-tauri/Cargo.toml` gained a `[lib]` section with
+  `crate-type = ["staticlib", "cdylib", "rlib"]`. `run()` already carried
+  `#[cfg_attr(mobile, tauri::mobile_entry_point)]`, but without those crate types
+  a mobile build could never have linked it — the template advertised a mobile
+  entry point it could not build. The `_lib` name suffix additionally avoids the
+  Windows lib/bin name collision (rust-lang/cargo#8519).
+
+#### 📚 Reference-Implementation Mirror
+
+- **`bun run docs:sync` now vendors a sixth source**: AIVORelay's Rust backend,
+  `docs/`, and the maintainers' `.AGENTS/` engineering notes (sparse, ~6 MB).
+  Reference manuals say what an API does; they do not say what an app built on
+  it looks like after two years in production.
+- `scripts/sync-docs.ts` gained a per-source `searchExtensions` field so
+  `docs:find` searches `.rs` in that mirror and markdown everywhere else.
+- **Two bugs found and fixed in the sync script** while adding it: a `*.md` glob
+  in a sparse spec is rejected by git's _cone mode_ and made the whole
+  `sparse-checkout set` call fail, leaving the clone checked out at root level;
+  and because the update path never re-applied the sparse config, that
+  half-configured clone then fetched, reset and **reported success forever**.
+  The update path now re-asserts the sparse set every run, so a mirror heals
+  itself instead of needing a manual delete.
+
+#### 🗂️ Repository Templates
+
+- `.github/ISSUE_TEMPLATE/bug_report.md` — points reporters at the app's own
+  **Copy Diagnostics** button (System & About tab) and Dev Console, so the
+  environment and log sections fill themselves in.
+- `.github/ISSUE_TEMPLATE/feature_request.md` — asks for the _problem_, and for
+  the case that an addition belongs in something deliberately minimal.
+- `.github/ISSUE_TEMPLATE/config.yml` — routes stack questions to
+  `DOCUMENTATION.md`, build problems to `BUILD.md`, and vulnerabilities to the
+  private process in `SECURITY.md`.
+- `.github/PULL_REQUEST_TEMPLATE.md` — requires a human-written "why" even when
+  a tool wrote the code, a citation of the local doc mirror for framework-shaped
+  changes, and an explicit statement of whether the change was manually run.
+
+#### 📖 Documentation
+
+- `DOCUMENTATION.md` §6 — the adopted/rejected ledger, including why the
+  Windows-only CDP remote-debugging hook was **not** taken (Tauri's WebDriver
+  path is the cross-platform answer and works with a config-declared window) and
+  why i18n / zustand / zod / tailwind stay out of a template.
+- `BUILD.md` — new setup step 5 with the measurement table and per-OS installs.
+- `README.md` — fast-dev-loop and self-healing-settings feature sections.
+- `SECURITY.md` — untrusted-file tolerance as a distinct hardening property.
+- `AGENTS.md`, `CRUSH.md` — `dev:fast` in the command tables.
+
+## [0.22.0] - 2026-08-20
+
+### Round 22 — Documentation-Driven Audit: Async State in the Graph, Lifecycle Correctness, CSP Least Privilege
+
+A full read of `src/` and `src-tauri/` against the local mirrors added in
+v0.21.0 (`bun run docs:find`), fixing four real bugs and bringing the frontend
+onto the SolidJS 2 patterns its own reference prescribes.
+
+#### 🐞 Bugs Fixed
+
+- **A toggle clicked while preferences were still loading was silently reverted.**
+  `PreferencesTab` mounted with placeholder values (all `false`, `checkUpdates`
+  `true`) and populated them from a `.then()` when the IPC settled. A click in
+  that window was written to disk by the handler and then overwritten in the UI
+  by the loader's `setX(settings.x)`, leaving screen and disk disagreeing until
+  the next launch. The rows now sit inside a `<Loading>` boundary and simply do
+  not exist until the read settles.
+- **The tray's "Check for Updates" did nothing unless the Preferences tab was
+  open.** The only instance listening for the `check-for-updates` event was the
+  `UpdateChecker` card, which is unmounted whenever another tab is selected.
+  Event listening moved to the footer instance, which is mounted for the whole
+  session; the card keeps the launch auto-check. (`src/App.tsx`,
+  `src/components/PreferencesTab.tsx`)
+- **Turning on "check for updates on launch" fired an immediate update check.**
+  `UpdateChecker` registered its setup in a re-running `createEffect` whose
+  compute tracked `autoCheckOnMount`, so flipping the preference re-ran the whole
+  block — a network check plus a teardown and re-registration of the tray
+  listener. Now one-time owned setup via `onSettled`, reading both props once
+  through `untrack`.
+- **The reset-confirmation timer outlived its component.** `DeveloperTab`'s
+  two-step "Reset All Settings" armed a 4 s `setTimeout` with no cleanup and no
+  guard against stacking, so switching tabs left a timer writing to a disposed
+  signal. Tracked and cleared on teardown, and restarted rather than stacked.
+
+#### ⚛️ SolidJS 2 Patterns (cites `.docs/solid-docs`)
+
+- **`PreferencesTab` async load moved into the reactive graph.** One
+  `createMemo(async …)` replaces the mount-time `.then()`, an `isCancelled` flag
+  and a `settingsLoaded` gate signal; the seven preference signals became
+  writable derived signals (`createSignal(fn)`) over it — the documented shape
+  for "starts from a reactive source but needs a local override"
+  (`(5)guides/(0)avoid-unnecessary-effects.mdx`). The load-gate signal is now
+  structural rather than explicit.
+- **Memo computes are side-effect free.** `applyThemeAccent` (a DOM write) and
+  the invalid-accent self-heal (an IPC write) moved out of the loader into
+  `createEffect` apply phases. New pure `resolveThemeAccent()` in
+  `src/lib/theme.ts` does the preset lookup with no DOM access, so it is safe to
+  call from a compute.
+- **`onCleanup` in a component body replaced by an `onSettled`-returned
+  cleanup** in `HotkeyRecorder` — matching `App.tsx` from v0.21.0. Per
+  `on-cleanup.mdx`, `onCleanup` is now a library/custom-primitive tool.
+- **`GlobalHotkeysSection.statusLine` is a `createMemo` behind `<Show>`.** It
+  was a plain function called four times per render, each call re-running the
+  derivation and each needing a `!` assertion to re-narrow what the guard had
+  already proven. `ACTION_ORDER` hoisted from an inline `Object.keys(...)` cast,
+  mirroring `TAB_ORDER` in `App.tsx`.
+- **`DevConsole` rows key on `LogLine.id`** (`keyed={(line) => line.id}`). The id
+  existed and was documented as the row key but nothing used it — rows were
+  keyed by object identity. With a key function the child receives an accessor,
+  so a severity or message change updates the row in place.
+- `setShowNotes(!showNotes())` → the updater form.
+
+#### 🔒 Security
+
+- **Dead CSP grants removed.** `connect-src` no longer lists
+  `https://github.com` / `https://api.github.com`: no frontend code has ever
+  fetched them, because the updater performs its HTTPS in the Rust process where
+  the webview CSP does not apply. `SECURITY.md` now documents every directive
+  and why it is there.
+- **`localStorage` is guarded everywhere.** New `src/lib/storage.ts`
+  (`readStored` / `writeStored` / `removeStored`) degrades a disabled, blocked or
+  full store to "not persisted" instead of throwing into the render tree. Two of
+  the four call sites were previously unguarded (`PreferencesTab`,
+  `DeveloperTab`); `App.tsx` and `shortcuts.ts` had hand-rolled `try`/`catch`
+  that now routes through the helper.
+
+#### 🧪 Tests & Test Infrastructure
+
+- **`bun test` was silently running against SolidJS's SSR build.** `solid-js`
+  resolves to `dist/server.cjs` under Bun's default export conditions, and in
+  that build effects never run and writes never propagate through the graph —
+  any reactivity or component test would have exercised a runtime the app never
+  ships, passing by doing nothing. The `test` script is now
+  `bun test --conditions browser`, which selects `dist/solid.js`, the same
+  client runtime Vite bundles into the webview. `bun run validate` and CI both
+  go through the script, so both were fixed by the same change.
+- `test/reactivity.test.ts` — 8 new contract tests pinning the SolidJS 2 shapes
+  the components now depend on: that the runner really resolved the client build,
+  that a writable derived signal accepts a local override, that the override is
+  discarded when a dependency of the derivation changes but survives when the
+  derivation never re-runs (the case `PreferencesTab` relies on), that an async
+  memo reads as not-ready before it settles, and that an effect's apply-phase
+  return value is called as a cleanup.
+- **The effect-cleanup hazard this exposed:** Solid calls whatever an apply
+  phase returns as its cleanup, so a concise arrow that happens to return a
+  value — `(accent) => applyThemeAccent(accent)` returns a string — halts the
+  reactive system on the effect's next run. All eight effects in `src/` were
+  audited and already use block bodies; the rule is now documented in
+  `CRUSH.md` pattern 4 and `AGENTS.md`.
+- `test/storage.test.ts` — 9 new tests covering the working store, a store that
+  throws on every operation, and a missing `localStorage` global.
+- `test/theme.test.ts` — `resolveThemeAccent` coverage, including a test that
+  runs it with no `document` global to prove it is DOM-free.
+- Suite: **110 → 130** frontend tests, 119 Rust tests.
+
+#### 🎨 UI
+
+- `.settings-skeleton` placeholder rows for the Preferences `<Loading>`
+  fallback, sized to the real `.setting-item` rhythm so the card does not jump.
+  The shimmer is a single compositor-driven background animation and is
+  neutralized by the existing `prefers-reduced-motion` rule.
+
+#### 📚 Documentation
+
+- `CRUSH.md` — new pattern 2 ("Async Data → Writable Derived Signal → Loading
+  Boundary"); the UpdateChecker dual-variant rule rewritten to explain why the
+  two jobs live on different instances.
+- `AGENTS.md`, `CONTRIBUTING.md` — async-state, side-effect, storage and
+  effect-cleanup rules.
+- `TESTING.md` — a warning that a bare `bun test` gets the SSR build, plus the
+  three new test files in the layout table.
+- `README.md` — CSP description corrected, plus a note on the one remaining
+  remote origin: Inter is loaded from the Google Fonts CDN, so the app falls
+  back to a system sans-serif offline. Self-hosting it would drop two origins
+  from the CSP; left as a product call.
+
+## [0.21.0] - 2026-08-19
+
+### Round 21 — Local Documentation Mirrors for the Whole Stack, SolidJS 2 Boundary Correctness & TypeScript 7 Audit
+
+#### 📚 Documentation Infrastructure (new capability)
+
+- **The upstream documentation for every layer of the stack is now vendored on disk** under `.docs/` (gitignored, ~200 MB) so architecture questions are answered from the primary source at the exact version this app runs — not from memory or a web search.
+  | Layer | Mirror | Pinned branch |
+  | :--- | :--- | :--- |
+  | Tauri 2 | `tauri-apps/tauri-docs` | `v2` |
+  | SolidJS 2 | `solidjs/solid-docs` | `v2-rebuild` |
+  | Bun | `RiskyMH/bun-docs` | `main` |
+  | TypeScript | `microsoft/TypeScript-Website` | `v2` (sparse) |
+  | TypeScript 7 | `microsoft/typescript-go` | `main` (sparse) |
+- **New `scripts/sync-docs.ts`** — the committed manifest is the source of truth, not the checkout: shallow (`--depth 1 --single-branch`) clones, partial (`--filter=blob:none --sparse`) for the two large Microsoft repos, fetch + hard-reset updates, and a status table reporting branch, commit, date, markdown count and size per mirror.
+- **New scripts**: `bun run docs:sync` (clone/fast-forward), `bun run docs:check` (status, no network), `bun run docs:find "<query>"` (search all five mirrors at once, skipping `.git` and translation directories so one query does not return the same page in five languages). `--only <id>` restricts any of them to one source.
+- **New `DOCUMENTATION.md`** — the master reading map: why the mirrors are gitignored, why each branch pin is load-bearing, a per-layer "I need to know X, read Y" table for Tauri 2 / SolidJS 2 / Bun / TypeScript, the layers that need no mirror (Rust via `rustup doc` and `cargo doc`, Vite, oxlint, Prettier), and the working agreement for doc-driven changes.
+- **New `TYPESCRIPT-7.md`** — TypeScript 7 changed defaults, removed options (now hard errors), Unicode template-literal-type behaviour, the trimmed JS/JSDoc surface, new `--checkers`/`--builders`/`--singleThreaded` flags, the 7.1 programmatic-API caveat (and why oxlint makes it a non-issue here), plus a **compliance audit of both `tsconfig` projects — result: no changes required, this repo is TS7-clean**.
+- `.docs/` and `.playwright-mcp/` added to `.gitignore`; `.docs/` added to `.prettierignore` so third-party docs are never reformatted.
+- Documentation-first standard propagated into `README.md`, `AGENTS.md` (new critical section + best-practice rule + Common Tasks rows), `CONTRIBUTING.md` (new rule + PR checklist item), `CRUSH.md`, `BUILD.md` (new setup step 3), `TESTING.md`, and `SECURITY.md` (a claim → upstream-reference table).
+
+#### ⚛️ SolidJS 2 Correctness (doc-driven, cites `.docs/solid-docs`)
+
+- **`<Loading>` boundary re-scoped from the whole app to the single data-dependent slot** in `src/App.tsx`. Per `(2)concepts/(4)boundaries.mdx` — _"place a loading boundary around the smallest coherent region that its fallback should replace; keep navigation, forms, and other controls outside when they must remain available during the load"_ — the boundary now wraps only the About panel, the sole consumer of the `appInfo` async memo. The header, tab bar and footer stay mounted and interactive during the startup IPC round-trip, and a future revalidation can no longer blank the entire window.
+- **`AppSkeleton` deleted** (~50 lines that duplicated the entire app shell) and replaced by a small `AboutTabSkeleton` card with `aria-busy="true"`. The chrome is rendered once, not twice.
+- **Component-body `onCleanup` replaced by an `onSettled`-returned cleanup.** Per `(3)lifecycle-actions/on-settled.mdx` and `(6)advanced/(2)specialized-reactivity/on-cleanup.mdx`, `onSettled` returning a cleanup is the 2.0 component setup/teardown shape and `onCleanup` is now reserved for library/custom-primitive internals. Listener registration and the status-timer teardown now live in one block.
+- **`<Errored>` now surfaces its `reset` function.** The fallback signature is `(err, reset)`; the crash screen gained a primary **"Try Again"** action that re-runs the reactive sources the boundary collected — recovering from a transient failure in place, without a full webview reload that would discard in-memory state such as the Dev Console feed. "Reload Application" is retained as the secondary escape hatch.
+- `Loading` and `Errored` imported from `solid-js` (their canonical home) rather than the `@solidjs/web` re-export.
+
+#### 🔒 Security (doc-driven, cites `.docs/tauri-docs`)
+
+- **`autostart:default` removed from `src-tauri/capabilities/default.json`** in favour of the three explicit commands it expands to (`allow-enable`, `allow-disable`, `allow-is-enabled` — verified against the plugin's own `permissions/default.toml`). Behaviour is identical today, but pinning the individual commands means a future upstream widening of that permission set cannot silently broaden this app's surface. This is the form `plugin/autostart.mdx` itself documents. The capability `description` now records the reasoning.
+
+#### 🧹 Hygiene
+
+- Pre-existing Prettier indentation drift in `src/components/AboutTab.tsx` corrected.
+- `scripts/generate-arch.ts` description map extended with `DOCUMENTATION.md`, `TYPESCRIPT-7.md` and `scripts/sync-docs.ts`; `ARCHITECTURE.md` regenerated.
+
+## [0.20.1] - 2026-08-19
+
+### SolidJS 2 Async-Graph Migration & Pipeline Hygiene
+
+#### ⚛️ SolidJS 2 Async Data Loading (modernization)
+
+- **App-level app-info loading migrated from legacy `onSettled` + Promise signal pattern to SolidJS 2's native `createMemo(async)` "async lives in the graph" model** in `src/App.tsx:92` — consumers read `appInfo()` as a plain accessor; `isPending(appInfo)` surfaces the in-flight state.
+- **Root `<Loading fallback={<AppSkeleton />}>` boundary** added in `src/App.tsx:284` wrapping `<AppContent>`, absorbing the startup IPC round-trip (with 3-attempt exponential-backoff retries). In the browser preview the memo resolves synchronously so the skeleton never appears.
+- **`AboutTab` prop type tightened** from `() => AppInfo | null` to `() => AppInfo` at `src/components/AboutTab.tsx:15` — the `<Loading>` boundary guarantees readiness, eliminating all null-check fallbacks in tile JSX and diagnostic handlers.
+- **Tile JSX subscribes directly** to `props.appInfo()` in tracking scope; event handlers (`buildDiagnosticsText`, `handleSaveReport`) switched to `untrack(() => props.appInfo())` for safe non-tracking reads.
+- `AppSkeleton` tray-status badge now respects `isTauri` instead of hardcoding `web-preview`.
+
+#### 📦 Dependency Hygiene
+
+- `@solidjs/web` version pin normalized from `^2.0.0-rc.0` to `2.0.0-rc.0` in `package.json` to match the `solid-js` pin (eliminates resolution variance).
+
+## [0.20.0] - 2026-08-19
+
+### Round 20 — Cross-Platform Keyboard Engine, System-Wide Global Hotkeys, Correctness Pass & Pipeline Hygiene
+
+#### 🌐 System-Wide Global Hotkeys (new — vendored, zero hotkey dependencies)
+
+- **`src-tauri/src/hotkeys/` — a complete cross-platform global-hotkey engine embedded in the app**, derived from the MIT-licensed [`handy-keys`](https://github.com/handy-computer/handy-keys) crate and merged into the tree rather than depended on:
+  - **Windows**: `WH_KEYBOARD_LL` / `WH_MOUSE_LL` low-level hooks on a dedicated message-loop thread, with automatic hook reinstall after a session change.
+  - **macOS**: `CGEventTap` on its own `CFRunLoop`, with tap re-enable on timeout and an Accessibility permission check that can open the exact System Settings pane.
+  - **Linux**: direct evdev `/dev/input/event*` reads (identical on Wayland, X11, and the console), device hotplug via inotify, and uinput re-injection for hotkey blocking.
+  - Side-aware modifiers, modifier-only hotkeys, hotkey blocking, and a `KeyboardListener` for recording flows.
+- **Merged, not copied.** The `bitflags` and `thiserror` dependencies were removed by hand-writing `Modifiers` (a nine-flag bitset with `bitflags`-compatible `!` semantics) and the `Error` enum (with user-facing `Display` messages that reach the UI verbatim). The code was migrated to Rust 2024 — explicit `unsafe` blocks inside `unsafe fn`, let-chains for every collapsible `if`, edition-2024 binding modes — and a platform-resolving `Mod` / `CmdOrCtrl` alias was added so one persisted spec works on every OS. **The only remaining dependencies are the OS bindings themselves** (`windows`, `objc2*`, `evdev`).
+- **`src-tauri/src/global_hotkeys.rs`**: the app-level layer — action set, persisted bindings, a supervisor that rebuilds the OS listener on any change (joining the dispatch thread so the hook is released before a new one installs), and the status the UI displays.
+- **Preferences → Global Hotkeys**: opt-in enable toggle, a recorder per action, live listener status (including the detect-only fallback when blocking is unavailable), cross-action conflict rejection, and a macOS Accessibility prompt.
+- **Six new IPC commands** (`get_global_hotkeys`, `get_global_hotkey_status`, `validate_hotkey_spec`, `set_global_hotkey`, `set_global_hotkeys_enabled`, `open_accessibility_settings`) and a `global-hotkey` event so the UI can acknowledge a fired binding.
+- **Privacy properties are documented and enforced** (see `SECURITY.md`): off by default, no listener without bindings, keystrokes never stored/logged/transmitted, no raw key stream over IPC, and deterministic hook release.
+- **Verified end-to-end on Windows**: the listener starts with blocking enabled, and synthesized `Ctrl+Alt+U` / `Ctrl+Alt+Space` chords fire their actions from outside the app.
+
+#### ⌨️ Cross-Platform Keyboard & Rebindable Shortcuts (new)
+
+- **`src/lib/keyboard.ts` — self-contained hotkey engine** (zero dependencies), modeled on the [`handy-keys`](https://github.com/handy-computer/handy-keys) Rust crate and adapted to the webview's `KeyboardEvent` model:
+  - Portable spec strings (`"Mod+Shift+K"` → ⌘⇧K on macOS, Ctrl+Shift+K elsewhere), compatible with Tauri's `CmdOrCtrl+…` accelerator syntax so one string can drive both.
+  - Layout-independent matching on `KeyboardEvent.code` (physical position), with quoted tokens (`"Shift+'?'"`) opting into character matching for label-following bindings.
+  - Side-aware modifier flags (`LCtrl`, `CtrlRight`, `AltGr`) with "either side" compound aliases, and a generous modifier/key alias table.
+  - Strict per-group modifier semantics — a modifier the hotkey doesn't name must not be held, so `Ctrl+Alt+K` never fires a `Ctrl+K` binding.
+  - Modifier-only hotkeys (`"Cmd+Shift"`), canonical round-tripping (`hotkeyToString` ⇄ `parseHotkey`), and platform-correct rendering (`⌃⌥⇧⌘` vs `Ctrl+Alt+Shift+Win`).
+  - `createKeyboardListener()` — side-aware modifier tracking that reconciles against the event's boolean flags (self-healing after an alt-tab) and clears on blur.
+  - `beginHotkeyCapture()` / `isCapturingHotkey()` — a shared capture guard so an armed recorder owns the keyboard and the chord being bound isn't also executed.
+- **`src/lib/shortcuts.ts` rewritten as a rebindable registry**: stable per-binding ids, portable default specs, per-machine user overrides in `localStorage` (invalid or stale entries are ignored rather than disabling a binding), conflict detection, "rebinding to the default is a reset" semantics, and a subscribe bus.
+- **`src/components/HotkeyRecorder.tsx` (new)**: "press a shortcut" capture control with a live preview of the held chord, Escape to cancel, and blur to cancel.
+- **Shortcuts modal is now a rebinding surface**: every row is a live recorder, with per-row reset, conflict warnings, and a "Reset All Shortcuts" action. The cheat sheet and the runtime handler read the same registry, so they cannot drift.
+- **Platform-correct labels everywhere**: shortcut labels were previously hardcoded as `"Ctrl+1 / Cmd+1"` on every OS; they now render per-platform from the live binding.
+- **App shortcut dispatch** now resolves through the registry instead of a hardcoded `if/else` chain, and no longer uses the deprecated `navigator.platform` for Mac detection.
+
+#### ⚛️ SolidJS 2 / TypeScript Frontend (`src`)
+
+- **Fixed: About tab froze on its mount-time value.** `AboutTab` snapshotted `props.appInfo()` into a `const` in the component body; in SolidJS that runs once, so when About was the persisted startup tab, every tile showed `unknown` forever. Now read reactively in JSX.
+- **Fixed: update check ran even when disabled.** `checkUpdatesOnLaunch` sits at its optimistic `true` default during the settings IPC round-trip, so the launch check fired before the persisted `false` arrived. `PreferencesTab` now gates the auto-check behind a `settingsLoaded` signal.
+- **Fixed: unbounded id set in the Dev Console.** The bus-dedup `Set` grew for the life of the session; it is now pruned against the bus's own capped snapshot.
+- **Fixed: blob downloads could be cancelled before starting.** `URL.revokeObjectURL` ran in the same tick as `link.click()`; extracted to `src/lib/download.ts`, which attaches the anchor, clicks, and revokes on the next macrotask. Used by both the settings backup and the diagnostic report.
+- **Fixed: settings sanitizer could emit `undefined` typed as `number`.** `sanitizeSettings` now resolves the caller's fallback against factory defaults first, rejects arrays, and requires whole-number geometry (a fractional value would be rejected by serde at the IPC boundary).
+- **Toast progress bar is now a CSS animation** bound to each toast's lifetime, replacing a 20 Hz `setInterval` that re-rendered the DOM for every visible toast.
+- **`src/lib/appMeta.ts` (new)**: `APP_NAME` / `APP_SLUG` / `storageKey()` — the single place the frontend names the product. Removes hardcoded product names, download-filename prefixes, and the bundle identifier from components, and namespaces every localStorage key.
+- **Dev Console empty state**: restored the previously-dead `.dev-console-empty` styling with a real, context-aware empty state.
+- **`main.tsx`**: replaced the unused `export default dispose` and unchecked `as HTMLElement` cast with an explicit mount-target check and an `import.meta.hot.dispose` teardown so HMR can't stack app instances.
+- **Resilience**: `localStorage` access for the persisted tab is now guarded, so disabled/full storage degrades instead of crashing into the error boundary.
+- **De-duplication**: `TAB_ORDER` derives from `TABS`, shortcut categories derive from `APP_SHORTCUTS`, and the reset handler uses `DEFAULT_THEME_ACCENT` instead of a literal `'cyan'`.
+
+#### 🦀 Rust Backend (`src-tauri`)
+
+- **Fixed: potential startup panic.** `save_window_geometry` and the `CloseRequested` handler called `window.state::<AppState>()`, which panics if a `Moved`/`Resized` event arrives before `setup()` has managed the state — Tauri creates configured windows first. Both now use `try_state` and no-op safely.
+- **Fixed: lost writes under concurrent settings updates.** `set_minimize_to_tray` took the settings lock three separate times around a read-modify-write, letting a concurrent writer's change be silently discarded. All settings commands now hold one guard across the whole operation, and commit to disk before mutating memory so the two can never disagree.
+- **Fixed: corrupt settings were silently destroyed.** An unparseable `settings.json` fell back to defaults and was overwritten by the next save. It is now preserved as `settings.json.bak`, and `minimize_to_tray` gained `#[serde(default)]` so _every_ field tolerates absence — a file from an older or newer build loads instead of resetting everything.
+- **Fixed: window flash on launch.** The main window is now declared `"visible": false` and shown explicitly from `setup()` after geometry restore, so `start_minimized` never flashes a window and a restored size/position never visibly jumps.
+- **Performance: no monitor enumeration during window drags.** Position saving now runs only the cheap Windows-minimized sentinel check per event; the "is this position still on an attached monitor" check runs at restore time, which is when a display can actually have gone away.
+- **`open_app_data_dir`** creates the config directory if it doesn't exist yet, so the file manager opens the real location instead of falling back to Documents.
+- **Geometry flush-on-close**: move/resize events update only the in-memory cache; `flush_window_geometry` persists once on `CloseRequested`, eliminating the per-drag-tick rewrite of `settings.json`.
+- **`specta_builder()` extracted** from `run()`, making the IPC command registry a single named definition.
+- **Rust tests**: 6 → 10, adding partial/empty-JSON tolerance, corrupt-file quarantine, missing-file handling, and window-position guards.
+
+#### 🔧 Project Tooling & Pipeline
+
+- **8-gate validation suite**: `before-commit --full` now runs version sync → typecheck → lint → **bun test** → vite build → cargo check → **cargo test** → arch refresh, ordered cheapest-first. Step numbers are derived from the array, and gates call package scripts (`bun run lint`) rather than duplicating their command lines.
+- **Script simplification**: `"test"` means `bun test` (it previously also ran the whole `--full` suite); `test:unit` removed; CI and the git hook updated to match.
+- **`rename-project.ts` overhaul**: now rewrites `src/lib/appMeta.ts`, the `kill` script's process name, and `main.rs`'s crate path; uses kebab-case for the Cargo package name and snake_case only for the derived library path; and **warns loudly when a pattern matches nothing** instead of reporting success. Verified end-to-end on a scratch copy.
+- **`generate-arch.ts`**: product name now derives from `tauri.conf.json` (so the doc follows a rebrand), added descriptions for every new file, and corrected several inaccurate ones (the log-viewer entries claimed ANSI stripping that does not exist).
+- **Dead dependency removal**: removed unused `lucide-solid` (the icon set lives in `src/lib/icons.tsx`).
+- **Dead CSS removal**: removed the legacy `ipc-output-box` block.
+- **Release profile**: added `[profile.release]` (`opt-level = "z"`, `lto`, `codegen-units = 1`, `strip`, `panic = "abort"`) for smaller production binaries.
+- **Typecheck coverage**: `test/` and `vite.config.ts` are now covered by `tsc -b` (added `@types/bun`); fixed a latent `exactOptionalPropertyTypes` violation in `vite.config.ts`.
+- **`cargo clippy -D warnings` is now a gate** in both `before-commit --full` and CI, and the whole tree (including the vendored hotkey engine) is clippy-clean.
+- **Tests**: 37 → 110 frontend tests (new `test/keyboard.test.ts`, rewritten `test/shortcuts.test.ts`, global-hotkey sanitizer cases) and 6 → 117 Rust tests (the vendored engine's own suite plus new settings/window-geometry coverage).
+- **Documentation sync**: `README.md` (new keyboard section, corrected project tree, `rename-project`-first rebranding guide, `tauri-plugin-log`/`notification` added to the plugin table), `TESTING.md` (8 gates, unit-test layout, expanded manual QA matrix), `SECURITY.md` (accurate capability list, full 10-command IPC table, trust-boundary notes), `CRUSH.md` (corrected design tokens, real ARIA switch markup, new Rust locking and keyboard patterns), `CONTRIBUTING.md`, and `THIRD_PARTY_LICENSES.md` (handy-keys design attribution).
+
 ## [0.19.0] - 2026-08-18
 
 ### Round 19 — SolidJS 2.0 Migration

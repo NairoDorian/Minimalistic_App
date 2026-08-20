@@ -1,0 +1,93 @@
+# Cargo configuration for this workspace.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Fast incremental dev builds
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The slowest part of a Tauri edit→relaunch loop is not compiling your crate —
+# it is **linking** the final binary against every dependency, which the default
+# platform linker does single-threaded. Swapping in LLVM's `lld` is the single
+# biggest win available, and it is entirely a local developer-experience choice:
+# it changes nothing about the shipped release binary.
+#
+# Measured on THIS repository (Windows 11, x86_64-pc-windows-msvc), timing
+# `touch src-tauri/src/lib.rs → cargo build finished` on a warm target dir:
+#
+#   | configuration                                       | time     |
+#   | --------------------------------------------------- | -------- |
+#   | default `link.exe`, default dev debuginfo            | 10.17 s  |
+#   | `lld-link.exe` + `CARGO_PROFILE_DEV_DEBUG=limited`    |  3.92 s  |
+#
+# **2.6× faster.** Corroborated by the same experiment on a larger Tauri 2 app
+# (AIVORelay), which measured 23.74 s → 10.45 s with the identical pair, and
+# additionally established that most of the win comes from *debuginfo*, not the
+# linker: emitting and linking full debug symbols for every dependency is the
+# real cost. `"limited"` keeps file/line information in backtraces, which is
+# what you actually want while developing. This repo already sets
+# `[profile.dev.package."*"] debug = false` in `src-tauri/Cargo.toml`, so the
+# dependency half of that saving is on by default for everyone.
+#
+# Things that project measured and found NOT to help: raising `CARGO_BUILD_JOBS`
+# above the machine's logical CPU count, forcing explicit `codegen-units`, and
+# `profile.dev.build-override` tuning. Cargo's defaults were already better.
+#
+# ⚠️  Changing the debuginfo level invalidates the whole dependency cache, so the
+# first build after switching recompiles everything (~1.5 min here). Pick one
+# mode and stay in it; alternating `bun run tauri dev` with `bun run dev:fast`
+# pays that cost on every switch. `bun run dev:fast --debug full` gives you the
+# fast linker while keeping the stock debuginfo level, if you want to alternate
+# without the rebuild.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Why the linker settings below are commented out
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A `linker`/`rustflags` entry here applies to **every** build on **every**
+# machine, so committing one uncommented would break the build for any
+# contributor — and every CI runner — that does not have LLVM installed, with a
+# confusing "linker not found" error far from its cause. A starting-point
+# template must clone-and-build on a bare toolchain.
+#
+# So the fast path is opt-in and there are two ways to take it:
+#
+#   1. `bun run dev:fast` — detects an available fast linker for your platform,
+#      exports the equivalent environment variables for that one process, and
+#      runs `tauri dev`. Nothing on disk changes; if no fast linker is found it
+#      prints how to install one and falls back to a normal dev run.
+#      This is the recommended route. See `scripts/dev-fast.ts`.
+#
+#   2. Uncomment the block for your platform below, after installing LLVM.
+#      Prefer this only for a machine you control, and never commit it.
+#
+# Install LLVM: https://releases.llvm.org  ·  Windows: `winget install LLVM.LLVM`
+# macOS: `brew install llvm`  ·  Debian/Ubuntu: `apt install lld`
+# Arch: `pacman -S lld`  ·  Fedora: `dnf install lld`
+
+# ── Windows (MSVC) ───────────────────────────────────────────────────────────
+# `lld-link.exe` ships with LLVM and is a drop-in replacement for `link.exe`.
+# [target.x86_64-pc-windows-msvc]
+# linker = "lld-link.exe"
+
+# ── Linux ────────────────────────────────────────────────────────────────────
+# `mold` is faster still than `lld` if you have it: swap `lld` for `mold` below.
+# [target.x86_64-unknown-linux-gnu]
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+# Apple's own linker in recent Xcode is already fast; measure before switching.
+# [target.aarch64-apple-darwin]
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Settings that are safe for everyone
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+# Cargo already defaults `jobs` to the logical CPU count and dev builds to
+# `incremental = true`, both of which measured better than any forced value —
+# so there is deliberately nothing to override here.
+
+[future-incompat-report]
+# Surface a summary when a dependency uses something scheduled for removal in a
+# future rustc, so an upgrade is a planned task rather than a broken build.
+frequency = "always"

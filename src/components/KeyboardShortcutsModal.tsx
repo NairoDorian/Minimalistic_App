@@ -1,20 +1,68 @@
-import { createEffect, type Component } from 'solid-js';
-import { Command, X } from '../lib/icons';
-import { APP_SHORTCUTS, type KeyboardShortcut } from '../lib/shortcuts';
+import { createEffect, createSignal, onSettled, type Component } from 'solid-js';
+import { Command, RotateCcw, X } from '../lib/icons';
+import {
+  APP_SHORTCUTS,
+  SHORTCUT_CATEGORIES,
+  findShortcutConflicts,
+  getShortcutSpec,
+  isShortcutOverridden,
+  resetShortcuts,
+  setShortcutSpec,
+  subscribeShortcuts,
+  type ShortcutId,
+} from '../lib/shortcuts';
+import { isCapturingHotkey } from '../lib/keyboard';
+import { HotkeyRecorder } from './HotkeyRecorder';
+import { toast } from '../lib/toast';
 
 interface KeyboardShortcutsModalProps {
   isOpen: () => boolean;
   onClose: () => void;
 }
 
+/** Applies a captured chord, reporting rejection or an overlapping binding. */
+function applyRebind(id: ShortcutId, spec: string): void {
+  if (!setShortcutSpec(id, spec)) {
+    toast.error('That key combination cannot be used as a shortcut');
+    return;
+  }
+  const conflicts = findShortcutConflicts(id, spec);
+  if (conflicts.length > 0) {
+    toast.warning(`Shortcut also bound to: ${conflicts.map((sc) => sc.description).join(', ')}`);
+  } else {
+    toast.success('Shortcut updated');
+  }
+}
+
 /**
- * Keyboard Shortcuts modal cheat sheet with accessible dialog markup.
- * SolidJS 2.0 uses onSettled-like createEffect for focus management;
- * callback refs replace useRef for DOM access.
+ * Keyboard shortcuts cheat sheet and rebinding surface.
+ *
+ * Every row is a live `HotkeyRecorder`, so the sheet documents the shortcuts
+ * and changes them in the same place — the list can never drift from what the
+ * app actually listens for, because both read the same registry.
  */
 export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (props) => {
   let modalRef: HTMLDivElement | undefined;
   let previouslyFocused: HTMLElement | null = null;
+
+  // Bindings live in a module-level store; this counter republishes them into
+  // the reactive graph so labels update the moment a shortcut is rebound.
+  const [revision, setRevision] = createSignal(0);
+  onSettled(() => subscribeShortcuts(() => setRevision((n) => n + 1)));
+
+  const specOf = (id: ShortcutId): string => {
+    revision();
+    return getShortcutSpec(id);
+  };
+  const overriddenOf = (id: ShortcutId): boolean => {
+    revision();
+    return isShortcutOverridden(id);
+  };
+  const conflictOf = (id: ShortcutId): string | null => {
+    const conflicts = findShortcutConflicts(id, specOf(id));
+    if (conflicts.length === 0) return null;
+    return `Also bound to: ${conflicts.map((sc) => sc.description).join(', ')}`;
+  };
 
   createEffect(
     () => props.isOpen(),
@@ -27,6 +75,10 @@ export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (p
       modalRef?.querySelector<HTMLElement>('.modal-close-btn')?.focus();
 
       const handleKeyDown = (e: KeyboardEvent) => {
+        // A recorder owns the keyboard while it is armed — Escape must cancel
+        // the capture, not close the dialog out from under it.
+        if (isCapturingHotkey()) return;
+
         if (e.key === 'Escape') {
           e.preventDefault();
           props.onClose();
@@ -64,8 +116,6 @@ export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (p
     }
   );
 
-  const categories: KeyboardShortcut['category'][] = ['Navigation', 'General'];
-
   return (
     <>
       {props.isOpen() && (
@@ -102,7 +152,12 @@ export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (p
             </div>
 
             <div class="modal-body" id="shortcuts-modal-desc">
-              {categories.map((cat) => {
+              <p class="shortcuts-hint">
+                Click a shortcut and press the key combination you want. Bindings are stored per
+                machine and shown using this platform's conventions.
+              </p>
+
+              {SHORTCUT_CATEGORIES.map((cat) => {
                 const list = APP_SHORTCUTS.filter((s) => s.category === cat);
                 if (list.length === 0) return null;
 
@@ -113,13 +168,36 @@ export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (p
                       {list.map((sc) => (
                         <div class="shortcut-row">
                           <span class="shortcut-desc">{sc.description}</span>
-                          <kbd class="shortcut-kbd">{sc.label}</kbd>
+                          <HotkeyRecorder
+                            ariaLabel={`Rebind: ${sc.description}`}
+                            spec={() => specOf(sc.id)}
+                            disabled={sc.fixed === true}
+                            canReset={() => overriddenOf(sc.id)}
+                            warning={() => conflictOf(sc.id)}
+                            onRecord={(spec) => applyRebind(sc.id, spec)}
+                            onReset={() => setShortcutSpec(sc.id, null)}
+                          />
                         </div>
                       ))}
                     </div>
                   </div>
                 );
               })}
+            </div>
+
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn-update-secondary"
+                onClick={() => {
+                  resetShortcuts();
+                  toast.info('All shortcuts restored to defaults');
+                }}
+                disabled={!APP_SHORTCUTS.some((sc) => overriddenOf(sc.id))}
+              >
+                <RotateCcw size={13} />
+                <span>Reset All Shortcuts</span>
+              </button>
             </div>
           </div>
         </div>

@@ -12,25 +12,19 @@ const TOAST_ICONS: Record<
   info: Info,
 };
 
-/** Individual Toast Notification View with auto-dismiss progress timer */
+/**
+ * Individual toast notification with an auto-dismiss timer.
+ *
+ * The draining progress bar is a pure CSS animation whose duration is bound to
+ * the toast's lifetime, so the timeline is driven by the compositor rather than
+ * by a 20 Hz timer re-rendering the DOM for every visible toast.
+ */
 const ToastEntry: Component<{ item: ToastItem }> = (props) => {
-  const [progress, setProgress] = createSignal(100);
   const Icon = TOAST_ICONS[props.item.type];
 
   onSettled(() => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const remainingPct = Math.max(0, 100 - (elapsed / props.item.durationMs) * 100);
-      setProgress(remainingPct);
-
-      if (elapsed >= props.item.durationMs) {
-        clearInterval(interval);
-        removeToast(props.item.id);
-      }
-    }, 50);
-
-    return () => clearInterval(interval);
+    const timer = setTimeout(() => removeToast(props.item.id), props.item.durationMs);
+    return () => clearTimeout(timer);
   });
 
   return (
@@ -52,7 +46,10 @@ const ToastEntry: Component<{ item: ToastItem }> = (props) => {
         </button>
       </div>
       <div class="toast-progress-track">
-        <div class="toast-progress-fill" style={{ width: `${progress()}%` }} />
+        <div
+          class="toast-progress-fill"
+          style={{ 'animation-duration': `${props.item.durationMs}ms` }}
+        />
       </div>
     </div>
   );

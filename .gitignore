@@ -40,3 +40,11 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Vendored upstream documentation mirrors (bun run docs:sync).
+# ~200 MB of third-party repos under their own licenses — the manifest in
+# scripts/sync-docs.ts is the committed source of truth, not the checkout.
+.docs/
+
+# Playwright MCP session scratch output
+.playwright-mcp/

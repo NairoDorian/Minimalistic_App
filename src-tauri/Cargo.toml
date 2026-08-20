@@ -1,9 +1,18 @@
 [package]
 name = "minimalistic-app"
-version = "0.19.0"
+version = "0.24.0"
 description = "Minimalistic cross-platform desktop application based on Tauri 2, Bun, SolidJS 2, and TypeScript"
 authors = ["Z"]
 edition = "2024"
+
+# The `_lib` suffix keeps the library target's name distinct from the binary's.
+# On Windows a lib and a bin that normalize to the same name collide
+# (rust-lang/cargo#8519), and the extra crate types are what a mobile build
+# links against — `run()` already carries `#[cfg_attr(mobile, …)]`, so without
+# them the mobile entry point could never actually be built.
+[lib]
+name = "minimalistic_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "^2.6.3", features = [] }
@@ -21,10 +30,53 @@ log = "^0.4.33"
 # serde with derive feature is used for AppSettings JSON persistence
 serde = { version = "^1.0.229", features = ["derive"] }
 serde_json = "^1.0.151"
+# Reports the exact JSON path of a deserialization failure ("theme_accent",
+# "global_hotkeys[2].action") instead of a byte offset. That path is what lets
+# src/settings_repair.rs reset one broken field and keep every other setting,
+# rather than discarding the whole file. See its module docs.
+serde_path_to_error = "^0.1.20"
 # specta types + tauri-specta bindings: auto-generates type-safe Rust↔TypeScript IPC
 specta = { version = "=2.0.0-rc.25", features = ["derive", "function"] }
 specta-typescript = "=0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["typescript"] }
+
+# ── Global hotkey backends (src/hotkeys) ──────────────────────────────────────
+# OS keyboard-hook bindings for system-wide shortcuts. These are the only
+# dependencies the hotkey module has: its types, parser, error enum, and bitset
+# are all hand-written in-tree (no bitflags, no thiserror, no hotkey crate).
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Low-level keyboard hook (WH_KEYBOARD_LL) + session-change notifications.
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_RemoteDesktop",
+    "Win32_Graphics_Gdi",
+    # GetCurrentThreadId — used by the listener's session-change unit tests.
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# CGEventTap-based tap; requires the Accessibility permission at runtime.
+objc2 = "0.6"
+objc2-core-foundation = "0.3"
+objc2-core-graphics = { version = "0.3", features = [
+    "CGEvent",
+    "CGEventTypes",
+    "CGEventSource",
+    "CGRemoteOperation",
+] }
+objc2-app-kit = { version = "0.3", features = ["NSEvent", "NSApplication"] }
+objc2-foundation = "0.3"
+block2 = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Pure-Rust evdev bindings — no C build step, and identical behaviour on
+# Wayland, X11, and the console. uinput is used to re-inject non-blocked keys.
+evdev = "0.13"
+# poll(2) for the event loop and inotify(7) for device hotplug.
+libc = "0.2"
 
 [features]
 default = ["custom-protocol"]
@@ -35,4 +87,15 @@ incremental = true
 
 [profile.dev.package."*"]
 debug = false
+
+# Production release optimizations for the native bundle: minimize binary size
+# (download-friendly), LTO + single codegen unit for best optimization, strip
+# symbols, and abort on panic (no unwinding tables) — the standard Tauri
+# release profile.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
 

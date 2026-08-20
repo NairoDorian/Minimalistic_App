@@ -1,6 +1,6 @@
 import { createSignal, onSettled, For } from 'solid-js';
 import { commands } from '../bindings';
-import type { AppSettings } from './PreferencesTab';
+import type { AppSettings } from '../bindings';
 import {
   Code,
   Terminal,
@@ -18,7 +18,8 @@ import {
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
 import { devLog } from '../lib/console';
-import { applyThemeAccent } from '../lib/theme';
+import { applyThemeAccent, THEME_ACCENT_STORAGE_KEY } from '../lib/theme';
+import { readStored, writeStored } from '../lib/storage';
 import {
   sanitizeSettings,
   downloadSettingsFile,
@@ -61,6 +62,8 @@ export function DeveloperTab(props: DeveloperTabProps) {
   });
 
   let fileInput: HTMLInputElement | undefined;
+  /** Timer that expires the two-step reset confirmation. */
+  let resetConfirmTimeout: ReturnType<typeof setTimeout> | null = null;
 
   onSettled(() => {
     const handleResize = () => {
@@ -71,7 +74,12 @@ export function DeveloperTab(props: DeveloperTabProps) {
       });
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      // Switching tabs unmounts this panel; a pending confirmation timer must
+      // not outlive it and write to a disposed signal.
+      if (resetConfirmTimeout) clearTimeout(resetConfirmTimeout);
+    };
   });
 
   const handleRunCommand = async () => {
@@ -110,7 +118,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
   const handleOpenConfigDir = async () => {
     if (!isTauri) {
       devLog.info('Open config dir simulated (Web Preview)');
-      toast.info('[Web Preview] App config dir simulated: %APPDATA%\\com.minimalistic.app');
+      toast.info('[Web Preview] Opening the app config directory requires the desktop build');
       return;
     }
 
@@ -130,7 +138,12 @@ export function DeveloperTab(props: DeveloperTabProps) {
     if (!resetConfirm()) {
       setResetConfirm(true);
       devLog.warn('Reset requires confirmation — click again within 4s');
-      setTimeout(() => setResetConfirm(false), 4000);
+      // Restart the window on every arming click rather than stacking timers.
+      if (resetConfirmTimeout) clearTimeout(resetConfirmTimeout);
+      resetConfirmTimeout = setTimeout(() => {
+        setResetConfirm(false);
+        resetConfirmTimeout = null;
+      }, 4000);
       return;
     }
 
@@ -149,6 +162,10 @@ export function DeveloperTab(props: DeveloperTabProps) {
       devLog.warn('Settings reset simulated (Web Preview)');
       toast.success('[Web Preview] Settings reset to default');
       props.onSettingsReset?.();
+    }
+    if (resetConfirmTimeout) {
+      clearTimeout(resetConfirmTimeout);
+      resetConfirmTimeout = null;
     }
     setResetConfirm(false);
   };
@@ -172,7 +189,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
       const current: AppSettings = {
         ...FALLBACK_SETTINGS,
         theme_accent:
-          (localStorage.getItem('theme_accent') as AppSettings['theme_accent']) ?? 'cyan',
+          (readStored(THEME_ACCENT_STORAGE_KEY) as AppSettings['theme_accent']) ?? 'cyan',
       };
       downloadSettingsFile(current, __APP_VERSION__);
       devLog.success('Settings backup exported (Web Preview)');
@@ -192,7 +209,7 @@ export function DeveloperTab(props: DeveloperTabProps) {
         applyThemeAccent(sanitized.theme_accent);
       } else {
         const sanitized = sanitizeSettings(parsed, FALLBACK_SETTINGS);
-        localStorage.setItem('theme_accent', sanitized.theme_accent ?? 'cyan');
+        writeStored(THEME_ACCENT_STORAGE_KEY, sanitized.theme_accent);
         applyThemeAccent(sanitized.theme_accent);
       }
 

@@ -1,6 +1,6 @@
 # Development Procedure & Workflow Guidelines (AGENTS.md)
 
-This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **React 19**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
+This repository contains a cross-platform minimalistic desktop application template powered by **Tauri 2**, **Bun.js**, **SolidJS 2**, **TypeScript 7**, and **Cargo (Rust 2024 Edition)**.
 
 ---
 
@@ -28,6 +28,46 @@ This repository contains a cross-platform minimalistic desktop application templ
 > | `git add . && git commit -m "msg" && git push` | `rtk git add . && rtk git commit -m "msg" && rtk git push`              |
 > | `git status`                                   | `rtk git status`                                                        |
 > | `bun run typecheck`                            | `bun run typecheck` (Bun scripts run directly, no `rtk` wrapper needed) |
+
+---
+
+## 📚 Documentation-First Standard
+
+> [!CRITICAL]
+> **The upstream documentation for every layer of this stack is vendored on disk.
+> Read it before answering an architecture question — do not answer from memory
+> and do not reach for a web search first.**
+>
+> ```bash
+> bun run docs:sync                  # clone/refresh every mirror (gitignored, ~200 MB)
+> bun run docs:check                 # branch, commit, freshness per mirror
+> bun run docs:find "capabilities"   # search all mirrors at once
+> ```
+>
+> | Layer                | Local mirror                         | Pinned branch |
+> | :------------------- | :----------------------------------- | :------------ |
+> | Tauri 2              | `.docs/tauri-docs/src/content/docs/` | `v2`          |
+> | SolidJS 2            | `.docs/solid-docs/src/routes/`       | `v2-rebuild`  |
+> | Bun                  | `.docs/bun-docs/content/docs/`       | `main`        |
+> | TypeScript           | `.docs/typescript-website/packages/` | `v2`          |
+> | TypeScript 7 changes | `.docs/typescript-go/CHANGES.md`     | `main`        |
+>
+> **The branch pins are load-bearing.** `solid-docs@main` documents SolidJS 1.x —
+> a different runtime with `createResource`, `onMount`, `<Suspense>` and
+> `<ErrorBoundary>`, none of which exist in this codebase. Tauri 1 docs describe
+> an allowlist security model we do not use. TypeScript 5 tutorials assume
+> defaults TypeScript 7 changed.
+>
+> **Cite the file you read** when a change is doc-driven, e.g. "per
+> `.docs/solid-docs/src/routes/(2)concepts/(4)boundaries.mdx`, a loading boundary
+> belongs around the smallest coherent region".
+>
+> Never edit anything under `.docs/` — it is a read-only checkout and the next
+> sync hard-resets it. Adding a significant dependency means adding its docs to
+> the manifest in `scripts/sync-docs.ts`.
+>
+> Full reading map: [`DOCUMENTATION.md`](DOCUMENTATION.md). TypeScript 7 specifics
+> and this repo's compliance audit: [`TYPESCRIPT-7.md`](TYPESCRIPT-7.md).
 
 ---
 
@@ -123,7 +163,7 @@ Follow these steps **in this order** whenever a version bump / release is reques
 bun run before-commit --bump <major|minor|patch>
 ```
 
-- Updates `scripts/version.ts` (the **only** place the version is defined) and auto-syncs the mirrors: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo update`.
+- Updates `scripts/version.ts` (the **only** place the version is defined) and auto-syncs the mirrors: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refreshes the `src-tauri/Cargo.lock` root crate entry via `cargo generate-lockfile`.
 - NEVER hand-edit the version in any mirror file — the script owns them.
 
 #### Choosing `major`, `minor`, or `patch` (SemVer semantics)
@@ -201,19 +241,19 @@ rtk git push origin main
 
 ### `bun run before-commit` Reference — Every Mode, Explained
 
-| Command                                                | What it does                                                                                                                                                                                                                                                     | Writes?                  |
-| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
-| `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`). | Yes                      |
-| `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                  | No                       |
-| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 6 quality gates sequentially: version check, TS typecheck (`tsc -b`), code lint (oxlint), production Vite build, Cargo check, and Architecture map generation. Exits 0 on 100% pass with timing breakdown.               | Yes (`arch`)             |
-| `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                             | Yes (incl. `version.ts`) |
-| `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                      | Yes (incl. `version.ts`) |
-| `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                         | Yes (incl. `version.ts`) |
-| `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                        | Git index                |
-| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `lint` + `typecheck` before every commit).                                                                                                                                                                    | Yes (hook file)          |
-| `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                | Yes (removes hook)       |
-| `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                          | No                       |
+| Command                                                | What it does                                                                                                                                                                                                                                                                                             | Writes?                  |
+| :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------- |
+| `bun run before-commit`                                | **Sync mode (default).** Reads `APP_VERSION` from `scripts/version.ts` and propagates it into `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; refreshes `src-tauri/Cargo.lock`. Prints a per-mirror report (`✅ in sync` / `🔧 fixed`).                                         | Yes                      |
+| `bun run before-commit --check`                        | **Validation mode.** Compares every mirror against `APP_VERSION` **without writing**; exits `1` on any drift. Safe for CI and pre-commit hooks.                                                                                                                                                          | No                       |
+| `bun run before-commit --full` (or `bun run validate`) | **Full Pro Pre-Commit Suite.** Runs all 8 quality gates sequentially, cheapest-first: version mirror check, TS typecheck (`tsc -b`), code lint (oxlint), Bun unit tests, production Vite build, `cargo check`, `cargo test`, and Architecture map refresh. Exits 0 on 100% pass with a timing breakdown. | Yes (`arch`)             |
+| `bun run before-commit --bump patch`                   | Increments the patch digit in `scripts/version.ts` (`0.11.0 → 0.11.1`), then runs the sync.                                                                                                                                                                                                              | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump minor`                   | Increments the minor digit and zeroes patch (`0.11.0 → 0.12.0`), then runs the sync.                                                                                                                                                                                                                     | Yes (incl. `version.ts`) |
+| `bun run before-commit --bump major`                   | Increments the major digit and zeroes minor + patch (`0.11.0 → 1.0.0`), then runs the sync.                                                                                                                                                                                                              | Yes (incl. `version.ts`) |
+| `bun run before-commit --set <version>`                | Sets an exact custom SemVer string (e.g. `1.0.0-rc.1`) and propagates it to all mirrors.                                                                                                                                                                                                                 | Yes (incl. `version.ts`) |
+| `bun run before-commit --stage`                        | Automatically stages updated mirror files with `git add`.                                                                                                                                                                                                                                                | Git index                |
+| `bun run before-commit --install-hook`                 | Installs `.git/hooks/pre-commit` (runs `--check` + `lint` + `typecheck` before every commit).                                                                                                                                                                                                            | Yes (hook file)          |
+| `bun run before-commit --uninstall-hook`               | Removes the `.git/hooks/pre-commit` hook cleanly.                                                                                                                                                                                                                                                        | Yes (removes hook)       |
+| `bun run before-commit --help`                         | Prints the usage summary and exits `0`.                                                                                                                                                                                                                                                                  | No                       |
 
 **Behavioral details:**
 
@@ -228,6 +268,7 @@ rtk git push origin main
 | Task                                     | Command(s)                                                                                      |
 | :--------------------------------------- | :---------------------------------------------------------------------------------------------- |
 | Live development                         | `bun run tauri dev`                                                                             |
+| Live development, fastest link path      | `bun run dev:fast` (`--check` to report the detected configuration only)                        |
 | Add a runtime dependency                 | `bun add <package>`                                                                             |
 | Add a dev dependency                     | `bun add -d <package>`                                                                          |
 | Upgrade everything to @latest            | `bun run update-deps`                                                                           |
@@ -247,10 +288,15 @@ rtk git push origin main
 | Format backend only (cargo fmt)          | `bun run format:backend`                                                                        |
 | Lint codebase (oxlint, TS7-compatible)   | `bun run lint`                                                                                  |
 | Auto-fix lint issues                     | `bun run lint:fix`                                                                              |
-| Run full pre-commit test suite           | `bun test` (or `bun run validate`)                                                              |
+| Run frontend unit tests                  | `bun test` (Bun runner, everything in `test/`)                                                  |
+| Run Rust unit tests                      | `cargo test --manifest-path src-tauri/Cargo.toml`                                               |
+| Run full pre-commit gate suite           | `bun run validate` (or `bun run before-commit --full`)                                          |
 | Type-check the whole workspace           | `bun run typecheck`                                                                             |
 | Rebrand & rename project starter kit     | `bun run rename-project --name "App Name" --identifier "com.id"`                                |
 | Regenerate `ARCHITECTURE.md`             | `bun run arch`                                                                                  |
+| Clone / refresh the doc mirrors          | `bun run docs:sync` (add `--only <id>` for one source)                                          |
+| Check doc mirror freshness               | `bun run docs:check`                                                                            |
+| Search all doc mirrors                   | `bun run docs:find "<query>"`                                                                   |
 | Regenerate all app icons                 | `bun run create-icons`                                                                          |
 | Purge Rust build artifacts               | `bun run clean`                                                                                 |
 | Production build                         | `bun run build`                                                                                 |
@@ -278,26 +324,41 @@ rtk git push origin main
    - **Single source of truth**: product name/tooltip/version come from `AppHandle::package_info()`; settings paths come from `app_config_dir()`; never reconstruct either by string matching.
    - **Descriptive `expect`/error messages**: icon bootstrapping fails gracefully with a setup error instead of a cryptic panic.
 
-4. **React 19 / TypeScript Frontend Conventions (`src`)**:
-   - **Component separation** (Round 8 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
+4. **Documentation-Driven Changes**:
+   - Before changing anything framework-shaped — a lifecycle primitive, a boundary, a capability, a `tsconfig` flag — read the pinned local mirror (`bun run docs:find`), not memory.
+   - Prefer the primitive the current major version prescribes: `onSettled` returning a cleanup (not `onMount`/`onCleanup`), two-argument `createEffect`, async `createMemo` (not `createResource`), `<Loading>`/`<Errored>` (not `<Suspense>`/`<ErrorBoundary>`).
+   - Scope `<Loading>` to the smallest region its fallback should replace; keep navigation and controls outside it so they stay usable during a load.
+   - Load persisted state with `createMemo(async …)` plus writable derived signals (`createSignal(fn)`), never by `.then()`-ing an IPC result into a pile of signals — the gap between mount and resolution is a window where a user's click lands on a placeholder value and is then silently overwritten.
+   - Keep memo computes side-effect free. DOM writes, IPC writes, subscriptions and storage go in `createEffect`'s apply phase.
+   - Never touch `localStorage` directly — use `readStored` / `writeStored` / `removeStored` from `src/lib/storage.ts`, which degrade a disabled or full store to "not persisted" instead of throwing into the render tree.
+   - Give every `createEffect` apply phase and every `onSettled` callback a **block body**, unless it genuinely returns a cleanup function. Solid calls the return value as cleanup, so a concise arrow that happens to return a string or a number halts the reactive system on the effect's next run (`REACTIVITY_HALTED`).
+   - Run frontend tests with `bun run test`, never a bare `bun test`: the script passes `--conditions browser` because `solid-js` resolves to its **SSR build** by default in Bun, where effects never run.
+   - Grant Tauri permissions explicitly rather than relying on a plugin's `:default` set, so an upstream widening of that set cannot silently broaden this app's surface. Better still, keep the capability out of the webview entirely when a Rust command can own it — autostart needs no webview permission at all now.
+   - Anything whose effect depends on the **path of the running executable** — OS autostart being the canonical case — must be guarded by `cfg!(debug_assertions)`, because a development binary lives in `target/debug` and would otherwise overwrite the installed app's registration.
+   - Resolve every app-written path through `portable::config_dir()` / `portable::log_dir()`, never `app.path().app_config_dir()` directly, or portable mode silently writes half its state to the OS directories.
+   - Adding, renaming or removing an IPC command means running `bun run tauri dev` once so `src/bindings.ts` regenerates; `test/bindings.test.ts` fails the commit otherwise.
+
+5. **SolidJS 2 / TypeScript Frontend Conventions (`src`)**:
+   - **Component separation** (Round 14 layout): `App.tsx` is the shell (tabs, header, footer, status). `PreferencesTab.tsx` owns preference state + handlers. `AboutTab.tsx` is presentational and exports shared types. `ToggleSwitch.tsx` and `UpdateChecker.tsx` are reusable primitives.
    - **Stable callbacks for event listeners**: any callback registered by a mount-once listener (e.g. tray `"check-for-updates"` events) must be stable — use ref-based concurrency guards (`isCheckingRef` / `isInstallingRef`) and an empty dep array rather than reading state directly.
-   - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={false} listenForEvents={false}` to prevent duplicate network requests.
+   - **`UpdateChecker` dual-variant rule**: exactly one instance (the card) may `autoCheckOnMount` and `listenForEvents`; footer variants pass `autoCheckOnMount={() => false} listenForEvents={() => false}` to prevent duplicate network requests.
    - **Optimistic rollback**: toggles update state immediately, then revert on IPC/plugin failure (see `PreferencesTab.tsx`).
-   - **Never `import React`** unless a type requires it; use `import type { FC }` / named type imports with `verbatimModuleSyntax`-safe patterns. React 19's JSX transform handles element creation.
+   - **Never `import React`** — SolidJS 2's JSX transform handles element creation via `jsxImportSource: "@solidjs/web"`. Use `import type { Component }` / named type imports with `verbatimModuleSyntax`-safe patterns.
    - **Catch clauses**: use `error: unknown` + `instanceof Error` narrowing — never `any`.
 
-5. **Accessibility Contract (ARIA)**:
+6. **Accessibility Contract (ARIA)**:
    - **Tabs**: `role="tablist"` / `role="tab"` / `role="tabpanel"` with `aria-selected`, `aria-controls`, `aria-labelledby`, roving `tabIndex`, and arrow + Home/End keyboard navigation.
    - **Switches**: `role="switch"` + `aria-checked`, `tabIndex={0}`, Space/Enter activation, and a visually-hidden native checkbox for form semantics.
    - **Live regions**: `aria-live="polite"` on the footer status and update status regions; `role="progressbar"` with `aria-valuemin/max/now` on download progress.
 
-6. **UI Theme & Aesthetic Standards**:
+7. **UI Theme & Aesthetic Standards**:
    - **Background**: 100% AMOLED Deep Black (`#000000`) — also painted inline in `index.html` to avoid white flash.
    - **Glassmorphism**: Translucent frosted cards (`backdrop-filter: blur(20px)`), `rgba(255, 255, 255, 0.08)` borders, and neon cyan (`#00f2fe`) accent glows.
    - **Typography**: Clean, sans-serif typography (`Inter`).
 
-7. **Documentation Rules**:
-   - Maintain [`README.md`](README.md), [`BUILD.md`](BUILD.md), [`TESTING.md`](TESTING.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`LICENSE`](LICENSE), [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+8. **Documentation Rules**:
+   - Maintain [`README.md`](README.md), [`DOCUMENTATION.md`](DOCUMENTATION.md), [`TYPESCRIPT-7.md`](TYPESCRIPT-7.md), [`BUILD.md`](BUILD.md), [`TESTING.md`](TESTING.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`CRUSH.md`](CRUSH.md), [`CHANGELOG.md`](CHANGELOG.md), [`AUTO-UPDATE.md`](AUTO-UPDATE.md), [`LICENSE`](LICENSE), [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`AGENTS.md`](AGENTS.md).
+   - When a dependency layer is added or a major version is bumped, update the mirror manifest in [`scripts/sync-docs.ts`](scripts/sync-docs.ts) and the reading map in [`DOCUMENTATION.md`](DOCUMENTATION.md) in the same change.
    - Keep inline code comments detailed and informative — every non-obvious function gets a doc comment explaining _why_, not just _what_.
    - After any file add/remove/rename, regenerate the architecture map (`bun run arch`).
    - Each changelog version header may appear exactly once; keep the exact `## [X.Y.Z] - YYYY-MM-DD` format.

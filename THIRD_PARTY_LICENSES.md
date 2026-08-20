@@ -59,6 +59,46 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ---
 
+## ⌨️ handy-keys (vendored)
+
+- **Authors:** Handy Computer
+- **License:** MIT License
+- **Source:** https://github.com/handy-computer/handy-keys
+
+The cross-platform global-hotkey engine in `src-tauri/src/hotkeys/` is derived
+from the `handy-keys` crate. It is **vendored rather than depended on**, and was
+adapted in the process: the modifier bitset and error type were rewritten by hand
+to drop the `bitflags` and `thiserror` dependencies, the code was migrated to
+Rust 2024 (explicit `unsafe` blocks inside `unsafe fn`, let-chains, edition-2024
+binding modes), and a platform-resolving `Mod` / `CmdOrCtrl` modifier alias was
+added so one spec string works on every OS.
+
+```
+MIT License
+
+Copyright (c) 2026 handy-computer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## 🦀 Tauri Framework
 
 - **Authors:** Tauri Programme within The Commons Conservancy
@@ -83,16 +123,16 @@ copies or substantial portions of the Software.
 
 ---
 
-## ⚛️ React
+## ⚛️ SolidJS 2
 
-- **Authors:** Meta Platforms, Inc. and affiliates
+- **Authors:** SolidJS Contributors
 - **License:** MIT License
-- **Source:** https://github.com/facebook/react
+- **Source:** https://github.com/solidjs/solid
 
 ```
 MIT License
 
-Copyright (c) Meta Platforms, Inc. and affiliates.
+Copyright (c) SolidJS Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

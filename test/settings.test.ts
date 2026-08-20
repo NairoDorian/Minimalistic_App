@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { sanitizeSettings, FALLBACK_SETTINGS, serializeSettings } from '../src/lib/settingsBackup';
+import type { AppSettings } from '../src/bindings';
 
-const valid = {
+const valid: Required<AppSettings> = {
   minimize_to_tray: true,
   start_minimized: false,
   check_updates_on_launch: true,
@@ -12,6 +13,9 @@ const valid = {
   saved_window_height: 720,
   saved_window_x: 50,
   saved_window_y: 75,
+  autostart_enabled: true,
+  global_hotkeys_enabled: true,
+  global_hotkeys: [{ action: 'toggle_window', spec: 'Ctrl+Opt+Space' }],
 };
 
 describe('Settings Backup Sanitizer', () => {
@@ -75,6 +79,51 @@ describe('Settings Backup Sanitizer', () => {
     const fallback = { ...FALLBACK_SETTINGS };
     sanitizeSettings({ ...valid, minimize_to_tray: true }, fallback);
     expect(fallback).toEqual(FALLBACK_SETTINGS);
+  });
+
+  test('keeps valid global hotkey bindings', () => {
+    const result = sanitizeSettings(valid, FALLBACK_SETTINGS);
+    expect(result.global_hotkeys).toEqual([{ action: 'toggle_window', spec: 'Ctrl+Opt+Space' }]);
+    expect(result.global_hotkeys_enabled).toBe(true);
+  });
+
+  test('drops global hotkey entries with an unknown action or a non-string spec', () => {
+    const result = sanitizeSettings(
+      {
+        ...valid,
+        global_hotkeys: [
+          { action: 'launch_missiles', spec: 'Ctrl+M' },
+          { action: 'show_window', spec: 42 },
+          { action: 'check_updates', spec: '  Ctrl+Opt+U  ' },
+          'not an object',
+          null,
+        ],
+      },
+      FALLBACK_SETTINGS
+    );
+    // Only the well-formed entry survives, with its spec trimmed.
+    expect(result.global_hotkeys).toEqual([{ action: 'check_updates', spec: 'Ctrl+Opt+U' }]);
+  });
+
+  test('keeps only the first binding when an action is repeated', () => {
+    const result = sanitizeSettings(
+      {
+        ...valid,
+        global_hotkeys: [
+          { action: 'show_window', spec: 'Ctrl+Opt+1' },
+          { action: 'show_window', spec: 'Ctrl+Opt+2' },
+        ],
+      },
+      FALLBACK_SETTINGS
+    );
+    expect(result.global_hotkeys).toEqual([{ action: 'show_window', spec: 'Ctrl+Opt+1' }]);
+  });
+
+  test('falls back when global_hotkeys is not an array', () => {
+    for (const bad of [null, 'Ctrl+K', 42, { action: 'show_window' }]) {
+      const result = sanitizeSettings({ ...valid, global_hotkeys: bad }, FALLBACK_SETTINGS);
+      expect(result.global_hotkeys).toEqual(FALLBACK_SETTINGS.global_hotkeys);
+    }
   });
 
   test('serializeSettings round-trips through the sanitizer', () => {

@@ -64,7 +64,7 @@ const BUS_LEVEL_TO_SEVERITY: Record<DevLogEntry['level'], LineSeverity> = {
 };
 
 /** File lines look like:
- *   [2026-08-15][00:04:36][minimalistic_app_lib::setup][INFO] message */
+ *   [2026-08-15][00:04:36][<crate>_lib::setup][INFO] message */
 const parseFileLine = (raw: string): LogLine => {
   const severity = severityFromText(raw);
   const tsMatch = raw.match(/^\[([^\]]+)\]/);
@@ -73,7 +73,14 @@ const parseFileLine = (raw: string): LogLine => {
   return withLineId({ raw, severity, timestamp, message, live: false });
 };
 
-/** Monotonic counter giving every rendered line a stable, unique key. */
+/**
+ * Monotonic counter giving every rendered line a stable, unique key.
+ *
+ * The `<For>` below keys on this id explicitly (`keyed={(line) => line.id}`)
+ * rather than on object identity, so a row survives being rebuilt — which is
+ * exactly what `mergeFileLines` does when a live-streamed line is superseded
+ * by its on-disk counterpart.
+ */
 let lineSeq = 0;
 
 const withLineId = (line: Omit<LogLine, 'id'>): LogLine => ({ ...line, id: lineSeq++ });
@@ -216,8 +223,21 @@ export const DevConsole: Component = () => {
   );
 
   // Frontend dev log bus — replays the snapshot on subscribe, then streams.
+  // The bus notifies listeners with the *full* entry snapshot on every push, so
+  // dedupe by entry id here: without this, each push re-appends every prior line
+  // (the bus is an append-only snapshot, not a delta stream).
   onSettled(() => {
-    return subscribeDevLog((entries) => appendLiveLines(busLinesFrom(entries)));
+    let seenIds = new Set<string>();
+    return subscribeDevLog((batch) => {
+      const unseen = batch.filter((entry) => !seenIds.has(entry.id));
+      if (unseen.length === 0) return;
+      unseen.forEach((entry) => seenIds.add(entry.id));
+      // The bus drops its own oldest entries once it hits its cap, so ids for
+      // lines that can never reappear would otherwise accumulate forever.
+      // Rebuilding from the current batch keeps the set bounded by the bus size.
+      if (seenIds.size > MAX_LINES) seenIds = new Set(batch.map((entry) => entry.id));
+      appendLiveLines(busLinesFrom(unseen));
+    });
   });
 
   // Subscribe to the backend log stream so new lines appear instantly.
@@ -429,22 +449,34 @@ export const DevConsole: Component = () => {
         tabindex={0}
         aria-label="Debug console log feed"
       >
-        <For each={filteredLines()}>
+        {filteredLines().length === 0 && (
+          <div class="dev-console-empty">
+            {lines().length === 0
+              ? isTauri
+                ? 'No log lines yet — run an IPC command or wait for backend activity.'
+                : 'No log lines yet — run a mock IPC command (backend logs need the desktop build).'
+              : 'No lines match the current filter.'}
+          </div>
+        )}
+        {/* Keyed by the line's own id: with a key function the child receives an
+            accessor, so severity/message changes update the existing row in
+            place instead of tearing it down and rebuilding it. */}
+        <For each={filteredLines()} keyed={(line) => line.id}>
           {(line) => (
             <div
-              class={`dev-console-line dev-console-line-${line.severity} ${
-                line.success ? 'dev-console-line-success' : ''
+              class={`dev-console-line dev-console-line-${line().severity} ${
+                line().success ? 'dev-console-line-success' : ''
               }`}
             >
-              {line.timestamp && <span class="dev-console-time">[{line.timestamp}]</span>}
+              {line().timestamp && <span class="dev-console-time">[{line().timestamp}]</span>}
               <span
-                class={`dev-console-badge badge-${line.severity} ${
-                  line.success ? 'badge-success' : ''
+                class={`dev-console-badge badge-${line().severity} ${
+                  line().success ? 'badge-success' : ''
                 }`}
               >
-                {badgeLabel(line)}
+                {badgeLabel(line())}
               </span>
-              <span class="dev-console-message">{line.message}</span>
+              <span class="dev-console-message">{line().message}</span>
             </div>
           )}
         </For>

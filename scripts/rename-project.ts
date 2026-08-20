@@ -77,15 +77,33 @@ function snakeify(text: string): string {
   return slugify(text).replace(/-/g, '_');
 }
 
+/**
+ * Applies one rewrite, reporting loudly when the pattern matched nothing.
+ *
+ * A rename tool that silently no-ops is worse than one that fails: the project
+ * looks renamed while a stale identifier is left behind, so an out-of-date
+ * pattern has to be visible.
+ */
 function replaceInFile(filePath: string, findPattern: RegExp | string, replacement: string) {
-  if (!fs.existsSync(filePath)) return;
+  const relative = path.relative(ROOT, filePath);
+  if (!fs.existsSync(filePath)) {
+    console.warn(`  ⚠️  Skipped ${relative} — file not found`);
+    return;
+  }
+
   const content = fs.readFileSync(filePath, 'utf8');
   const next =
     typeof findPattern === 'string'
       ? content.replaceAll(findPattern, replacement)
       : content.replace(findPattern, replacement);
+
+  if (next === content) {
+    console.warn(`  ⚠️  No match in ${relative} for ${String(findPattern)} — left unchanged`);
+    return;
+  }
+
   fs.writeFileSync(filePath, next, 'utf8');
-  console.log(`  ✓ Updated ${path.relative(ROOT, filePath)}`);
+  console.log(`  ✓ Updated ${relative}`);
 }
 
 async function main() {
@@ -103,15 +121,25 @@ async function main() {
   console.log('=================================================================\n');
 
   const appName = opts.name;
+  // Kebab-case everywhere a slug is used (npm package, Cargo package, exported
+  // file names); snake_case only for the Rust *library path* Cargo derives from
+  // the package name, which `main.rs` has to spell out.
   const pkgSlug = appName ? slugify(appName) : undefined;
-  const crateName = appName ? snakeify(appName) : undefined;
+  const crateName = pkgSlug;
+  const crateLibPath = appName ? snakeify(appName) : undefined;
   const identifier = opts.identifier;
   const author = opts.author;
   const github = opts.github;
 
-  // 1. package.json
+  // 1. package.json — name plus the `kill` script, whose process name is the
+  //    Cargo binary produced for `tauri dev`.
   if (pkgSlug) {
     replaceInFile(path.join(ROOT, 'package.json'), /"name":\s*"[^"]+"/, `"name": "${pkgSlug}"`);
+    replaceInFile(
+      path.join(ROOT, 'package.json'),
+      /"kill":\s*"taskkill \/F \/IM [^"]+?\.exe/,
+      `"kill": "taskkill /F /IM ${crateName}.exe`
+    );
   }
 
   // 2. src-tauri/Cargo.toml
@@ -125,7 +153,7 @@ async function main() {
   if (author) {
     replaceInFile(
       path.join(ROOT, 'src-tauri', 'Cargo.toml'),
-      /authors\s*=\s*\["[^"]*"\]/,
+      /authors\s*=\s*\[[^\]]*\]/,
       `authors = ["${author}"]`
     );
   }
@@ -134,6 +162,17 @@ async function main() {
       path.join(ROOT, 'src-tauri', 'Cargo.toml'),
       /description\s*=\s*"[^"]+"/,
       `description = "${opts.description}"`
+    );
+  }
+
+  // 2b. src-tauri/src/main.rs — update the crate path reference so a renamed
+  //     crate still compiles. Rust exposes hyphenated crate names as
+  //     snake_case paths (e.g. `minimalistic-app` -> `minimalistic_app::run`).
+  if (crateLibPath) {
+    replaceInFile(
+      path.join(ROOT, 'src-tauri', 'src', 'main.rs'),
+      /[a-zA-Z0-9_]+::run\(\)/,
+      `${crateLibPath}::run()`
     );
   }
 
@@ -174,26 +213,20 @@ async function main() {
     );
   }
 
-  // 5. App.tsx & AboutTab.tsx UI Title
-  if (appName) {
+  // 5. src/lib/appMeta.ts — the frontend's single source of product identity.
+  //    Every user-visible name, exported file-name prefix, and localStorage key
+  //    derives from these two constants, so this one edit rebrands the whole UI.
+  if (appName && pkgSlug) {
+    const appMetaPath = path.join(ROOT, 'src', 'lib', 'appMeta.ts');
     replaceInFile(
-      path.join(ROOT, 'src', 'App.tsx'),
-      /<span className="brand-title">[^<]+<\/span>/,
-      `<span className="brand-title">${appName}</span>`
+      appMetaPath,
+      /export const APP_NAME = '[^']*';/,
+      `export const APP_NAME = '${appName.replaceAll("'", "\\'")}';`
     );
     replaceInFile(
-      path.join(ROOT, 'src', 'components', 'AboutTab.tsx'),
-      /name:\s*'[^']+',/,
-      `name: '${appName}',`
-    );
-  }
-
-  // 6. scripts/before-commit.ts CARGO_CRATE_NAME
-  if (crateName) {
-    replaceInFile(
-      path.join(ROOT, 'scripts', 'before-commit.ts'),
-      /const CARGO_CRATE_NAME = '[^']+';/,
-      `const CARGO_CRATE_NAME = '${crateName}';`
+      appMetaPath,
+      /export const APP_SLUG = '[^']*';/,
+      `export const APP_SLUG = '${pkgSlug}';`
     );
   }
 

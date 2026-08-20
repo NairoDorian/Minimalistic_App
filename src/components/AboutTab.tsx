@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, createMemo, Show, untrack } from 'solid-js';
 import { commands } from '../bindings';
 import type { AppInfo } from '../bindings';
 import {
@@ -10,12 +10,16 @@ import {
   Check,
   FolderOpen,
   Download,
+  Package,
 } from '../lib/icons';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
+import { APP_NAME, APP_SLUG } from '../lib/appMeta';
+import { formatShortcutLabel } from '../lib/shortcuts';
+import { downloadTextFile } from '../lib/download';
 
 export const WEB_PREVIEW_APP_INFO: AppInfo = {
-  name: 'Minimalistic App',
+  name: APP_NAME,
   version: __APP_VERSION__,
   tauri_version: '2.11 (Web Preview)',
   os: 'Web Browser',
@@ -23,7 +27,8 @@ export const WEB_PREVIEW_APP_INFO: AppInfo = {
 };
 
 interface AboutTabProps {
-  appInfo: () => AppInfo | null;
+  /** Async memo accessor resolving to the app's metadata (see App.tsx). */
+  appInfo: () => AppInfo;
   onStatusChange?: (status: string) => void;
   onOpenShortcuts?: () => void;
 }
@@ -31,19 +36,43 @@ interface AboutTabProps {
 export function AboutTab(props: AboutTabProps) {
   const [copied, setCopied] = createSignal(false);
 
-  /** Builds the shared markdown diagnostics block used by both copy and report export. */
-  const buildDiagnosticsText = (): string => {
-    const info = props.appInfo();
-    const version = info?.version ?? __APP_VERSION__;
-    const tauriVer = info?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version;
-    const os = info?.os ?? 'unknown';
-    const arch = info?.arch ?? 'unknown';
+  /**
+   * Where the app is actually writing settings and logs.
+   *
+   * Worth surfacing because it is not always the OS config directory: dropping a
+   * file named `portable` beside the executable redirects everything into
+   * `<exe dir>/Data`, and a user who does that (or receives a pre-configured
+   * portable copy) should be able to confirm it without hunting through the
+   * filesystem. Falls back to a neutral placeholder in the browser preview,
+   * where there is no backend to ask.
+   */
+  const storage = createMemo(async () => {
+    if (!isTauri) {
+      return { active: false, data_dir: 'Browser preview — nothing is written to disk' };
+    }
+    try {
+      return await commands.getPortableStatus();
+    } catch (err: unknown) {
+      console.warn('Portable status query failed:', err);
+      return { active: false, data_dir: 'unavailable' };
+    }
+  });
 
+  /**
+   * Builds the shared markdown diagnostics block used by both copy and report export.
+   *
+   * Reads the app-info accessor through `untrack` — this runs in an event handler
+   * (click), not a tracking scope, so a plain read returns the last settled
+   * value without subscribing. By the time the user clicks, the startup IPC
+   * memo has resolved.
+   */
+  const buildDiagnosticsText = (): string => {
+    const info = untrack(() => props.appInfo());
     return [
       '```markdown',
-      `- Application: ${info?.name ?? 'Minimalistic App'} v${version}`,
-      `- Tauri Engine: v${tauriVer}`,
-      `- OS / Architecture: ${os} (${arch})`,
+      `- Application: ${info.name} v${info.version}`,
+      `- Tauri Engine: v${info.tauri_version}`,
+      `- OS / Architecture: ${info.os} (${info.arch})`,
       `- Runtime Stack: Bun 1.3+ | SolidJS 2 | Cargo Rust 2024`,
       '```',
     ].join('\n');
@@ -67,26 +96,21 @@ export function AboutTab(props: AboutTabProps) {
   /** Exports a timestamped diagnostic report as a downloadable `.txt` file (Blob download). */
   const handleSaveReport = () => {
     const report = [
-      'Minimalistic App — Diagnostic Report',
+      `${APP_NAME} — Diagnostic Report`,
       `Generated: ${new Date().toISOString()}`,
       '',
       buildDiagnosticsText(),
     ].join('\n');
 
-    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `minimalistic-app-diagnostics-${props.appInfo()?.version ?? __APP_VERSION__}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const version = untrack(() => props.appInfo()).version;
+    downloadTextFile(`${APP_SLUG}-diagnostics-${version}.txt`, report, 'text/plain;charset=utf-8');
     toast.success('Diagnostic report downloaded');
     props.onStatusChange?.('Diagnostic report saved');
   };
 
   const handleOpenConfigDir = async () => {
     if (!isTauri) {
-      toast.info('[Web Preview] Simulated opening %APPDATA%\\com.minimalistic.app');
+      toast.info('[Web Preview] Opening the app config directory requires the desktop build');
       return;
     }
     try {
@@ -98,8 +122,10 @@ export function AboutTab(props: AboutTabProps) {
     }
   };
 
-  const info = props.appInfo();
-
+  // NOTE: `props.appInfo()` is read inside JSX expressions so each tile subscribes
+  // to the async memo — when the startup IPC settles (or revalidates), the tiles
+  // update automatically. The About tab is always rendered under an <Errored> and
+  // a parent <Loading> boundary, so the not-ready state is absorbed by Loading.
   return (
     <div
       class="settings-card"
@@ -157,7 +183,7 @@ export function AboutTab(props: AboutTabProps) {
             <AppWindow size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Application Version</span>
           </div>
-          <span class="tile-value">v{info?.version ?? __APP_VERSION__}</span>
+          <span class="tile-value">v{props.appInfo().version}</span>
         </div>
 
         <div class="info-tile">
@@ -165,9 +191,7 @@ export function AboutTab(props: AboutTabProps) {
             <Cpu size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Tauri Core Engine</span>
           </div>
-          <span class="tile-value">
-            v{info?.tauri_version ?? WEB_PREVIEW_APP_INFO.tauri_version}
-          </span>
+          <span class="tile-value">v{props.appInfo().tauri_version}</span>
         </div>
 
         <div class="info-tile">
@@ -176,7 +200,7 @@ export function AboutTab(props: AboutTabProps) {
             <span class="tile-title">Target Platform / Arch</span>
           </div>
           <span class="tile-value">
-            {info?.os ?? 'unknown'} ({info?.arch ?? 'unknown'})
+            {props.appInfo().os} ({props.appInfo().arch})
           </span>
         </div>
 
@@ -187,6 +211,26 @@ export function AboutTab(props: AboutTabProps) {
           </div>
           <span class="tile-value">Bun 1.3+ | SolidJS 2 | Rust 2024</span>
         </div>
+
+        <div class="info-tile info-tile-wide">
+          <div class="tile-header">
+            <Package size={16} color="var(--accent-cyan)" />
+            <span class="tile-title">
+              Data Location {storage().active ? '(Portable)' : '(System)'}
+            </span>
+          </div>
+          {/* The path can be long, so it gets the full grid width and its own
+              wrapping rule rather than being truncated into uselessness. */}
+          <span class="tile-value tile-value-path" title={storage().data_dir}>
+            {storage().data_dir}
+          </span>
+          <Show when={storage().active}>
+            <span class="tile-hint">
+              A <code>portable</code> marker file beside the executable is redirecting settings and
+              logs here instead of the OS directories.
+            </span>
+          </Show>
+        </div>
       </div>
 
       <div class="about-notes-box">
@@ -196,9 +240,9 @@ export function AboutTab(props: AboutTabProps) {
             type="button"
             class="btn-shortcuts-hint"
             onClick={props.onOpenShortcuts}
-            title="Press ? or Ctrl+/ for shortcut list"
+            title={`Press ? or ${formatShortcutLabel('show-shortcuts')} for the shortcut list`}
           >
-            Shortcuts (Ctrl+/)
+            Shortcuts ({formatShortcutLabel('show-shortcuts')})
           </button>
         </div>
         <ul class="notes-list">

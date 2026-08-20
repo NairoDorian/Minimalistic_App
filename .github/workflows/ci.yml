@@ -54,6 +54,9 @@ jobs:
       - name: Validate TypeScript static types (tsc -b)
         run: bun x tsc -b
 
+      - name: Run unit tests (bun test)
+        run: bun run test
+
       - name: Validate version mirrors in sync (before-commit --check)
         run: bun run before-commit --check
 
@@ -62,6 +65,9 @@ jobs:
 
       - name: Validate Rust compilation (cargo check)
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Validate Rust lint (cargo clippy)
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Run Rust unit tests
         working-directory: src-tauri

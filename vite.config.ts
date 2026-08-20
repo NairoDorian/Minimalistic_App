@@ -30,13 +30,10 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     host: host || false,
-    hmr: host
-      ? {
-          protocol: 'ws',
-          host,
-          port: 1421,
-        }
-      : undefined,
+    // Conditionally spread `hmr` so it is omitted (Vite's default) when there is
+    // no Tauri dev host, rather than assigned `undefined` — the latter violates
+    // exactOptionalPropertyTypes and would also disable HMR on plain localhost.
+    ...(host ? { hmr: { protocol: 'ws', host, port: 1421 } } : {}),
     watch: {
       ignored: ['**/src-tauri/**'],
     },
