@@ -158,7 +158,7 @@ Minimalistic_App/
 
 ## 2. File Inventory & Descriptions
 
-Repomix metrics: **116 files · 1005.3 KB · 258,460 tokens** (text files; binary assets are listed without content metrics).
+Repomix metrics: **116 files · 1005.9 KB · 258,647 tokens** (text files; binary assets are listed without content metrics).
 
 | File Path | Size | Lines | Tokens | Chars | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -178,8 +178,8 @@ Repomix metrics: **116 files · 1005.3 KB · 258,460 tokens** (text files; binar
 | `AGENTS.md` | 32.5 KB | 374 | 7087 | 33094 | Guidelines, SOP procedure, and technical context for AI coding agents operating on this repository. |
 | `AUTO-UPDATE.md` | 11.6 KB | 245 | 2725 | 11885 | Documentation and setup guide for GitHub Releases auto-updater and release CI/CD workflow. |
 | `BUILD.md` | 9.0 KB | 309 | 2403 | 9168 | Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides. |
-| `bunfig.toml` | 1.3 KB | 29 | 332 | 1294 | Source or configuration file for the application. |
-| `CHANGELOG.md` | 123.1 KB | 1439 | 31514 | 125039 | Version history tracking releases and features starting with v0.1.0. |
+| `bunfig.toml` | 1.4 KB | 32 | 377 | 1463 | Source or configuration file for the application. |
+| `CHANGELOG.md` | 123.5 KB | 1448 | 31656 | 125494 | Version history tracking releases and features starting with v0.1.0. |
 | `CONTRIBUTING.md` | 7.9 KB | 147 | 1968 | 8045 | Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2. |
 | `CRUSH.md` | 11.9 KB | 332 | 3010 | 12116 | Rapid developer & AI agent cheat sheet with CLI commands, Rust idioms, SolidJS 2 patterns, and design tokens. |
 | `DOCUMENTATION.md` | 25.9 KB | 265 | 5175 | 26397 | Master documentation map: where the vendored upstream docs for every stack layer live under .docs/, which file to read for which question, and the working agreement for doc-driven changes. |

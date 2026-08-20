@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.26.1] - 2026-08-20
+
+### Round 26.5 — Adopt Handy_V2 Bun 1.4 Improvements
+
+#### ⚙️ Tooling
+
+- **Adopt `lockfileVersion: 2`**: Migrated `bun.lock` to Bun 1.4's lockfile v2 format for improved resolution semantics.
+- **Enable `noOrphans` run guard**: Added `[run] noOrphans = true` to `bunfig.toml` — when the parent process (terminal or `tauri dev`) dies, all descendant Bun processes are recursively SIGKILL'd, preventing orphaned Vite dev servers.
+
 ## [0.26.0] - 2026-08-20
 
 ### Round 26 — Full Bun 1.4 Port: Prerelease Dependency Sweep
