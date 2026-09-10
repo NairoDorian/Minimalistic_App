@@ -84,9 +84,12 @@ pub(crate) fn spawn(blocking_hotkeys: Option<BlockingHotkeys>) -> Result<MacOSLi
     let thread_state = Arc::clone(&state);
     let thread_running = Arc::clone(&running);
 
-    let handle = thread::spawn(move || {
-        run_event_tap(thread_state, thread_running, init_tx);
-    });
+    // Named so a panic on the tap thread is attributable in the log.
+    let handle = thread::Builder::new()
+        .name("hotkey-tap".to_string())
+        .spawn(move || {
+            run_event_tap(thread_state, thread_running, init_tx);
+        })?;
 
     // Wait for the event tap to be created
     let run_loop = match init_rx.recv() {
@@ -485,8 +488,14 @@ fn run_event_tap(
             unsafe {
                 drop(Box::from_raw(ctx_ptr));
             }
+            // `AXIsProcessTrusted` passed, so this is usually a stale grant: macOS
+            // keys the permission to the binary's code signature, and a rebuilt
+            // or updated binary can read as trusted while the tap is refused.
             let _ = init_tx.send(Err(
-                "Failed to create event tap. Your terminal app may need accessibility permission in System Settings > Privacy & Security > Accessibility".to_string()
+                "Failed to create the keyboard event tap. Remove this app from System Settings > \
+                 Privacy & Security > Accessibility and grant it again; when running from a \
+                 terminal or IDE, that host application needs the permission too."
+                    .to_string(),
             ));
             return;
         }

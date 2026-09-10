@@ -17,7 +17,7 @@ Thank you for your interest in contributing to **Minimalistic App**! This guide 
 
 ### 1. Prerequisites
 
-- **Bun** (v1.2+) - The primary package manager.
+- **Bun** (v1.4+) — the primary package manager. The committed `bun.lock` is lockfile v2 and `bunfig.toml` uses the isolated linker, both of which older releases reject.
 - **Rust & Cargo** (2024 Edition / stable).
 - Platform-specific build tools (see [BUILD.md](BUILD.md)).
 
@@ -142,6 +142,6 @@ Before submitting a Pull Request:
 2. [ ] **Type Check**: `bun run typecheck` (`bun x tsc -b`) passes with 0 errors.
 3. [ ] **Version Sync**: `bun run before-commit --check` confirms all mirrors are synchronized.
 4. [ ] **Architecture Map**: `bun run arch` has updated `ARCHITECTURE.md` with any new or modified files.
-5. [ ] **Full Validation Gate**: `bun run validate` passes 100% of all 8 pre-commit gates (version sync, types, lint, Bun tests, Vite build, cargo check, cargo test, arch map).
+5. [ ] **Full Validation Gate**: `bun run validate` passes 100% of all 10 pre-commit gates (version sync, formatting, types, lint, Bun tests, Vite build, cargo check, clippy, cargo test, arch map) — the same set CI runs.
 6. [ ] **Documentation**: Any new feature or configuration setting is documented in `README.md` and `CHANGELOG.md`.
 7. [ ] **Doc-Driven Changes Cited**: Framework-shaped changes reference the local mirror they came from (`bun run docs:find`), and any new dependency layer has been added to the manifest in `scripts/sync-docs.ts` — see [`DOCUMENTATION.md`](DOCUMENTATION.md).

@@ -8,10 +8,13 @@
 //! - **macOS**: Uses CGEventTap. Requires accessibility permissions.
 //! - **Windows**: Uses low-level keyboard hooks. Clean thread shutdown.
 //! - **Linux**: Reads evdev devices directly (Wayland, X11, and console
-//!   alike). Requires read access to `/dev/input` (`input` group).
-//!   Blocking grabs keyboards exclusively and re-injects non-blocked
-//!   events through uinput, so it additionally requires write access to
-//!   `/dev/uinput`. Clean thread shutdown.
+//!   alike). Requires read access to `/dev/input/event*`, best granted with
+//!   a udev `uaccess` rule scoped to the logged-in seat (see the error the
+//!   Linux backend returns); membership in the `input` group also works but
+//!   extends the same access to every session, SSH included. Blocking grabs
+//!   keyboards exclusively and re-injects non-blocked events through uinput,
+//!   so it additionally requires write access to `/dev/uinput`. Clean thread
+//!   shutdown.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

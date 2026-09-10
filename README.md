@@ -177,7 +177,7 @@ Follow these steps **in this order** when bumping the version, preparing a relea
 | `bun run before-commit --install-hook` | Install `.git/hooks/pre-commit` running `--check`; refuses to overwrite an existing hook.                                                                            | Yes     |
 | `bun run before-commit --help`         | Print usage.                                                                                                                                                         | No      |
 
-Details: after a bump, a missing `## [<version>]` changelog header is an advisory `⚠️`, never a blocker. Invalid usage (`--bump` without a part, unknown part, `--check --bump` together) exits `1` with a descriptive message.
+Details: after a bump, a missing `## [<version>]` changelog header is an advisory `⚠️`, never a blocker. Invalid usage (`--bump` without a part, unknown part, `--check --bump` together) exits `1` with a descriptive message. The `Cargo.lock` refresh is `cargo generate-lockfile`, which re-resolves **every** crate to the newest version its spec allows, not just the root entry — a bump is also a Rust dependency refresh, so run `bun run validate` before committing one.
 
 ---
 
@@ -211,18 +211,27 @@ UpdateChecker card (listenForEvents=true) → check() → GitHub Releases API
 
 ### ⚙️ IPC Command Surface (Rust ↔ SolidJS 2)
 
-| Command                | Direction | Payload                                            | Purpose                                                                                               |
-| :--------------------- | :-------- | :------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
-| `get_minimize_to_tray` | Rust → UI | `bool`                                             | Current tray-on-close preference.                                                                     |
-| `set_minimize_to_tray` | UI → Rust | `{ enabled: bool }` → `Result<(), String>`         | Persists to disk first, then commits memory; error string surfaces to the UI for optimistic rollback. |
-| `get_app_settings`     | Rust → UI | `AppSettings`                                      | Returns the full persisted application preferences struct.                                            |
-| `update_app_settings`  | UI → Rust | `{ settings: AppSettings }` → `Result<(), String>` | Persists full settings struct atomically to disk and memory.                                          |
-| `reset_app_settings`   | UI → Rust | `Result<(), String>`                               | Restores settings to clean factory defaults.                                                          |
-| `get_app_info`         | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch) | Reads `AppHandle::package_info()` — single source of truth, never hardcoded.                          |
-| `get_system_stats`     | Rust → UI | `SystemStats` (process_id, os, arch, tauri_ver)    | Returns runtime process and platform diagnostic telemetry.                                            |
-| `open_app_data_dir`    | UI → Rust | `Result<(), String>`                               | Opens the OS application data directory in the native file explorer.                                  |
-| `get_recent_logs`      | Rust → UI | `u32 (max_lines) → String`                         | Returns the last N lines of the backend log file as a single string.                                  |
-| `clear_logs`           | UI → Rust | `Result<(), String>`                               | Truncates the backend log file to zero bytes.                                                         |
+| Command                       | Direction | Payload                                                 | Purpose                                                                                                                                    |
+| :---------------------------- | :-------- | :------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_minimize_to_tray`        | Rust → UI | `bool`                                                  | Current tray-on-close preference.                                                                                                          |
+| `set_minimize_to_tray`        | UI → Rust | `{ enabled: bool }` → `Result<(), String>`              | Persists to disk first, then commits memory; error string surfaces to the UI for optimistic rollback.                                      |
+| `get_app_settings`            | Rust → UI | `AppSettings`                                           | Returns the full persisted application preferences struct.                                                                                 |
+| `update_app_settings`         | UI → Rust | `{ settings: AppSettings }` → `Result<(), String>`      | Persists full settings struct atomically to disk and memory.                                                                               |
+| `reset_app_settings`          | UI → Rust | `Result<(), String>`                                    | Restores settings to clean factory defaults.                                                                                               |
+| `get_app_info`                | Rust → UI | `AppInfo` (name, version, tauri_version, os, arch)      | Reads `AppHandle::package_info()` — single source of truth, never hardcoded.                                                               |
+| `get_system_stats`            | Rust → UI | `SystemStats` (process_id, os, arch, tauri_ver)         | Returns runtime process and platform diagnostic telemetry.                                                                                 |
+| `open_app_data_dir`           | UI → Rust | `Result<(), String>`                                    | Opens the OS application data directory in the native file explorer.                                                                       |
+| `get_recent_logs`             | Rust → UI | `u32 (max_lines) → String`                              | Returns the last N lines of the backend log file as a single string.                                                                       |
+| `clear_logs`                  | UI → Rust | `Result<(), String>`                                    | Truncates the backend log file to zero bytes.                                                                                              |
+| `get_global_hotkeys`          | Rust → UI | `GlobalHotkeyBinding[]`                                 | Every global hotkey action with its current binding (an empty spec means unbound).                                                         |
+| `get_global_hotkey_status`    | Rust → UI | `GlobalHotkeyStatus`                                    | Whether the OS listener is running, how many chords are registered, whether they are withheld from other apps, and why it could not start. |
+| `validate_hotkey_spec`        | UI → Rust | `{ spec: string }` → `Result<String, String>`           | Parses and canonicalizes a spec without binding it, so the recorder can reject an unusable chord before it is saved.                       |
+| `set_global_hotkey`           | UI → Rust | `{ action, spec }` → `Result<(), String>`               | Binds (or, with an empty spec, clears) one action, rejects a chord already bound to another action, persists, and restarts the listener.   |
+| `set_global_hotkeys_enabled`  | UI → Rust | `{ enabled: bool }` → `Result<(), String>`              | Turns the OS keyboard hook on or off and persists the preference.                                                                          |
+| `open_accessibility_settings` | UI → Rust | `Result<(), String>`                                    | macOS: opens the Accessibility pane the hook needs permission from. A no-op elsewhere.                                                     |
+| `get_autostart`               | Rust → UI | `AutostartStatus` (enabled, os_registered, dev_build)   | The stored preference next to the real OS state, plus whether this build refuses to write the entry.                                       |
+| `set_autostart`               | UI → Rust | `{ enabled: bool }` → `Result<AutostartStatus, String>` | Persists the preference first, then reconciles the OS launch entry (release builds only).                                                  |
+| `get_portable_status`         | Rust → UI | `PortableStatus` (active, data_dir)                     | Whether a `portable` marker is redirecting settings and logs, and the directory in use.                                                    |
 
 All handlers are registered via `tauri_specta::Builder` with `collect_commands!` in `src-tauri/src/lib.rs` and callable from SolidJS 2 through the auto-generated, type-safe `commands.*` wrappers in `src/bindings.ts`.
 
@@ -238,14 +247,16 @@ Preferences serialize to JSON inside the OS config directory, **scoped by the ap
 
 - Corrupt or unreadable files log a `[settings]` warning and fall back to defaults (missing file = quiet defaults).
 - **Atomic persistence**: Writes serialize to an adjacent `.tmp` file and atomically rename over the destination, preventing 0-byte corrupt files on power loss or abrupt exit.
-- The Rust `Mutex` is held only for the in-memory mutation; disk I/O happens after the lock is dropped (never blocking IPC).
+- The settings `Mutex` is held across the **whole** read-modify-write, disk write included. Taking it three separate times would let a concurrent writer — another IPC command, or a window move updating the in-memory geometry — slip in between the read and the write-back and have its change silently discarded (CRUSH.md pattern 4). Writes are rare and small, so nothing observable ever waits on it.
+- Window geometry is the one exception to write-on-change: move and resize events update memory only, and the file is written once when the window is hidden or closed — and only if something actually changed (a dirty flag), so a tray click on an untouched window costs no disk write.
 - Poisoned-mutex panics are recovered transparently via the `lock_guard()` helper.
 
 ### 🔄 Auto-Update Checker (`UpdateChecker.tsx`)
 
 - Integrated GitHub Releases auto-updater powered by `tauri-plugin-updater` and `tauri-plugin-process`.
-- **Dual-variant component**: embedded **card** (Preferences tab, primary instance — auto-checks on mount and listens for tray events) and compact **footer** indicator (`autoCheckOnMount={false}`, `listenForEvents={false}` — never fires duplicate network requests).
-- **Stable event-listener pattern**: ref-based concurrency guards (`isCheckingRef`, `isInstallingRef`) and mount tracking keep the tray listener's `checkForUpdates` closure stable with an empty dep array.
+- **Dual-variant component, two jobs on two lifetimes**: the **card** (Preferences tab) auto-checks on mount, gated on the saved "check for updates on launch" preference, and unmounts whenever another tab is selected; the **footer** indicator is mounted for the whole session, so it — not the card — owns the tray's `check-for-updates` event. Each instance does exactly one of the two jobs, so no check is ever fired twice. Both props are read once, untracked, in `onSettled` (CRUSH.md pattern 3).
+- **Concurrency guards, not signals**: an in-flight check and an in-flight install are tracked in plain component-scope variables plus one module-level `installInFlight` flag shared by every instance, so "Install" clicked on the card and on the footer can never start two downloads of the same update.
+- **Reaches you while hidden**: a new version found while the window sits in the tray is announced with a native OS notification (`src/lib/notification.ts`, no in-app fallback there — a toast in a hidden window would be shown to nobody).
 - Streamed download progress percentages (`Started` / `Progress` / `Finished` events), one-click app relaunch, collapsible release notes drawer, and descriptive error handling (404 → "Update endpoint not found").
 
 ### 🔢 Single-Source Version Management
@@ -273,7 +284,7 @@ scripts/version.ts  (APP_VERSION)  ← THE ONLY PLACE THE VERSION IS DEFINED
 - **Componentized tabs**:
   - `src/components/PreferencesTab.tsx` — owns the autostart / minimize-to-tray toggle state, their IPC initialization, and the embedded update-checker card.
   - `src/components/AboutTab.tsx` — purely presentational System & About metadata view (also exports the shared `AppInfo` type, browser-preview fallback, and 1-click **Copy Diagnostics** markdown utility).
-- **Start at OS Launch Toggle** (Default: `OFF`): Managed via `@tauri-apps/plugin-autostart` (macOS AppleScript launcher, `--autostart` arg).
+- **Start at OS Launch Toggle** (Default: `OFF`): the preference lives in `AppSettings`, and the OS launch entry is derived from it by the Rust backend (`src-tauri/src/autostart.rs` on top of `tauri-plugin-autostart`; macOS AppleScript launcher; registered with the `--autostart` argument). The webview never calls the plugin, and a development build never writes the entry — see "Autostart That Cannot Sabotage Your Install" below.
 - **Minimize to Taskbar on Close Toggle** (Default: `OFF`): When OFF, closing the window quits the app. When ON, closing hides to taskbar tray. Persisted to disk atomically.
 - **Accessibility & Keyboard Control**: Full WAI-ARIA tabs pattern — roving `tabIndex`, `ArrowLeft` / `ArrowRight` cycling, `Home` / `End` jumps, and `tabIndex={0}` on `role="tabpanel"` cards for direct keyboard entry. Toggle switches use `role="switch"`, `aria-checked`, `aria-disabled`, `tabIndex`, `onKeyDown` handlers (`Space` / `Enter` toggles), and `:focus-visible` focus ring styles.
 - **SolidJS 2 dev mode**: mount-once side effects use `onSettled` (one-time, not reactive); `createEffect` is reserved for reactive signal-dependent effects.
@@ -348,7 +359,7 @@ when the app is hidden in the tray and another window has focus.
 
 ### 🔒 Security, CI/CD & TypeScript Rigor
 
-- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun x tsc -b`), **Bun unit tests** (`bun run test`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, `cargo check`, and **Rust unit tests** (`cargo test`) — on every push and PR.
+- **GitHub Actions CI Workflow** (`.github/workflows/ci.yml`): cross-platform validation on `ubuntu-24.04`, `macOS`, and `Windows` runners — code formatting, **code lint** (`bun run lint`), TypeScript types (`bun run typecheck`), **Bun unit tests** (`bun run test`), **version-mirror drift check** (`bun run before-commit --check`), Vite production bundling, `cargo check`, **`cargo clippy -D warnings`**, and **Rust unit tests** (`cargo test`) — on every push and PR. `bun run validate` runs the same ten gates locally.
 - **Release profile tuned for distribution** (`Cargo.toml` `[profile.release]`): `opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"` — the smallest download the toolchain will produce.
 - **Settings survive schema change and corruption**: every `AppSettings` field carries a serde default, so a file written by an older or newer build still loads; an unparseable file is preserved as `settings.json.bak` instead of being silently overwritten.
 - **No window flash on launch**: the main window is declared `"visible": false` and shown from `setup()` after geometry restore, so `start_minimized` never flashes a window and a restored size/position never visibly jumps.
@@ -556,11 +567,11 @@ returns an `Outcome`, so swapping in `CliArgs::try_parse_from` touches one file.
 
 | Tool / Library   | Version                                 | Purpose                                                |
 | :--------------- | :-------------------------------------- | :----------------------------------------------------- |
-| **Bun.js**       | `1.3+`                                  | Runtime, script runner & package manager               |
+| **Bun.js**       | `1.4+` (lockfile v2, isolated linker)   | Runtime, script runner & package manager               |
 | **Tauri**        | `^2.11.5`                               | Lightweight cross-platform native desktop shell        |
-| **SolidJS 2**    | `2.0.0-rc.0`                            | Frontend component framework (fine-grained reactivity) |
+| **SolidJS 2**    | `2.0.0-rc.1`                            | Frontend component framework (fine-grained reactivity) |
 | **TypeScript**   | `7.1.0-dev.*` (nightly, `next` channel) | Strict static type checking (TypeScript 7)             |
-| **Vite**         | `8.2.1`                                 | Frontend dev server & production bundler (Vite 8)      |
+| **Vite**         | `8.2.2`                                 | Frontend dev server & production bundler (Vite 8)      |
 | **Cargo / Rust** | `2024 edition`                          | Native system tray & background process backend        |
 
 Every layer above has its **upstream documentation vendored locally** under
@@ -610,6 +621,7 @@ Minimalistic_App/
 │   │   ├── settingsBackup.ts     # Settings export/import + strict import sanitizer
 │   │   ├── storage.ts            # localStorage access that degrades instead of throwing
 │   │   ├── download.ts           # Blob download helper (deferred object-URL revocation)
+│   │   ├── notification.ts       # OS notifications: one permission flow over the Tauri plugin / Web API, toast fallback
 │   │   └── icons.tsx             # Self-contained SVG icon set (no icon dependency)
 │   ├── components/
 │   │   ├── ToggleSwitch.tsx      # Accessible ARIA switch (Space/Enter, focus ring)
@@ -645,7 +657,7 @@ Minimalistic_App/
 │   ├── build.rs                  # tauri-build bootstrap
 │   ├── icons/                    # Generated icon set (PNG/ICO/ICNS — `bun run create-icons`)
 │   └── tauri.conf.json           # App config, CSP, updater endpoints (version synced)
-├── test/                         # Bun unit tests (`bun test`)
+├── test/                         # Bun unit tests (`bun run test` — never a bare `bun test`, see TESTING.md)
 │   ├── keyboard.test.ts          # Hotkey parsing, formatting, matching, listener
 │   ├── shortcuts.test.ts         # Registry, rebinding, conflicts, action resolution
 │   ├── hardening.test.ts         # Which browser shortcuts are swallowed, and which are not
@@ -655,10 +667,11 @@ Minimalistic_App/
 │   ├── reactivity.test.ts        # SolidJS 2 graph behaviour the app depends on
 │   ├── bindings.test.ts          # IPC contract drift: Rust registry vs generated wrappers
 │   ├── theme.test.ts             # Theme presets & CSS variable application
+│   ├── notification.test.ts      # Notification service: permission mapping, one-time prompt, fallbacks
 │   └── version.test.ts           # APP_VERSION SemVer format
 ├── scripts/                      # Node.js tooling (isolated tsconfig.scripts.json)
 │   ├── version.ts                # APP_VERSION — global single source of truth
-│   ├── before-commit.ts          # Version sync & 8-gate suite (--check / --bump / --full)
+│   ├── before-commit.ts          # Version sync & 10-gate suite (--check / --bump / --full)
 │   ├── dev-fast.ts               # Fast Rust dev loop (measured linker configuration)
 │   ├── sync-docs.ts              # Local documentation mirrors (.docs/) sync & search
 │   ├── rename-project.ts         # 1-command rebranding CLI
@@ -716,7 +729,7 @@ derived at runtime from `package_info()`, so it follows automatically.
    - Add `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
    - Push a `v*` tag to trigger `.github/workflows/release.yml`.
 4. **Replace the placeholder copy** — the highlights list in `AboutTab.tsx` and this README.
-5. **Validate & regenerate the docs** — `bun run validate` runs all 8 gates and refreshes `ARCHITECTURE.md`.
+5. **Validate & regenerate the docs** — `bun run validate` runs all 10 gates and refreshes `ARCHITECTURE.md`.
 
 > Renaming by hand instead? The identifiers live in exactly the files in the
 > table above — `src/lib/appMeta.ts` is the only place the frontend hardcodes
@@ -726,16 +739,16 @@ derived at runtime from `package_info()`, so it follows automatically.
 
 ## 🧰 Troubleshooting Cheatsheet
 
-| Symptom                                              | Fix                                                                                                                                    |
-| :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| App quits when closing the window                    | That's the default (`minimize_to_tray: false`). Enable the toggle in Preferences.                                                      |
-| No tray icon on Linux                                | System tray requires `libayatana-appindicator3-dev` + `libxdo-dev` (and a tray-supporting desktop shell). CI installs them for Ubuntu. |
-| Devtools not opening                                 | WebView2 devtools are disabled in release builds by design; in dev, right-click → Inspect or `bun run tauri dev -- --devtools`.        |
-| "Update endpoint not found (GitHub release pending)" | No release published yet, or `endpoints` URL doesn't match your repo. Publish a tag via the release workflow.                          |
-| Version mismatch between files                       | Run `bun run before-commit` (sync) or `--check` (diagnose). CI blocks drifted pushes.                                                  |
-| White flash on app start                             | Shouldn't happen — `index.html` paints `#000` inline. If it returns, verify the inline `<style>` survived bundling.                    |
-| `cargo` commands fail after edits                    | Run `bun run before-commit` (refreshes `Cargo.lock` root entry) or `cargo check` inside `src-tauri/`.                                  |
-| `Access is denied. (os error 5)` on `.exe`           | The app is still running in the background/tray. Run `bun run kill` or `Stop-Process -Name "minimalistic-app" -Force`.                 |
+| Symptom                                              | Fix                                                                                                                                                                                                                               |
+| :--------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App quits when closing the window                    | That's the default (`minimize_to_tray: false`). Enable the toggle in Preferences.                                                                                                                                                 |
+| No tray icon on Linux                                | System tray requires `libayatana-appindicator3-dev` + `libxdo-dev` (and a tray-supporting desktop shell). CI installs them for Ubuntu.                                                                                            |
+| Devtools not opening                                 | Devtools are compiled out of release builds (Tauri's default; enable the `devtools` Cargo feature to ship them). Under `bun run tauri dev` the hardening is off, so right-click → Inspect, `F12` or `Ctrl+Shift+I` all open them. |
+| "Update endpoint not found (GitHub release pending)" | No release published yet, or `endpoints` URL doesn't match your repo. Publish a tag via the release workflow.                                                                                                                     |
+| Version mismatch between files                       | Run `bun run before-commit` (sync) or `--check` (diagnose). CI blocks drifted pushes.                                                                                                                                             |
+| White flash on app start                             | Shouldn't happen — `index.html` paints `#000` inline. If it returns, verify the inline `<style>` survived bundling.                                                                                                               |
+| `cargo` commands fail after edits                    | Run `bun run before-commit` (refreshes `Cargo.lock` root entry) or `cargo check` inside `src-tauri/`.                                                                                                                             |
+| `Access is denied. (os error 5)` on `.exe`           | The app is still running in the background/tray. Run `bun run kill` or `Stop-Process -Name "minimalistic-app" -Force`.                                                                                                            |
 
 ---
 

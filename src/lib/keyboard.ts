@@ -23,10 +23,13 @@
  *
  * NOT included: OS-level global hotkeys. Capturing keys while the app is not
  * focused needs privileged platform hooks (CGEventTap + accessibility grants on
- * macOS, `WH_KEYBOARD_LL` on Windows, evdev + udev rules on Linux). Reach for
- * `tauri-plugin-global-shortcut` on the Rust side for that; the spec strings
- * here are intentionally compatible with its `CmdOrCtrl+Shift+K` accelerator
- * syntax, so the same string can drive both.
+ * macOS, `WH_KEYBOARD_LL` on Windows, evdev + udev rules on Linux). That layer
+ * lives in the Rust backend — `src-tauri/src/hotkeys/`, driven by
+ * `src-tauri/src/global_hotkeys.rs` — and the spec grammar here is deliberately
+ * the same one it parses (`Mod` / `CmdOrCtrl`, side-specific modifiers, the
+ * key aliases), so a chord recorded in the webview can be handed to the OS hook
+ * as-is. The grammar is also compatible with Tauri's `CmdOrCtrl+Shift+K`
+ * accelerator syntax.
  */
 
 /* ────────────────────────────────  Platform  ─────────────────────────────── */

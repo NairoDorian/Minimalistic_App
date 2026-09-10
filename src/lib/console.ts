@@ -23,6 +23,14 @@ const MAX_ENTRIES = 200;
 let entries: DevLogEntry[] = [];
 const listeners = new Set<DevLogListener>();
 
+/**
+ * Monotonic id source. The Dev Console de-duplicates bus entries by id (the
+ * bus replays its whole snapshot on every push), so ids must be unique for the
+ * life of the session — a counter guarantees that, where the random string it
+ * replaces merely made a collision improbable.
+ */
+let nextEntryId = 0;
+
 function notify() {
   const snapshot = [...entries];
   listeners.forEach((listener) => listener(snapshot));
@@ -30,8 +38,9 @@ function notify() {
 
 /** Appends a new console entry at the end of the feed. */
 export function pushDevLog(level: DevLogLevel, message: string): void {
+  nextEntryId += 1;
   const entry: DevLogEntry = {
-    id: Math.random().toString(36).substring(2, 10),
+    id: `dev-${nextEntryId}`,
     level,
     message,
     timestamp: Date.now(),

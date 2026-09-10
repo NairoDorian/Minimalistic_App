@@ -112,9 +112,7 @@ impl HotkeyManager {
         let thread_state = Arc::clone(&state);
         let thread_running = Arc::clone(&running);
 
-        let handle = thread::spawn(move || {
-            Self::event_loop(listener, thread_state, tx, thread_running);
-        });
+        let handle = Self::spawn_event_loop(listener, thread_state, tx, thread_running)?;
 
         Ok(Self {
             state,
@@ -143,9 +141,7 @@ impl HotkeyManager {
         let thread_state = Arc::clone(&state);
         let thread_running = Arc::clone(&running);
 
-        let handle = thread::spawn(move || {
-            Self::event_loop(listener, thread_state, tx, thread_running);
-        });
+        let handle = Self::spawn_event_loop(listener, thread_state, tx, thread_running)?;
 
         Ok(Self {
             state,
@@ -154,6 +150,22 @@ impl HotkeyManager {
             running,
             blocking_hotkeys: Some(blocking_hotkeys),
         })
+    }
+
+    /// Spawns the processing thread.
+    ///
+    /// Named so a panic in the matcher is attributable in the log: the app's
+    /// panic hook records the thread name, and an `<unnamed>` thread is the
+    /// one field a crash report cannot recover afterwards.
+    fn spawn_event_loop(
+        listener: KeyboardListener,
+        state: Arc<Mutex<ManagerState>>,
+        sender: Sender<HotkeyEvent>,
+        running: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<JoinHandle<()>> {
+        Ok(thread::Builder::new()
+            .name("hotkey-manager".to_string())
+            .spawn(move || Self::event_loop(listener, state, sender, running))?)
     }
 
     /// Event processing loop
@@ -169,13 +181,20 @@ impl HotkeyManager {
             // Block until we receive an event or timeout (to check running flag)
             match listener.recv_timeout(RECV_TIMEOUT) {
                 Ok(key_event) => {
-                    if let Ok(mut state) = state.lock() {
-                        let hotkey_events = state.process_event(&key_event);
-                        for event in hotkey_events {
-                            if sender.send(event).is_err() {
-                                // Receiver dropped, exit
-                                return;
-                            }
+                    // A poisoned lock means another holder panicked, not that
+                    // the registry is corrupt — every mutation it sees is a
+                    // plain map insert or remove. Skipping events while the
+                    // lock is poisoned (the previous `if let Ok`) silently
+                    // disabled every global hotkey for the rest of the session
+                    // with nothing in the log, so the guard is recovered.
+                    let hotkey_events = state
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .process_event(&key_event);
+                    for event in hotkey_events {
+                        if sender.send(event).is_err() {
+                            // Receiver dropped, exit
+                            return;
                         }
                     }
                 }
@@ -257,6 +276,22 @@ impl HotkeyManager {
         self.event_receiver
             .recv()
             .map_err(|_| Error::EventLoopNotRunning)
+    }
+
+    /// Blocking receive with timeout
+    ///
+    /// Blocks until a hotkey event is received, the timeout expires
+    /// (`Error::Timeout`), or the event loop stops (`Error::EventLoopNotRunning`).
+    /// This is the shape a dispatch loop wants: an event is handled the instant
+    /// it arrives, and the timeout exists only so the caller can notice a stop
+    /// request between events.
+    pub fn recv_timeout(&self, timeout: std::time::Duration) -> Result<HotkeyEvent> {
+        self.event_receiver
+            .recv_timeout(timeout)
+            .map_err(|e| match e {
+                mpsc::RecvTimeoutError::Timeout => Error::Timeout,
+                mpsc::RecvTimeoutError::Disconnected => Error::EventLoopNotRunning,
+            })
     }
 
     /// Non-blocking receive for hotkey events

@@ -3,11 +3,7 @@ import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import {
-  sendNotification,
-  isPermissionGranted,
-  requestPermission,
-} from '@tauri-apps/plugin-notification';
+import { sendOsNotification } from '../lib/notification';
 import {
   RefreshCw,
   Download,
@@ -36,21 +32,20 @@ let installInFlight = false;
  * Surfaces a native OS notification when a new version is found while the
  * main window is hidden in the tray — the only channel that can reach the
  * user without opening the GUI.
+ *
+ * `sendOsNotification` rather than `sendAppNotification` on purpose: its toast
+ * fallback would be drawn into a window nobody is looking at and would expire
+ * before the window is next opened. If the OS declines, there is simply no
+ * notification, and the card shows the update the next time the app is opened.
  */
 const notifyIfHidden = async (version: string) => {
   if (!isTauri) return;
   try {
-    const visible = await getCurrentWindow().isVisible();
-    if (visible) return;
-
-    let granted = await isPermissionGranted();
-    if (!granted) granted = (await requestPermission()) === 'granted';
-    if (granted) {
-      sendNotification({
-        title: 'Update available',
-        body: `v${version} is ready to install. Open the app to update.`,
-      });
-    }
+    if (await getCurrentWindow().isVisible()) return;
+    await sendOsNotification({
+      title: 'Update available',
+      body: `v${version} is ready to install. Open the app to update.`,
+    });
   } catch (err: unknown) {
     console.warn('Failed to send update notification:', err);
   }
@@ -267,7 +262,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
           </span>
         )}
         {updateAvailable() && !isInstalling() && (
-          <button onClick={() => void installUpdate()} class="btn-update-footer">
+          <button type="button" onClick={() => void installUpdate()} class="btn-update-footer">
             <Download size={12} /> Update to v{latestVersion()}
           </button>
         )}
@@ -278,6 +273,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
         )}
         {!isChecking() && !showUpToDate() && !updateAvailable() && !isInstalling() && (
           <button
+            type="button"
             onClick={() => void checkForUpdates(true)}
             class="btn-footer-check"
             aria-label="Check for updates"
@@ -325,6 +321,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
             <>
               {releaseNotes() && (
                 <button
+                  type="button"
                   onClick={() => setShowNotes((prev) => !prev)}
                   class="btn-update-secondary"
                   aria-label="Toggle release notes"
@@ -334,7 +331,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
                   {showNotes() ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
               )}
-              <button onClick={() => void installUpdate()} class="btn-update-primary">
+              <button type="button" onClick={() => void installUpdate()} class="btn-update-primary">
                 <Download size={14} /> Install v{latestVersion()}
               </button>
             </>
@@ -342,6 +339,7 @@ export const UpdateChecker: Component<UpdateCheckerProps> = (props) => {
 
           {!updateAvailable() && !isInstalling() && (
             <button
+              type="button"
               onClick={() => void checkForUpdates(true)}
               disabled={isChecking()}
               class="btn-update-secondary"

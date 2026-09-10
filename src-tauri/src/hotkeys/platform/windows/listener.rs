@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
-use crate::hotkeys::error::Result;
+use crate::hotkeys::error::{Error, Result};
 use crate::hotkeys::platform::state::{
     BlockingHotkeys, RECONCILABLE, release_events, stale_modifiers,
 };
@@ -412,117 +412,161 @@ pub(crate) struct WindowsListenerState {
     pub blocking_hotkeys: Option<BlockingHotkeys>,
 }
 
-/// Spawn a Windows low-level keyboard hook listener
+/// Spawn a Windows low-level keyboard hook listener.
+///
+/// Returns only once the hook thread has reported whether both hooks were
+/// installed, so an `Ok` means the listener is genuinely live. Previously a
+/// `SetWindowsHookExW` failure — a per-session hook limit, a sandbox that
+/// forbids global hooks — was printed to stderr from inside the thread while
+/// this function still returned `Ok`: the caller then showed "Listening" for a
+/// hook that did not exist, and stderr is not even attached in a release
+/// build. The handshake mirrors the macOS backend, which has always reported
+/// tap creation back through a channel.
 pub(crate) fn spawn(blocking_hotkeys: Option<BlockingHotkeys>) -> Result<WindowsListenerState> {
     let (tx, rx) = mpsc::channel();
     let running = Arc::new(AtomicBool::new(true));
     let thread_running = Arc::clone(&running);
     let thread_blocking = blocking_hotkeys.clone();
+    // Hook installation outcome: `Ok(())` once both hooks are in place, or the
+    // failure to surface to the caller.
+    let (init_tx, init_rx) = mpsc::channel::<std::result::Result<(), String>>();
 
-    let handle = thread::spawn(move || {
-        // Initialize thread-local hook context
-        HOOK_CONTEXT.with(|ctx| {
-            *ctx.borrow_mut() = Some(HookContext {
-                event_sender: tx,
-                current_modifiers: Modifiers::empty(),
-                blocking_hotkeys: thread_blocking,
-                altgr_phantom_ctrl: false,
-                menu_mask_sent: false,
+    // Named so a panic inside the hook thread is attributable in the log —
+    // the app's panic hook records the thread name.
+    let handle = thread::Builder::new()
+        .name("hotkey-hook".to_string())
+        .spawn(move || {
+            // Initialize thread-local hook context
+            HOOK_CONTEXT.with(|ctx| {
+                *ctx.borrow_mut() = Some(HookContext {
+                    event_sender: tx,
+                    current_modifiers: Modifiers::empty(),
+                    blocking_hotkeys: thread_blocking,
+                    altgr_phantom_ctrl: false,
+                    menu_mask_sent: false,
+                });
             });
-        });
 
-        // Install the low-level keyboard hook
-        let kb_hook =
-            unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook_proc), None, 0) };
+            // Install the low-level keyboard hook
+            let kb_hook =
+                unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook_proc), None, 0) };
 
-        let mut kb_hook = match kb_hook {
-            Ok(h) => h,
-            Err(e) => {
-                eprintln!("Failed to install keyboard hook: {:?}", e);
-                return;
-            }
-        };
-
-        // Install the low-level mouse hook
-        let mouse_hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) };
-
-        let mut mouse_hook = match mouse_hook {
-            Ok(h) => h,
-            Err(e) => {
-                eprintln!("Failed to install mouse hook: {:?}", e);
-                // Clean up keyboard hook before returning
-                unsafe {
-                    let _ = UnhookWindowsHookEx(kb_hook);
+            let mut kb_hook = match kb_hook {
+                Ok(h) => h,
+                Err(e) => {
+                    let _ = init_tx.send(Err(format!(
+                        "could not install the low-level keyboard hook: {e}"
+                    )));
+                    HOOK_CONTEXT.with(|ctx| *ctx.borrow_mut() = None);
+                    return;
                 }
-                return;
-            }
-        };
+            };
 
-        // Watch for session changes (Win+L lock/unlock, RDP connect) and
-        // suspend/resume: the secure desktop swallows key-up events, so
-        // modifier state must be reconciled when the session comes back, and
-        // Windows can silently drop LL hooks across a sleep, so they are
-        // re-armed on resume.
-        let watcher_hwnd = unsafe { create_watcher_window() };
+            // Install the low-level mouse hook
+            let mouse_hook =
+                unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) };
 
-        // Message loop - required for low-level hooks to function.
-        // Keep the short timeout so shutdown polling behavior remains unchanged.
-        let mut msg = MSG::default();
-        loop {
-            // Check if we should stop
-            if !thread_running.load(Ordering::SeqCst) {
-                break;
-            }
+            let mut mouse_hook = match mouse_hook {
+                Ok(h) => h,
+                Err(e) => {
+                    // Clean up keyboard hook before returning
+                    unsafe {
+                        let _ = UnhookWindowsHookEx(kb_hook);
+                    }
+                    let _ = init_tx.send(Err(format!(
+                        "could not install the low-level mouse hook: {e}"
+                    )));
+                    HOOK_CONTEXT.with(|ctx| *ctx.borrow_mut() = None);
+                    return;
+                }
+            };
 
-            // Process all pending messages
-            let outcome = drain_thread_messages(&mut msg);
-            if outcome.quit {
-                break;
-            }
-            if outcome.reconcile {
-                reconcile_modifiers_in_context();
-            }
-            // The wndproc requests re-installs for messages that arrive via
-            // SendMessage (dispatched inside PeekMessageW, never seen by the
-            // drain loop) -- WM_POWERBROADCAST always, WM_WTSSESSION_CHANGE
-            // on builds that send rather than post it.
-            if outcome.reinstall_hooks || take_reinstall_request() {
-                unsafe {
-                    if reinstall_hooks(&mut kb_hook, &mut mouse_hook) {
-                        // At most a few lines per unlock/resume, and it makes
-                        // the re-arm observable in the field.
-                        eprintln!("handy-keys: re-armed hooks after session/power change");
-                    } else {
-                        // Keep the old hooks: they usually still work (the
-                        // reinstall is defensive hardening, not a repair).
-                        eprintln!(
-                            "handy-keys: failed to re-install hooks after session/power change"
-                        );
+            // Both hooks are live: release the caller.
+            let _ = init_tx.send(Ok(()));
+
+            // Watch for session changes (Win+L lock/unlock, RDP connect) and
+            // suspend/resume: the secure desktop swallows key-up events, so
+            // modifier state must be reconciled when the session comes back, and
+            // Windows can silently drop LL hooks across a sleep, so they are
+            // re-armed on resume.
+            let watcher_hwnd = unsafe { create_watcher_window() };
+
+            // Message loop - required for low-level hooks to function.
+            // Keep the short timeout so shutdown polling behavior remains unchanged.
+            let mut msg = MSG::default();
+            loop {
+                // Check if we should stop
+                if !thread_running.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                // Process all pending messages
+                let outcome = drain_thread_messages(&mut msg);
+                if outcome.quit {
+                    break;
+                }
+                if outcome.reconcile {
+                    reconcile_modifiers_in_context();
+                }
+                // The wndproc requests re-installs for messages that arrive via
+                // SendMessage (dispatched inside PeekMessageW, never seen by the
+                // drain loop) -- WM_POWERBROADCAST always, WM_WTSSESSION_CHANGE
+                // on builds that send rather than post it.
+                if outcome.reinstall_hooks || take_reinstall_request() {
+                    unsafe {
+                        if reinstall_hooks(&mut kb_hook, &mut mouse_hook) {
+                            // At most a few lines per unlock/resume, and it makes
+                            // the re-arm observable in the field — through the
+                            // `log` facade, so it reaches the log file and the
+                            // Dev Console rather than a stderr no release build has.
+                            log::info!("[hotkeys] Re-armed the keyboard hooks after a session/power change");
+                        } else {
+                            // Keep the old hooks: they usually still work (the
+                            // reinstall is defensive hardening, not a repair).
+                            log::warn!(
+                                "[hotkeys] Failed to re-install the keyboard hooks after a session/power change"
+                            );
+                        }
                     }
                 }
+
+                // Wait for messages or timeout — unlike thread::sleep, this returns
+                // immediately when a message arrives, so hook callbacks are never delayed.
+                wait_for_message_or_timeout(HOOK_LOOP_TIMEOUT_MS);
             }
 
-            // Wait for messages or timeout — unlike thread::sleep, this returns
-            // immediately when a message arrives, so hook callbacks are never delayed.
-            wait_for_message_or_timeout(HOOK_LOOP_TIMEOUT_MS);
-        }
-
-        // Clean up the watcher window, then the hooks
-        if let Some(hwnd) = watcher_hwnd {
+            // Clean up the watcher window, then the hooks
+            if let Some(hwnd) = watcher_hwnd {
+                unsafe {
+                    destroy_watcher_window(hwnd);
+                }
+            }
             unsafe {
-                destroy_watcher_window(hwnd);
+                let _ = UnhookWindowsHookEx(kb_hook);
+                let _ = UnhookWindowsHookEx(mouse_hook);
             }
-        }
-        unsafe {
-            let _ = UnhookWindowsHookEx(kb_hook);
-            let _ = UnhookWindowsHookEx(mouse_hook);
-        }
 
-        // Clear thread-local state
-        HOOK_CONTEXT.with(|ctx| {
-            *ctx.borrow_mut() = None;
-        });
-    });
+            // Clear thread-local state
+            HOOK_CONTEXT.with(|ctx| {
+                *ctx.borrow_mut() = None;
+            });
+        })?;
+
+    match init_rx.recv() {
+        Ok(Ok(())) => {}
+        Ok(Err(message)) => {
+            // The thread has already unhooked and returned; join it so no
+            // detached thread outlives the error.
+            let _ = handle.join();
+            return Err(Error::Platform(message));
+        }
+        Err(_) => {
+            let _ = handle.join();
+            return Err(Error::Platform(
+                "the keyboard hook thread exited before installing its hooks".to_string(),
+            ));
+        }
+    }
 
     Ok(WindowsListenerState {
         event_receiver: rx,
@@ -820,24 +864,27 @@ fn send_menu_mask() {
     if sent != inputs.len() as u32 {
         // Rare (e.g. UIPI filtering); the cost is the pre-mask behavior:
         // the shell may open its menu when the modifier is released.
-        eprintln!("handy-keys: menu mask injection failed");
+        log::warn!("[hotkeys] Menu mask injection failed");
     }
 }
 
 /// Check if a hotkey combination should be blocked
+///
+/// A poisoned set is recovered rather than treated as empty: it only ever sees
+/// inserts and removes, so it is valid whatever happened to the previous
+/// holder, and "never block again" would be a silent regression.
 fn should_block_hotkey(
     blocking_hotkeys: &Option<BlockingHotkeys>,
     modifiers: Modifiers,
     key: Option<Key>,
 ) -> bool {
-    if let Some(hotkeys) = blocking_hotkeys
-        && let Ok(set) = hotkeys.lock()
-    {
-        return set
+    blocking_hotkeys.as_ref().is_some_and(|hotkeys| {
+        hotkeys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .iter()
-            .any(|h| h.modifiers.matches(modifiers) && h.key == key);
-    }
-    false
+            .any(|h| h.modifiers.matches(modifiers) && h.key == key)
+    })
 }
 
 #[cfg(test)]

@@ -37,15 +37,19 @@ impl ListenerState {
     }
 
     /// Check if an event matches a blocking hotkey
+    ///
+    /// A poisoned set is recovered rather than treated as empty: it only ever
+    /// sees inserts and removes, so it is valid whatever happened to the
+    /// previous holder, and "never block again" would be a silent regression
+    /// the user could not diagnose.
     pub fn should_block(&self, modifiers: Modifiers, key: Option<Key>) -> bool {
-        if let Some(ref hotkeys) = self.blocking_hotkeys {
-            if let Ok(set) = hotkeys.lock() {
-                return set
-                    .iter()
-                    .any(|h| h.modifiers.matches(modifiers) && h.key == key);
-            }
-        }
-        false
+        self.blocking_hotkeys.as_ref().is_some_and(|hotkeys| {
+            hotkeys
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .iter()
+                .any(|h| h.modifiers.matches(modifiers) && h.key == key)
+        })
     }
 }
 

@@ -254,7 +254,7 @@ Considered and deliberately **not** adopted:
 | [AGENTS.md](AGENTS.md)                             | Development procedure and workflow rules for agents and humans             |
 | [ARCHITECTURE.md](ARCHITECTURE.md)                 | Generated file inventory and data flow (`bun run arch`)                    |
 | [BUILD.md](BUILD.md)                               | Toolchain prerequisites, per-OS setup, production builds                   |
-| [TESTING.md](TESTING.md)                           | The 8-gate pre-commit suite, unit-test layout, manual QA matrix            |
+| [TESTING.md](TESTING.md)                           | The 10-gate pre-commit suite, unit-test layout, manual QA matrix           |
 | [SECURITY.md](SECURITY.md)                         | Capability model, hotkey hook, CSP, disclosure policy                      |
 | [AUTO-UPDATE.md](AUTO-UPDATE.md)                   | Updater architecture, Minisign signing, release workflow                   |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                 | Branching, conventional commits, code standards                            |

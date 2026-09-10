@@ -4,7 +4,10 @@
 //! plus an inotify watch on `/dev/input` for hotplug. Reading evdev
 //! directly needs no X11 or Wayland connection, so the listener works
 //! identically on both and on a bare console; it requires read access to
-//! the device nodes (typically membership in the `input` group).
+//! the device nodes. The recommended grant is a udev `uaccess` rule, which
+//! scopes the access to the physically logged-in seat; membership in the
+//! `input` group also works but hands the same read access to every session
+//! of that user, SSH included — see `SECURITY.md`.
 //!
 //! # Blocking
 //!
@@ -204,9 +207,13 @@ pub(crate) fn spawn(blocking_hotkeys: Option<BlockingHotkeys>) -> Result<LinuxLi
     let running = Arc::new(AtomicBool::new(true));
     let thread_running = Arc::clone(&running);
 
-    let handle = thread::spawn(move || {
-        run_loop(devices, inotify, grab, state, thread_running);
-    });
+    // Named so a panic in the poll loop is attributable in the log — the app's
+    // panic hook records the thread name.
+    let handle = thread::Builder::new()
+        .name("hotkey-evdev".to_string())
+        .spawn(move || {
+            run_loop(devices, inotify, grab, state, thread_running);
+        })?;
 
     Ok(LinuxListenerState {
         event_receiver: rx,
@@ -253,10 +260,18 @@ fn open_capturable_devices(grab: &mut Option<GrabConfig>) -> Result<Vec<OpenDevi
 
     if devices.is_empty() {
         return Err(Error::Platform(if permission_denied > 0 {
+            // The udev route is recommended over the `input` group on purpose:
+            // a `uaccess` tag grants the nodes to whoever is logged in at the
+            // seat and revokes them when they log out, whereas the group grants
+            // every session of that user — an SSH login included — the ability
+            // to read the keyboard. See SECURITY.md.
             format!(
                 "permission denied opening {permission_denied} device node(s) under {DEV_INPUT}. \
-                 Reading keyboard events requires read access to these nodes: add your user to \
-                 the 'input' group (sudo usermod -aG input $USER) and log out and back in"
+                 Reading keyboard events requires read access to these nodes. Grant it with a \
+                 udev rule such as `SUBSYSTEM==\"input\", KERNEL==\"event*\", TAG+=\"uaccess\"` \
+                 in /etc/udev/rules.d/, then replug or `udevadm trigger`; adding your user to \
+                 the 'input' group also works but extends the access to every session, SSH \
+                 included"
             )
         } else {
             format!("no keyboard-capable input devices found under {DEV_INPUT}")
@@ -312,8 +327,8 @@ fn open_device(path: &Path, grab: &mut Option<GrabConfig>) -> io::Result<Option<
             // would make that listener see OUR clone as a new keyboard and
             // clone it back — an unbounded device storm. First blocker
             // wins; we detect but cannot block behind it.
-            eprintln!(
-                "handy-keys: {} is another handy-keys blocking listener's output; its hotkeys \
+            log::warn!(
+                "[hotkeys] {} is another handy-keys blocking listener's output; its hotkeys \
                  will be detected but not blocked by this listener",
                 path.display()
             );
@@ -327,8 +342,8 @@ fn open_device(path: &Path, grab: &mut Option<GrabConfig>) -> io::Result<Option<
             // Combo device exposing keyboard keys on a pointer node: the
             // no-grabbing-pointers rule wins, but say so — "why isn't my
             // hotkey blocked" is undebuggable otherwise.
-            eprintln!(
-                "handy-keys: {} exposes keyboard keys on a pointer device; its hotkeys will be \
+            log::warn!(
+                "[hotkeys] {} exposes keyboard keys on a pointer device; its hotkeys will be \
                  detected but not blocked (pointer devices are never grabbed)",
                 path.display()
             );
@@ -350,8 +365,8 @@ fn complete_grab(device: &mut OpenDevice, cfg: &mut GrabConfig) {
             device.output_nodes = nodes;
         }
         Err(e) => {
-            eprintln!(
-                "handy-keys: cannot grab {} for hotkey blocking ({e}); its hotkeys will be \
+            log::warn!(
+                "[hotkeys] cannot grab {} for hotkey blocking ({e}); its hotkeys will be \
                  detected but not blocked",
                 device.path.display()
             );
@@ -582,7 +597,7 @@ fn run_loop(
                 // won't heal; exiting drops the sender, so receivers see
                 // EventLoopNotRunning instead of silently waiting forever.
                 _ => {
-                    eprintln!("handy-keys: poll on input devices failed: {err}");
+                    log::warn!("[hotkeys] poll on input devices failed: {err}");
                     break;
                 }
             }
@@ -669,8 +684,8 @@ fn drain_device(
                             if let Some(output) = &mut device.output {
                                 if !device.pending.is_empty() {
                                     if let Err(e) = output.emit(&device.pending) {
-                                        eprintln!(
-                                            "handy-keys: failed to re-inject events for {}: {e}",
+                                        log::warn!(
+                                            "[hotkeys] failed to re-inject events for {}: {e}",
                                             device.path.display()
                                         );
                                     }

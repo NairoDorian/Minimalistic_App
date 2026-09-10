@@ -1,6 +1,6 @@
 import { createSignal, createEffect, createMemo, Loading, Show } from 'solid-js';
 import { commands } from '../bindings';
-import type { AppSettings as BindingAppSettings, AutostartStatus } from '../bindings';
+import type { AppSettings, AutostartStatus } from '../bindings';
 import { Power, Minimize2, Maximize2, Move3d, Palette, EyeOff, RefreshCw } from '../lib/icons';
 import { ToggleSwitch } from './ToggleSwitch';
 import { UpdateChecker } from './UpdateChecker';
@@ -16,13 +16,6 @@ import { FALLBACK_SETTINGS } from '../lib/settingsBackup';
 import { readStored, writeStored } from '../lib/storage';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
-
-/**
- * Type-safe settings type from the Tauri Specta generated bindings.
- * Re-exported here for consumers (DeveloperTab, settingsBackup) that
- * depend on the same shape without importing the bindings directly.
- */
-export type AppSettings = BindingAppSettings;
 
 interface PreferencesTabProps {
   onStatusChange: (status: string) => void;
@@ -325,6 +318,7 @@ export function PreferencesTab(props: PreferencesTabProps) {
 
   const handleAccentChange = async (accent: ThemeAccent) => {
     // Setting the signal is enough — the effect above paints it onto the DOM.
+    const previous = currentAccent();
     setCurrentAccent(accent);
 
     if (isTauri) {
@@ -333,7 +327,12 @@ export function PreferencesTab(props: PreferencesTabProps) {
         const preset = THEME_PRESETS.find((p) => p.id === accent);
         toast.success(`Accent changed to ${preset?.name ?? accent}`);
       } catch (err: unknown) {
+        // Optimistic rollback, like every toggle above: the swatch must not
+        // keep showing a colour the next launch will not have.
         console.error('Failed to persist theme accent:', err);
+        setCurrentAccent(previous);
+        toast.error('Failed to save theme accent');
+        props.onStatusChange('Error saving theme accent');
       }
     } else {
       writeStored(THEME_ACCENT_STORAGE_KEY, accent);

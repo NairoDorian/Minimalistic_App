@@ -8,6 +8,175 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > [!NOTE]
 > **Release flow (exact order)**: `bun run before-commit --bump <major|minor|patch>` → add this version's entry at the top of this file → `bun run arch` → `bun run before-commit --check` + `bun run typecheck` → commit & push (`feat(vX.Y.Z): ...`). Bump levels: **patch** = fixes (`0.8.1 → 0.8.2`), **minor** = backward-compatible features (`0.8.1 → 0.9.0`), **major** = breaking changes (`0.8.1 → 1.0.0`). Full walkthrough: `README.md` / `AGENTS.md`.
 
+## [0.27.0] - 2026-09-09
+
+### Round 27 — Full Review: Correctness Fixes, Notification Service, Gate Parity, Documentation Truth
+
+A complete read of every document and every source file, followed by fixes,
+optimisations and comments only — no new user-facing capability beyond the
+notification work that was already sitting in the working tree, unshipped, from
+the previous session.
+
+#### 🔔 Notification service (was in the tree, never committed)
+
+- **`src/lib/notification.ts` (new)** — one implementation of the "check
+  permission, ask once, send" sequence, over `@tauri-apps/plugin-notification`
+  in the desktop build and the browser Notification API in the web preview.
+  Two entry points: `sendAppNotification` falls back to an in-app toast, and
+  `sendOsNotification` deliberately does not — it exists for paths that run
+  while the window is hidden, where a toast would be shown to nobody and would
+  expire before the window is next opened.
+- **`UpdateChecker` uses it now.** The "update found while hidden" path carried
+  its own copy of the permission dance, and the two copies had already drifted
+  in how they mapped the plugin's answers. One copy remains.
+- **Developer Hub → OS notification bench** (title/body inputs, permission
+  badge, "Request Permission"), with the existing toast bench beneath it.
+- 14 tests in `test/notification.test.ts`: permission mapping, the one-time
+  prompt, a recorded denial never re-prompting, the product-name title default,
+  and the no-fallback variant resolving `false` without a toast.
+
+#### 🐞 Fixed
+
+- **`--version` and `--help` printed twice on Windows** in any build that had a
+  console — every `cargo run`, and a release build launched from a terminal.
+  `cli::print_and_exit` attached to the parent console and then wrote the
+  message through _both_ `WriteConsoleA` and Rust's `stdout`, on the mistaken
+  premise that Rust caches the stdout handle at process start. It re-resolves
+  it on every write, so the second path was pure duplication (and ANSI-only, so
+  a rebranded non-ASCII app name would have been mangled). One write remains.
+- **A Windows hook-install failure was invisible.** `SetWindowsHookExW` failing
+  (a per-session hook limit, a sandbox) was printed to stderr from inside the
+  listener thread while `spawn` still returned `Ok`, so Preferences showed
+  "Listening" for a hook that did not exist — and a release build has no
+  stderr to print to. The thread now reports installation back over a channel,
+  as the macOS backend always has, and the failure reaches the status line.
+- **Every tray click that hid the window rewrote `settings.json`.** The
+  geometry flush the previous round added ran on hide as well as close, and
+  wrote unconditionally. `AppState::geometry_dirty` now records whether a move
+  or resize actually changed anything; hiding an untouched window costs no
+  disk write, and a failed write keeps the flag raised so the next hide retries.
+- **Window geometry was restored twice, in two different orders** — once at
+  startup (size, then position) and again on every show (position, then size).
+  One helper, `restore_window_geometry`, runs before every show, position
+  first: a DPI-aware window is rescaled by the OS when it lands on a monitor
+  with a different scale factor, so a size applied _before_ the move is scaled
+  a second time on arrival.
+- **`request_quit` could panic before `setup()` finished** (a `--quit`
+  forwarded by a second launch during startup): `state()` → `try_state()`.
+- **Global hotkey dispatch latency.** The dispatch thread polled `try_recv`
+  every 25 ms: up to 25 ms added to every hotkey press, and forty idle wake-ups
+  a second. It now blocks in a new `HotkeyManager::recv_timeout`, handles an
+  event the instant it arrives, and re-checks the stop flag every 50 ms.
+- **A poisoned lock silently disabled every global hotkey.** The manager's
+  event loop and both `should_block` paths skipped their work whenever the
+  mutex was poisoned — hotkeys dead for the rest of the session, nothing in the
+  log. The data behind those locks is a plain map or set, valid whatever
+  happened to the previous holder, so the guard is recovered instead.
+- **The theme accent had no rollback.** A failed persist left the swatch
+  showing a colour the next launch would not have; it now reverts and reports,
+  like every toggle.
+- **The Dev Console read the log file twice on open.** The unpause effect also
+  ran at mount; it now skips its first run.
+- **Toast and console ids were random strings.** Both consumers de-duplicate or
+  key by id, so a collision (improbable, not impossible) would have dropped a
+  console line or dismissed two toasts at once. Monotonic counters now.
+
+#### 🧵 Crashes are attributable
+
+- Every thread the hotkey engine spawns has a name — `hotkey-dispatch`,
+  `hotkey-manager`, `hotkey-hook` (Windows), `hotkey-tap` (macOS),
+  `hotkey-evdev` (Linux). `panic_log` records the thread name, and until now a
+  crash on any of them logged as `<unnamed>`, defeating the one field that
+  module exists to capture.
+- The Windows and Linux listeners' diagnostics ("re-armed hooks after a
+  session change", "cannot grab device for blocking", "poll failed") go through
+  the `log` facade instead of `eprintln!`, so they reach the rotating log file
+  and the Dev Console rather than a stderr no release build has.
+
+#### 🔒 Consistency with SECURITY.md
+
+- The Linux backend's permission error told users to join the `input` group,
+  which SECURITY.md explicitly says never to do (it extends keyboard read
+  access to every session of that user, SSH included). The error and both
+  module docs now recommend a udev `uaccess` rule and explain the difference.
+
+#### 🛠️ Gate parity
+
+- **`bun run validate` and the git hook now run the formatting check** that CI
+  has always enforced. The notification round above had passed `validate` with
+  three unformatted files and would have failed the push. Ten gates, listed in
+  TESTING.md; the installed hook is a copy of the template, so it was
+  reinstalled.
+- `ci.yml` calls `bun run typecheck` rather than spelling `bun x tsc -b` a
+  second time, matching every other gate's package-script indirection.
+- `release.yml`: `bun install --frozen-lockfile` (a release is built from the
+  validated dependency set), the `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret
+  AUTO-UPDATE.md tells you to set but the workflow never read, and the
+  redundant explicit Vite build that `beforeBuildCommand` ran again.
+- `rename-project` also rewrites the two hardcoded release titles in
+  `release.yml` and the repository links in `.github/ISSUE_TEMPLATE/config.yml`.
+
+#### 🧹 Smaller things
+
+- `DeveloperTab`: the IPC playground's two parallel tables (menu entries and
+  dispatch map) are one list; the notification title defaults to `APP_NAME`
+  rather than a literal `rename-project` would miss; the web-preview backup
+  export validates the stored accent through `resolveThemeAccent` instead of a
+  cast.
+- `AppSettings::default` reuses the serde field defaults, so "what a missing
+  field becomes" and "what a fresh install gets" are one definition.
+- `PreferencesTab` no longer re-exports `AppSettings` (nothing imported it).
+- A dead branch removed from the shortcuts modal; the Dev Console's option
+  tables hoisted to module scope; `type="button"` on the five updater buttons.
+- CSS: the last three `transition: all` rules scoped to the properties that
+  change; the Dev Console font stack listed `monospace` before `Consolas`,
+  which made `Consolas` unreachable.
+- `src/lib/keyboard.ts` module docs pointed at `tauri-plugin-global-shortcut`
+  for OS-level hotkeys; the app has shipped its own engine since 0.20.0.
+- The macOS event-tap failure message no longer talks about "your terminal
+  app" to a user of a bundled application.
+
+#### 📖 Documentation corrected against the code
+
+Claims that had drifted, fixed in place:
+
+- README said the settings mutex is released before disk I/O; it is held
+  across the write, on purpose, since 0.20.0 (CRUSH.md pattern 4 had it right).
+- README, AUTO-UPDATE.md and AGENTS.md described the pre-0.22.0 `UpdateChecker`
+  split (card listens, footer inert) and React-era "ref-based guards with an
+  empty dep array"; rewritten for the current two-lifetimes design.
+- README and AGENTS.md said autostart is "managed via
+  `@tauri-apps/plugin-autostart`" from the frontend; that package was removed
+  in 0.24.0 and the Rust side owns the write.
+- AUTO-UPDATE.md told readers the CSP "must include" two GitHub origins that
+  0.22.0 removed because the updater runs in Rust, and showed a release
+  workflow that is not the one committed; its sequence diagram had the webview
+  fetching `latest.json` itself.
+- The gate count ("8-gate") across README, AGENTS.md, CRUSH.md,
+  CONTRIBUTING.md, TESTING.md and DOCUMENTATION.md — clippy had made it nine,
+  formatting makes it ten.
+- AGENTS.md's task table and CRUSH.md's command list said `bun test`, which the
+  same AGENTS.md forbids two sections later (it selects Solid's SSR build).
+- The Bun floor is 1.4, not 1.2 or 1.3: the lockfile is v2 and `bunfig.toml`
+  uses the isolated linker. README, BUILD.md, CONTRIBUTING.md, About tab.
+- README's IPC table listed 10 of the 19 commands; SECURITY.md had all 19.
+- README's devtools troubleshooting row referenced a `tauri dev -- --devtools`
+  flag that does not exist.
+- CRUSH.md pattern 2 showed the exact concise-arrow effect that pattern 4 warns
+  halts the reactive system.
+- `ARCHITECTURE.md`: 23 files that read "Source or configuration file for the
+  application" have real descriptions; `capabilities/default.json` no longer
+  claims an autostart grant; `ci.yml`'s description lists clippy and the
+  version check.
+
+#### ✅ Verification
+
+- `bun run test` **170 pass / 0 fail** (11 files); `cargo test` **178 pass**;
+  `cargo clippy --all-targets -- -D warnings` clean; `tsc -b`, oxlint and
+  Prettier clean; `bun run before-commit --check` in sync; a portable scratch
+  copy of the debug build launched with `--hidden`, wrote its settings and log
+  beside the executable, and shut down cleanly on a forwarded `--quit`.
+
 ## [0.26.1] - 2026-08-20
 
 ### Round 26.5 — Adopt Handy_V2 Bun 1.4 Improvements

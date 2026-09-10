@@ -117,6 +117,19 @@ const busLinesFrom = (entries: DevLogEntry[]): LogLine[] =>
     });
   });
 
+/** Severity filter choices, in the order the dropdown lists them. */
+const SEVERITY_OPTIONS: readonly { value: LogSeverity; label: string }[] = [
+  { value: 'all', label: 'All levels' },
+  { value: 'error', label: 'Error' },
+  { value: 'warn', label: 'Warn' },
+  { value: 'info', label: 'Info' },
+  { value: 'debug', label: 'Debug' },
+  { value: 'trace', label: 'Trace' },
+];
+
+/** How many trailing lines a poll asks the backend for. The default is 200. */
+const LINE_LIMIT_OPTIONS: readonly number[] = [50, 100, 200, 500];
+
 const badgeLabel = (line: LogLine): string => {
   if (line.success) return 'SUC';
   switch (line.severity) {
@@ -210,15 +223,18 @@ export const DevConsole: Component = () => {
   // Flush buffered live lines and re-sync with the file whenever unpaused.
   createEffect(
     () => paused(),
-    (p) => {
-      if (!p) {
-        if (pending.length > 0) {
-          const buffered = pending;
-          pending = [];
-          appendLiveLines(buffered);
-        }
-        void fetchLogs(true);
+    (p, previouslyPaused) => {
+      // The apply phase also runs once at mount (`previouslyPaused` is
+      // undefined then). That first run is not an "unpause": nothing is
+      // buffered yet and the polling effect above has already issued the
+      // initial fetch, so acting on it would read the log file twice on open.
+      if (previouslyPaused === undefined || p) return;
+      if (pending.length > 0) {
+        const buffered = pending;
+        pending = [];
+        appendLiveLines(buffered);
       }
+      void fetchLogs(true);
     }
   );
 
@@ -320,15 +336,6 @@ export const DevConsole: Component = () => {
     }
   };
 
-  const severityOptions: { value: LogSeverity; label: string }[] = [
-    { value: 'all', label: 'All levels' },
-    { value: 'error', label: 'Error' },
-    { value: 'warn', label: 'Warn' },
-    { value: 'info', label: 'Info' },
-    { value: 'debug', label: 'Debug' },
-    { value: 'trace', label: 'Trace' },
-  ];
-
   return (
     <div class="dev-console-box">
       <div class="dev-console-header">
@@ -370,7 +377,7 @@ export const DevConsole: Component = () => {
             class="dev-console-control"
             aria-label="Filter by log severity"
           >
-            {severityOptions.map((opt) => (
+            {SEVERITY_OPTIONS.map((opt) => (
               <option value={opt.value}>{opt.label}</option>
             ))}
           </select>
@@ -381,7 +388,7 @@ export const DevConsole: Component = () => {
             class="dev-console-control"
             aria-label="Lines to fetch from the log file"
           >
-            {[50, 100, 200, 500].map((count) => (
+            {LINE_LIMIT_OPTIONS.map((count) => (
               <option value={count}>Last {count} lines</option>
             ))}
           </select>

@@ -279,40 +279,37 @@ pub fn parse_env(app_name: &str, version: &str) -> Outcome {
 /// `AttachConsole(ATTACH_PARENT_PROCESS)` borrows the console of whatever
 /// launched us — the `cmd.exe` or PowerShell window the user typed into. It
 /// fails harmlessly when there is no parent console (double-clicked from
-/// Explorer, started by the OS at login), which is why the result is ignored.
+/// Explorer, started by the OS at login) and when this process already owns a
+/// console (every debug build), which is why the result is ignored.
 ///
-/// Reopening the CRT handles afterwards is required: Rust's `println!` writes
-/// to the `stdout` handle captured at process start, which is still invalid.
-/// `freopen`-equivalent behaviour is obtained here by re-fetching the handle
-/// through the Win32 console API and writing to it directly.
+/// After the attach, **one** write through Rust's own `stdout` is enough. Rust
+/// re-resolves the standard handle on every write rather than caching it at
+/// process start, so once a console is attached `stdout()` already points at
+/// it; and when there is no console at all the handle is null and the write is
+/// silently discarded, which is exactly what a GUI binary wants. An earlier
+/// revision additionally called `WriteConsoleA` on the raw handle "in case the
+/// CRT handle was stale" — the premise was wrong, and the result was every
+/// message printed twice in any build that had a console, which is every
+/// `cargo run`. (`WriteConsoleA` is also ANSI-only, so a rebranded app name
+/// with non-ASCII characters would have been mangled.)
 ///
 /// This is a no-op everywhere except Windows, where every other platform's
 /// GUI binary already inherits a working stdout.
 #[cfg(windows)]
 pub fn print_and_exit(message: &str, code: i32) -> ! {
     use std::io::Write as _;
-    use windows::Win32::System::Console::{
-        ATTACH_PARENT_PROCESS, AttachConsole, GetStdHandle, STD_OUTPUT_HANDLE, WriteConsoleA,
-    };
+    use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
-    // SAFETY: both calls are plain Win32 FFI with no pointer arguments we own.
-    // A failure of either simply means there is no console to print to, which
-    // is the normal case for a double-click launch.
+    // SAFETY: a plain Win32 FFI call with no pointer arguments. Failure means
+    // there is no console to attach to, or one is attached already; either way
+    // the write below does the right thing on its own.
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
-        if let Ok(handle) = GetStdHandle(STD_OUTPUT_HANDLE) {
-            let bytes = message.as_bytes();
-            let mut written = 0u32;
-            let _ = WriteConsoleA(handle, bytes, Some(&mut written), None);
-        }
     }
 
-    // Also write through the normal path. In a *debug* build the console
-    // subsystem is active and this is the write that actually appears; in a
-    // release build stdout is invalid and this is a harmless no-op. Doing both
-    // keeps `--version` working in `cargo run` and in the shipped binary.
-    let _ = std::io::stdout().write_all(message.as_bytes());
-    let _ = std::io::stdout().flush();
+    let mut stdout = std::io::stdout();
+    let _ = stdout.write_all(message.as_bytes());
+    let _ = stdout.flush();
 
     std::process::exit(code);
 }

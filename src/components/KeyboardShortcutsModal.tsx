@@ -157,9 +157,15 @@ export const KeyboardShortcutsModal: Component<KeyboardShortcutsModalProps> = (p
                 machine and shown using this platform's conventions.
               </p>
 
+              {/* Plain `.map` rather than `<For>`, deliberately: the registry is
+                  a module-level constant, so this runs exactly once at creation
+                  and a keyed list primitive would only add bookkeeping. The
+                  reactive parts — the bound spec, the override state — are read
+                  inside each HotkeyRecorder's props, which is where they update.
+                  Every category in SHORTCUT_CATEGORIES is derived from the
+                  registry, so no section can be empty. */}
               {SHORTCUT_CATEGORIES.map((cat) => {
                 const list = APP_SHORTCUTS.filter((s) => s.category === cat);
-                if (list.length === 0) return null;
 
                 return (
                   <div class="shortcuts-category-section">

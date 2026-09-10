@@ -51,8 +51,11 @@ jobs:
       - name: Validate code lint (oxlint)
         run: bun run lint
 
+      # Package-script indirection, like every other gate here: the command
+      # line lives in package.json once, so CI, `bun run validate` and the git
+      # hook cannot drift apart.
       - name: Validate TypeScript static types (tsc -b)
-        run: bun x tsc -b
+        run: bun run typecheck
 
       - name: Run unit tests (bun test)
         run: bun run test

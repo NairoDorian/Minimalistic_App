@@ -13,14 +13,14 @@ bun run dev:fast               # Same, with the fastest linker available (2.6x h
 bun run vite                   # Web-only preview in browser
 
 # Quality Gates & Verification
-bun test                       # Run the Bun frontend unit test suite
+bun run test                   # Bun frontend unit tests (never a bare `bun test`: the script selects Solid's client build)
 bun run typecheck              # Static TypeScript typecheck (tsc -b)
 bun run lint                   # Code lint (oxlint — TS7-compatible)
 bun run lint:fix               # Auto-fix lint issues
 bun run format                 # Format all files (Prettier + cargo fmt)
 bun run format:check           # Verify formatting without modifying files
 bun run before-commit --check  # Verify version mirrors are in sync
-bun run validate               # Run the full 8-gate pre-commit validation suite
+bun run validate               # Run the full 10-gate pre-commit validation suite (what CI runs)
 
 # Production, Scaffolding & Maintenance
 bun run rename-project         # 1-command project rebranding & customization CLI
@@ -158,9 +158,13 @@ const [minimizeToTray, setMinimizeToTray] = createSignal(
 );
 
 // 3. Side effects live at the imperative boundary, never inside the memo.
+//    Block body, not a concise arrow: see pattern 4 — the apply phase's
+//    return value is called as a cleanup, and applyThemeAccent returns a string.
 createEffect(
   () => currentAccent(),
-  (accent) => applyThemeAccent(accent)
+  (accent) => {
+    applyThemeAccent(accent);
+  }
 );
 
 // 4. A boundary scoped to the data-dependent rows — NOT the whole card.

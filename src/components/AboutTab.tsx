@@ -26,6 +26,14 @@ export const WEB_PREVIEW_APP_INFO: AppInfo = {
   arch: 'unknown',
 };
 
+/**
+ * The toolchain floor this build was made with, shown in the tile grid and in
+ * the copied diagnostics. One constant so the two can never disagree. Bun 1.4
+ * is a hard floor, not a suggestion: `bun.lock` is lockfile v2 and
+ * `bunfig.toml` uses the isolated linker, both of which older Bun rejects.
+ */
+const TECH_STACK_LABEL = 'Bun 1.4+ | SolidJS 2 | Rust 2024';
+
 interface AboutTabProps {
   /** Async memo accessor resolving to the app's metadata (see App.tsx). */
   appInfo: () => AppInfo;
@@ -73,7 +81,7 @@ export function AboutTab(props: AboutTabProps) {
       `- Application: ${info.name} v${info.version}`,
       `- Tauri Engine: v${info.tauri_version}`,
       `- OS / Architecture: ${info.os} (${info.arch})`,
-      `- Runtime Stack: Bun 1.3+ | SolidJS 2 | Cargo Rust 2024`,
+      `- Runtime Stack: ${TECH_STACK_LABEL}`,
       '```',
     ].join('\n');
   };
@@ -209,7 +217,7 @@ export function AboutTab(props: AboutTabProps) {
             <Terminal size={16} color="var(--accent-cyan)" />
             <span class="tile-title">Tech Stack Standards</span>
           </div>
-          <span class="tile-value">Bun 1.3+ | SolidJS 2 | Rust 2024</span>
+          <span class="tile-value">{TECH_STACK_LABEL}</span>
         </div>
 
         <div class="info-tile info-tile-wide">

@@ -230,6 +230,36 @@ async function main() {
     );
   }
 
+  // 6. .github/workflows/release.yml — the GitHub release title is composed
+  //    from the product name in two places (the draft-release job and the
+  //    tauri-action step). Left alone, every release page a rebranded app
+  //    published would still carry the template's name.
+  if (appName) {
+    const releaseWorkflow = path.join(ROOT, '.github', 'workflows', 'release.yml');
+    replaceInFile(
+      releaseWorkflow,
+      /name: "[^"]*? \$\{\{ steps\.get_version\.outputs\.tag_name \}\}"/,
+      `name: "${appName} \${{ steps.get_version.outputs.tag_name }}"`
+    );
+    replaceInFile(
+      releaseWorkflow,
+      /releaseName: '[^']*? \$\{\{ needs\.create-release\.outputs\.tag_name \}\}'/,
+      `releaseName: '${appName} \${{ needs.create-release.outputs.tag_name }}'`
+    );
+  }
+
+  // 7. .github/ISSUE_TEMPLATE/config.yml — the issue-chooser contact links
+  //    point at this repository's own DOCUMENTATION/BUILD/SECURITY files, so
+  //    they have to follow the GitHub slug or they keep sending reporters to
+  //    the template's repository.
+  if (github) {
+    replaceInFile(
+      path.join(ROOT, '.github', 'ISSUE_TEMPLATE', 'config.yml'),
+      /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/main\//g,
+      `https://github.com/${github}/blob/main/`
+    );
+  }
+
   console.log('\n🔄 Refreshing Cargo.lock...');
   spawnSync('cargo', ['generate-lockfile'], {
     cwd: path.join(ROOT, 'src-tauri'),

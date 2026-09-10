@@ -8,7 +8,7 @@ This guide covers how to set up the local development environment, install toolc
 
 ### Universal Toolchains (All Platforms)
 
-1. **[Bun Package Manager](https://bun.sh/)** (v1.2+):
+1. **[Bun Package Manager](https://bun.sh/)** (v1.4+ — the committed `bun.lock` is lockfile v2 and `bunfig.toml` uses the isolated linker, neither of which older releases understand):
 
    ```bash
    # Windows (PowerShell)
@@ -243,7 +243,8 @@ bun run typecheck
 # 3. Check version synchronization across mirrors
 bun run before-commit --check
 
-# 4. Full pre-commit suite (Version + Types + Vite Build + Cargo Check + Arch Map)
+# 4. Full pre-commit suite — all 10 gates (version, formatting, types, lint,
+#    Bun tests, Vite build, cargo check, clippy, cargo test, arch map)
 bun run validate
 ```
 

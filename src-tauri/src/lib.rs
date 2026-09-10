@@ -30,6 +30,7 @@ use specta::Type;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use tauri::{
     AppHandle, Emitter, Manager, State, WindowEvent,
@@ -136,14 +137,18 @@ impl Default for AppSettings {
             settings_version: settings_migrate::CURRENT_SETTINGS_VERSION,
             minimize_to_tray: false,
             start_minimized: false,
-            check_updates_on_launch: true,
-            theme_accent: "cyan".to_string(),
+            // The per-field serde defaults are reused rather than restated, so
+            // "what a missing field becomes" and "what a fresh install gets"
+            // are one definition and cannot drift apart. `settings_version`
+            // above is the deliberate exception.
+            check_updates_on_launch: default_true(),
+            theme_accent: default_theme_accent(),
             remember_window_size: false,
             remember_window_position: false,
             saved_window_width: 0,
             saved_window_height: 0,
-            saved_window_x: i32::MIN,
-            saved_window_y: i32::MIN,
+            saved_window_x: default_unset_position(),
+            saved_window_y: default_unset_position(),
             autostart_enabled: false,
             global_hotkeys_enabled: false,
             global_hotkeys: Vec::new(),
@@ -185,6 +190,16 @@ pub struct AppState {
     /// Flag set to true when explicit application quit is triggered (e.g. via Tray menu).
     /// Used by `WindowEvent::CloseRequested` listener to bypass window close prevention.
     pub is_quitting: Mutex<bool>,
+    /// True when the in-memory window geometry has changed since it was last
+    /// written to disk.
+    ///
+    /// Move and resize events update `settings` in memory only (see
+    /// [`save_window_geometry`]); the file is written once when the window is
+    /// hidden or closed ([`flush_window_geometry`]). Without this flag every
+    /// tray click that hides the window would rewrite `settings.json` even
+    /// when nothing moved, which is a needless disk write and a needless
+    /// wear on the SSD of a machine that toggles the window all day.
+    pub geometry_dirty: AtomicBool,
     /// Supervises the OS-wide global hotkey listener (see `global_hotkeys`).
     pub global_hotkeys: GlobalHotkeys,
 }
@@ -428,7 +443,42 @@ fn get_app_settings(state: State<'_, AppState>) -> AppSettings {
 /// Tauri IPC command: Atomically updates and persists the full `AppSettings` struct.
 #[tauri::command]
 #[specta::specta]
-fn update_app_settings(settings: AppSettings, state: State<'_, AppState>) -> Result<(), String> {
+fn update_app_settings(
+    app: AppHandle,
+    mut settings: AppSettings,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Seed the geometry the moment a `remember_*` preference is switched on.
+    //
+    // The saved values are only ever updated by later move/resize events, so
+    // without this a user who enables "remember window position" and then
+    // closes the app without dragging the window first would relaunch at the
+    // configured default — the preference would look like it did nothing.
+    // Only *unset* values are filled in: a value the user already accumulated
+    // by moving the window is never overwritten here, and the Windows
+    // minimized sentinel is rejected exactly as it is in `save_window_geometry`.
+    if let Some(window) = app.get_webview_window("main") {
+        if settings.remember_window_position
+            && (settings.saved_window_x == default_unset_position()
+                || settings.saved_window_y == default_unset_position())
+            && let Ok(pos) = window.outer_position()
+            && !is_windows_minimized_position(pos.x, pos.y)
+        {
+            settings.saved_window_x = pos.x;
+            settings.saved_window_y = pos.y;
+        }
+
+        if settings.remember_window_size
+            && (settings.saved_window_width == 0 || settings.saved_window_height == 0)
+            && let Ok(size) = window.inner_size()
+            && size.width > 0
+            && size.height > 0
+        {
+            settings.saved_window_width = size.width;
+            settings.saved_window_height = size.height;
+        }
+    }
+
     // Held across the write so concurrent savers can't interleave and leave the
     // file describing one struct while memory holds another.
     let mut current = lock_guard(&state.settings);
@@ -749,8 +799,21 @@ pub struct PortableStatus {
 }
 
 /// Shows, unminimizes, and focuses the main window if it exists.
+///
+/// The persisted geometry is re-applied first (when the matching `remember_*`
+/// preference is on), so the window surfaces exactly where it was last hidden
+/// or closed. Doing it here rather than only at startup is what makes the
+/// first show after a `--hidden` / `start_minimized` launch land in the right
+/// place too — the window has never been visible at that point, so nothing
+/// else has had a chance to position it.
 pub(crate) fn show_and_focus_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // `try_state`: the tray and the single-instance callback can reach this
+        // before `setup()` has managed the state, and a show must never panic.
+        if let Some(state) = app.try_state::<AppState>() {
+            let settings = lock_guard(&state.settings).clone();
+            restore_window_geometry(&window, &settings);
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -772,6 +835,7 @@ pub(crate) fn show_window_if_hidden(app: &AppHandle) {
 pub(crate) fn toggle_window_visibility(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
+            flush_window_geometry(&window.as_ref().window());
             let _ = window.hide();
         } else {
             show_and_focus_window(app);
@@ -799,10 +863,14 @@ pub(crate) fn toggle_window_visibility(app: &AppHandle) {
 /// Reached from the tray menu, from a `--quit` forwarded by a second launch,
 /// and from the `Quit` global hotkey action.
 pub(crate) fn request_quit(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    *lock_guard(&state.is_quitting) = true;
-
-    state.global_hotkeys.shutdown();
+    // `try_state` rather than `state`: a `--quit` forwarded by a second launch
+    // can arrive while the first is still inside `setup()`, before the state
+    // is managed. `state()` would panic there; with nothing managed there is
+    // also nothing to flag or shut down, and closing the window is enough.
+    if let Some(state) = app.try_state::<AppState>() {
+        *lock_guard(&state.is_quitting) = true;
+        state.global_hotkeys.shutdown();
+    }
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.close();
@@ -869,9 +937,47 @@ fn saved_window_position_is_usable(
     })
 }
 
+/// Applies the persisted window geometry to `window`, for each half whose
+/// `remember_*` preference is on and whose saved value is usable.
+///
+/// Called right before a window is shown — from `setup()` for the first show
+/// and from [`show_and_focus_window`] for every later one — so the restore is
+/// never visible as a jump. The main window is declared `"visible": false` in
+/// `tauri.conf.json` for exactly this reason.
+///
+/// Position is applied before size, deliberately. A DPI-aware window that
+/// moves onto a monitor with a different scale factor is rescaled by the OS
+/// as part of the move, so a physical size applied *before* the move would be
+/// scaled a second time on arrival; applied after it, the saved size is the
+/// final size.
+fn restore_window_geometry(window: &tauri::WebviewWindow, settings: &AppSettings) {
+    if settings.remember_window_position
+        && saved_window_position_is_usable(
+            settings.saved_window_x,
+            settings.saved_window_y,
+            window.available_monitors(),
+        )
+    {
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            x: settings.saved_window_x,
+            y: settings.saved_window_y,
+        }));
+    }
+    if settings.remember_window_size
+        && settings.saved_window_width > 0
+        && settings.saved_window_height > 0
+    {
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+            width: settings.saved_window_width,
+            height: settings.saved_window_height,
+        }));
+    }
+}
+
 /// Updates the in-memory `AppSettings` window geometry (when the corresponding
-/// `remember_*` flag is on). Disk is flushed once on close via
-/// `flush_window_geometry` instead of on every drag/resize tick, so we never
+/// `remember_*` flag is on) and raises [`AppState::geometry_dirty`] if a value
+/// actually changed. Disk is flushed once on close/hide via
+/// [`flush_window_geometry`] instead of on every drag/resize tick, so we never
 /// rewrite settings.json dozens of times while the user is dragging the window.
 fn save_window_geometry(window: &tauri::Window, save_size: bool, save_position: bool) {
     // Tauri creates configured windows before `setup()` runs, so a Moved/Resized
@@ -880,18 +986,27 @@ fn save_window_geometry(window: &tauri::Window, save_size: bool, save_position: 
     let Some(state) = window.try_state::<AppState>() else {
         return;
     };
-    let mut settings = lock_guard(&state.settings);
 
-    // A minimized window reports a zero-sized client area on some platforms —
-    // never persist that as the restore size.
+    // A minimized window reports a zero-sized client area and an off-screen
+    // position on some platforms. Neither is a place to restore to, so the
+    // whole event is ignored rather than persisting either half of it.
+    if window.is_minimized().unwrap_or(false) {
+        return;
+    }
+
+    let mut settings = lock_guard(&state.settings);
+    let mut changed = false;
+
     if save_size
         && settings.remember_window_size
         && let Ok(size) = window.inner_size()
         && size.width > 0
         && size.height > 0
+        && (settings.saved_window_width, settings.saved_window_height) != (size.width, size.height)
     {
         settings.saved_window_width = size.width;
         settings.saved_window_height = size.height;
+        changed = true;
     }
 
     // Only the cheap sentinel check runs here: this fires on every tick of a
@@ -902,23 +1017,44 @@ fn save_window_geometry(window: &tauri::Window, save_size: bool, save_position: 
         && settings.remember_window_position
         && let Ok(pos) = window.outer_position()
         && !is_windows_minimized_position(pos.x, pos.y)
+        && (settings.saved_window_x, settings.saved_window_y) != (pos.x, pos.y)
     {
         settings.saved_window_x = pos.x;
         settings.saved_window_y = pos.y;
+        changed = true;
+    }
+
+    // Raised while the settings lock is still held, so the flag can never say
+    // "clean" for a change that is already in memory.
+    if changed {
+        state.geometry_dirty.store(true, Ordering::SeqCst);
     }
 }
 
-/// Flushes the current in-memory window geometry to disk in a single write.
-/// Called from the `CloseRequested` handler so preferences persisted by the
-/// frontend (via `update_app_settings`) plus any in-memory geometry updates are
-/// all on disk before the window/session tears down.
+/// Writes the in-memory window geometry to disk, once, if it changed.
+///
+/// Called from the `CloseRequested` handler and from every path that hides the
+/// window, so a position accumulated over a session of drags survives a
+/// restart. The final geometry is captured first rather than trusted to the
+/// last `Moved`/`Resized` event, which can be coalesced away.
+///
+/// The dirty flag is what keeps this cheap: a tray click that hides an
+/// untouched window costs no disk write at all. Every other preference writer
+/// persists the whole struct through `save_settings_to_disk` on its own, so
+/// nothing else is ever waiting on this flush.
 fn flush_window_geometry(window: &tauri::Window) {
+    save_window_geometry(window, true, true);
     let Some(state) = window.try_state::<AppState>() else {
         return;
     };
+    if !state.geometry_dirty.swap(false, Ordering::SeqCst) {
+        return;
+    }
     let settings = lock_guard(&state.settings).clone();
     if let Err(err) = save_settings_to_disk(&state.settings_path, &settings) {
-        log::warn!("[settings] Failed to flush window geometry on close: {err}");
+        // Leave the flag raised so the next hide or close retries the write.
+        state.geometry_dirty.store(true, Ordering::SeqCst);
+        log::warn!("[settings] Failed to flush window geometry: {err}");
     }
 }
 
@@ -1187,6 +1323,7 @@ pub fn run(cli: cli::CliArgs) {
                 settings: Mutex::new(initial_settings),
                 settings_path: settings_path.clone(),
                 is_quitting: Mutex::new(false),
+                geometry_dirty: AtomicBool::new(false),
                 global_hotkeys: GlobalHotkeys::new(),
             });
             log::info!(
@@ -1250,13 +1387,12 @@ pub fn run(cli: cli::CliArgs) {
             app.manage(tray);
 
             // The main window is declared `"visible": false` in tauri.conf.json
-            // and shown here instead. That keeps geometry restoration invisible
-            // (no jump from the configured default to the saved size/position)
-            // and means `start_minimized` never flashes a window before hiding it.
-            //
-            // Restore persisted window geometry (borrowed from the AIVORelay
-            // reference app) before the window is first shown, so the app
-            // reopens at its last size and on the correct monitor.
+            // and shown from `show_and_focus_window` instead, which re-applies
+            // the persisted geometry (borrowed from the AIVORelay reference
+            // app) immediately before every show. That keeps geometry
+            // restoration invisible — no jump from the configured default to
+            // the saved size/position — and means `start_minimized` never
+            // flashes a window before hiding it.
             if let Some(main_window) = app.get_webview_window("main") {
                 // Take away the browser's own keyboard shortcuts before the
                 // window is ever shown, so there is no window in which F5 can
@@ -1264,31 +1400,6 @@ pub fn run(cli: cli::CliArgs) {
                 // and on platforms without an engine-level switch — the
                 // frontend guard in `src/lib/hardening.ts` covers those.
                 webview_hardening::disable_browser_accelerator_keys(&main_window);
-
-                let settings = lock_guard(&app.state::<AppState>().settings).clone();
-                if settings.remember_window_size
-                    && settings.saved_window_width > 0
-                    && settings.saved_window_height > 0
-                {
-                    let _ = main_window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                        width: settings.saved_window_width,
-                        height: settings.saved_window_height,
-                    }));
-                }
-                if settings.remember_window_position
-                    && saved_window_position_is_usable(
-                        settings.saved_window_x,
-                        settings.saved_window_y,
-                        main_window.available_monitors(),
-                    )
-                {
-                    let _ = main_window.set_position(tauri::Position::Physical(
-                        tauri::PhysicalPosition {
-                            x: settings.saved_window_x,
-                            y: settings.saved_window_y,
-                        },
-                    ));
-                }
             }
 
             // Start the OS-wide global hotkey listener from the persisted

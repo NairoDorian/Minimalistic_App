@@ -29,11 +29,23 @@ const fileDescriptions: Record<string, string> = {
   '.vscode/settings.json':
     'VS Code workspace editor settings for format-on-save, Prettier default formatter, rust-analyzer, and oxlint on-type linting.',
   '.github/workflows/ci.yml':
-    'Cross-platform GitHub Actions CI validating Prettier formatting, oxlint lint, TypeScript types (tsc), Vite production bundle, Bun unit tests (bun test), Rust compilation check (cargo check), and Rust unit tests (cargo test) across Linux, macOS, and Windows.',
+    'Cross-platform GitHub Actions CI validating Prettier formatting, oxlint lint, TypeScript types (tsc), Bun unit tests, version-mirror drift, the Vite production bundle, cargo check, cargo clippy (-D warnings), and cargo test across Linux, macOS, and Windows.',
   '.github/workflows/release.yml':
-    'Multi-platform Tauri 2 GitHub Actions release workflow publishing draft releases and signed updater bundles.',
+    'Multi-platform Tauri 2 GitHub Actions release workflow: a draft release with notes extracted from CHANGELOG.md, then signed Windows/macOS/Linux bundles and updater artifacts uploaded to it.',
+  '.github/ISSUE_TEMPLATE/bug_report.md':
+    'Bug report template that points reporters at the in-app Copy Diagnostics button and Dev Console so the environment and log sections fill themselves in.',
+  '.github/ISSUE_TEMPLATE/feature_request.md':
+    'Feature request template that asks for the problem rather than the solution, and for the case that an addition belongs in a deliberately minimal template.',
+  '.github/ISSUE_TEMPLATE/config.yml':
+    'Issue chooser routing stack questions to DOCUMENTATION.md, build problems to BUILD.md, and vulnerabilities to the private process in SECURITY.md.',
+  '.github/PULL_REQUEST_TEMPLATE.md':
+    'Pull request template requiring a human-written "why", a citation of the local doc mirror for framework-shaped changes, and an explicit statement of manual testing.',
+  '.cargo/config.toml':
+    'Cargo workspace config: the measured fast-linker/debuginfo findings behind `bun run dev:fast` (kept commented out so a bare toolchain still builds) and the future-incompat report setting.',
+  'bunfig.toml':
+    'Bun 1.4 configuration: `.env` auto-loading disabled, the isolated linker (global virtual store), peer auto-install, and the `noOrphans` run guard that kills descendant processes when `tauri dev` dies.',
   'package.json':
-    'Project manifest containing Bun scripts (dev, build, typecheck, format, arch, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2), and TypeScript tooling.',
+    'Project manifest containing the Bun scripts (tauri, dev:fast, typecheck, lint, test, format, validate, arch, docs:*, create-icons, update-deps, update:rtk, clean), dependencies (SolidJS 2, Tauri v2 plugins), and TypeScript tooling.',
   'repomix.config.json':
     'Repomix configuration for metadata-only architecture output (gitignore-aware, no file contents).',
   'tsconfig.json':
@@ -48,7 +60,7 @@ const fileDescriptions: Record<string, string> = {
   'BUILD.md':
     'Comprehensive cross-platform build instructions, prerequisites for Windows/macOS/Linux, and troubleshooting guides.',
   'TESTING.md':
-    'Testing & QA guide detailing the 8-gate automated validation suite, unit-test layout, and the manual desktop verification matrix.',
+    'Testing & QA guide detailing the 10-gate automated validation suite, unit-test layout, and the manual desktop verification matrix.',
   'CONTRIBUTING.md':
     'Contributor guidelines, Git branching strategy, Conventional Commits standard, and coding rules for Rust and SolidJS 2.',
   'SECURITY.md':
@@ -86,6 +98,40 @@ const fileDescriptions: Record<string, string> = {
     'Product identity constants (APP_NAME, APP_SLUG) and localStorage key namespacing — the single place the frontend hardcodes the app name, rewritten by rename-project.',
   'src/lib/download.ts':
     'Blob download helper shared by settings backup export and the diagnostic report, with deferred object-URL revocation so webviews do not cancel the download.',
+  'src/lib/hardening.ts':
+    'Release-only frontend hardening: swallows the browser accelerators (reload, print, find, zoom), drop-to-navigate and the browser context menu, with an injectable target so the rules are unit-testable.',
+  'src/lib/storage.ts':
+    'Fail-soft localStorage helpers (readStored / writeStored / removeStored) that degrade a disabled, blocked or full store to "not persisted" instead of throwing into the render tree.',
+  'src/lib/notification.ts':
+    'OS notification service: one implementation of the permission check/request/send sequence over the Tauri plugin or the browser Notification API, with an explicit no-fallback variant for background paths and a toast-fallback variant for the Developer Hub.',
+  'scripts/dev-fast.ts':
+    'Fast Rust dev loop: detects the best available linker per platform (lld-link / mold / ld64.lld) and runs `tauri dev` with it plus limited debuginfo, as environment variables for that one process only.',
+  'src-tauri/src/autostart.rs':
+    '"Start at OS launch" owned by the backend: the preference is the source of truth, the OS launch entry is derived state reconciled at startup, and a development build never writes it.',
+  'src-tauri/src/cli.rs':
+    'Hand-written command-line parser (--autostart, --hidden, --show, --toggle, --quit, --log-level, --help, --version) with never-fatal unknown arguments and the parent-console attach that makes --help print from a Windows GUI binary.',
+  'src-tauri/src/panic_log.rs':
+    'Panic hook that logs message, source location and thread name through the log facade before the default handler runs, so a crash reaches the rotating log file and the Dev Console.',
+  'src-tauri/src/portable.rs':
+    'Portable mode: a `portable` marker file beside the executable redirects settings and logs to <exe dir>/Data/, resolved once at process start with a loud fallback when the location is not writable.',
+  'src-tauri/src/settings_migrate.rs':
+    'Versioned settings-schema migration ladder run on the raw JSON before repair; ships the v0→v1 step that enforces one global hotkey binding per action and one action per chord.',
+  'src-tauri/src/settings_repair.rs':
+    'Field-level self-healing for settings.json: merges the stored document over the defaults and resets exactly the JSON paths serde rejects (via serde_path_to_error) instead of discarding the file.',
+  'src-tauri/src/webview_hardening.rs':
+    'Release-only, Windows-only engine hardening that disables WebView2 browser accelerator keys (F5, Ctrl+R, Ctrl+P, zoom) before the window is first shown.',
+  'src-tauri/src/webview_runtime.rs':
+    'Points the WebView2 user-data folder into the portable Data/ directory via WEBVIEW2_USER_DATA_FOLDER, so portable mode also covers what the webview engine writes (Windows only, by documented limitation).',
+  'test/bindings.test.ts':
+    'IPC contract drift test: compares the collect_commands! registry in lib.rs against the generated wrappers in src/bindings.ts as source text.',
+  'test/hardening.test.ts':
+    'Bun unit tests for the release-only webview hardening: which browser shortcuts are swallowed, which are never touched, and that drop, context-menu and teardown behave.',
+  'test/notification.test.ts':
+    'Bun unit tests for the notification service: permission mapping, the one-time prompt, the toast fallback, and the no-fallback OS variant used while the window is hidden.',
+  'test/reactivity.test.ts':
+    'Contract tests pinning the SolidJS 2 shapes the components depend on: writable derived signals, not-ready async memos, and the effect-cleanup rule, run against the client build.',
+  'test/storage.test.ts':
+    'Bun unit tests for the fail-soft localStorage helpers against a working store, a store that throws on every call, and a missing global.',
   'src/components/HotkeyRecorder.tsx':
     '"Press a shortcut" capture control that claims the keyboard while armed, previews the held chord live, and commits a canonical spec string.',
   'test/keyboard.test.ts':
@@ -141,7 +187,7 @@ const fileDescriptions: Record<string, string> = {
   'src/components/AboutTab.tsx':
     'Presentational System & About tab panel with diagnostic grid, clipboard copy, and config folder opener.',
   'src/components/DeveloperTab.tsx':
-    'Developer Hub tab providing live IPC command execution, toast benchmarks, memory telemetry, and factory reset actions.',
+    'Developer Hub tab: IPC command playground, settings backup/restore, the OS-notification and toast bench, viewport telemetry, and the two-step factory reset.',
   'src/components/Toast.tsx':
     'Toast notification container and animated item components with auto-dismiss timers and ARIA live regions.',
   'src/components/ErrorBoundary.tsx':
@@ -180,9 +226,9 @@ const fileDescriptions: Record<string, string> = {
     'Tauri v2 configuration defining window dimensions, updater endpoints, and tray bundle.',
   'src-tauri/build.rs': 'Rust build script initializing Tauri build environment.',
   'src-tauri/capabilities/default.json':
-    'Tauri v2 capability definitions granting core, autostart, updater, process, and notification permissions to the main window.',
+    'Tauri v2 capability definitions granting only core, updater, process, and notification permissions to the main window — autostart is deliberately absent because the Rust side owns that write.',
   'src-tauri/src/lib.rs':
-    "Core Rust backend implementing System Tray menu ('Open', 'Check for Updates', 'Quit'), autostart, IPC settings persistence, and window hide event intercept.",
+    "Core Rust backend: the AppSettings struct and its load/repair/migrate/save pipeline, the tauri-specta IPC registry, the system tray menu ('Open', 'Check for Updates', 'Quit'), single-instance argv forwarding, window geometry persistence, and the close-to-tray intercept.",
   'src-tauri/src/main.rs':
     'Main Rust entry point launching the lib run loop without extra Windows console.',
   'src-tauri/icons/32x32.png': 'Application tray/window icon at 32x32 pixels.',
@@ -204,7 +250,7 @@ const fileDescriptions: Record<string, string> = {
   'scripts/version.ts':
     'Global single source of truth for the application version (APP_VERSION constant) consumed by vite.config.ts and before-commit.ts.',
   'scripts/before-commit.ts':
-    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json (+ Cargo.lock root entry via cargo generate-lockfile) with --check, --bump, --full (7-step suite incl. lint + unit tests), and --install-hook modes.',
+    'Version synchronization & validation script propagating APP_VERSION to package.json, Cargo.toml, and tauri.conf.json (+ Cargo.lock root entry via cargo generate-lockfile) with --check, --bump, --set, --full (the 10-gate suite), --stage, and --install-hook modes.',
   'src-tauri/Cargo.lock':
     'Rust dependency lockfile, committed to track exact crate versions for reproducible builds.',
 };
@@ -384,7 +430,7 @@ ${fileRows.join('\n')}
 
 - **Frontend Layer**: Built with **SolidJS 2** and **TypeScript**, styled using a 100% AMOLED deep black theme with glassmorphic cards.
 - **Desktop Container**: Powered by **Tauri v2**, executing cross-platform GUI & native system tray integration.
-- **Backend & Native Integrations**: Written in **Rust (Cargo)**, handling taskbar tray context menus ("Open", "Check for Updates", "Quit"), window close intercept (\`CloseRequested\`), OS autostart via \`@tauri-apps/plugin-autostart\`, and auto-updater via \`@tauri-apps/plugin-updater\`.
+- **Backend & Native Integrations**: Written in **Rust (Cargo)**, handling taskbar tray context menus ("Open", "Check for Updates", "Quit"), window close intercept (\`CloseRequested\`), the OS autostart entry (owned by \`autostart.rs\` on top of \`tauri-plugin-autostart\`, never written from a dev build), system-wide global hotkeys (\`hotkeys/\`), and the auto-updater via \`tauri-plugin-updater\` / \`@tauri-apps/plugin-updater\`.
 - **Architecture Map**: Generated by the **Repomix** \`pack()\` API (gitignore-aware file collection, per-file token/char metrics, directory tree) with descriptions merged by \`scripts/generate-arch.ts\`.
 - **Package Manager & CLI**: Run and tested using **Bun.js** via the single primary command:
   \`\`\`bash

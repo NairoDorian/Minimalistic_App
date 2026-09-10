@@ -19,6 +19,14 @@ type ToastListener = (toasts: ToastItem[]) => void;
 let toasts: ToastItem[] = [];
 const listeners = new Set<ToastListener>();
 
+/**
+ * Monotonic id source. `removeToast` and the keyed `<For>` in `Toast.tsx` both
+ * identify a toast by id, so two toasts sharing one would be dismissed and
+ * re-rendered together; a counter cannot collide, where the random string it
+ * replaces only made that unlikely.
+ */
+let nextToastId = 0;
+
 function notify() {
   const snapshot = [...toasts];
   listeners.forEach((listener) => listener(snapshot));
@@ -32,7 +40,8 @@ export function showToast(
   type: ToastType = 'info',
   durationMs: number = 3500
 ): string {
-  const id = Math.random().toString(36).substring(2, 9);
+  nextToastId += 1;
+  const id = `toast-${nextToastId}`;
   const toast: ToastItem = { id, message, type, durationMs };
   toasts = [...toasts, toast];
   notify();

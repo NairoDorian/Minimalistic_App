@@ -18,19 +18,21 @@ sequenceDiagram
     participant GH as GitHub Releases API
 
     User->>Tray: Click "Check for Updates..."
-    Tray->>UI: Emit event ("check-for-updates")
-    UI->>GH: HTTP GET latest/download/latest.json
-    GH-->>UI: Return release metadata & signatures
+    Tray->>UI: emit("check-for-updates") — received by the footer UpdateChecker
+    UI->>Tauri: check()  (updater plugin, over IPC)
+    Tauri->>GH: HTTP GET releases/latest/download/latest.json
+    GH-->>Tauri: manifest: version, notes, per-platform url + signature
+    Tauri-->>UI: Update { available, version, body }
     alt New Version Available
-        UI->>User: Display "Install vX.Y.Z"
+        UI->>User: Display "Install vX.Y.Z" (+ an OS notification if the window is hidden)
         User->>UI: Click "Install"
-        UI->>GH: Stream binary download (Progress events)
-        UI->>Tauri: Download & Verify Minisign signature
-        Tauri->>Tauri: Execute silent installer / binary replace
-        Tauri->>UI: Trigger relaunch()
-        UI->>User: Restart app into new version
+        UI->>Tauri: downloadAndInstall(onProgress)
+        Tauri->>GH: Stream the installer (Started / Progress / Finished events)
+        Tauri->>Tauri: Verify the Minisign signature, then run the installer
+        UI->>Tauri: relaunch()  (process plugin)
+        Tauri->>User: App restarts into the new version
     else Up to Date
-        UI->>User: Display "App is up to date" banner
+        UI->>User: Display "App is up to date"
     end
 ```
 
@@ -90,7 +92,8 @@ Inspired by Handy's `UpdateChecker` design:
 - **`check()`**: Queries the configured `latest.json` endpoint to compare version strings.
 - **`downloadAndInstall(onProgress)`**: Streams binary download chunks, emitting `Started`, `Progress`, and `Finished` events to calculate dynamic download percentages.
 - **`relaunch()`**: Automatically terminates the running app process and launches the newly updated application binary.
-- **Dual-variant rule**: only the card instance (Preferences tab) auto-checks on mount and listens for tray events; the footer variant passes `autoCheckOnMount={false} listenForEvents={false}` to prevent duplicate network requests.
+- **Dual-variant rule**: the card instance (Preferences tab) auto-checks on mount, gated on the saved "check for updates on launch" preference, and unmounts with its tab; the footer instance is mounted for the whole session and is the one that listens for the tray's `check-for-updates` event. Each instance does exactly one of the two jobs, so no check is ever issued twice — see CRUSH.md pattern 3 for why the two jobs need two lifetimes.
+- **Hidden-window notification**: a version found while the window is in the tray is announced through a native OS notification (`src/lib/notification.ts`); the webview holds the `notification:default` capability for that.
 
 ---
 
@@ -141,70 +144,34 @@ The `url` fields point at the exact installers uploaded to the GitHub Release; `
 
 ## 🤖 Continuous Integration & GitHub Actions Workflow
 
-Below is the production-ready `.github/workflows/release.yml` workflow that automates building signed installers and publishing updates to GitHub Releases. It is **committed to the repo** and runs on every `v*` tag push (`workflow_dispatch` also available) — no separate commit required. When you fork this template, customize the `TAURI_SIGNING_PRIVATE_KEY` secrets and repo links as described in the steps below.
+The release pipeline is committed as [`.github/workflows/release.yml`](.github/workflows/release.yml)
+and runs on every `v*` tag push, or manually through `workflow_dispatch` with an
+optional `tag` input. It is two jobs:
 
-```yaml
-name: 'Release Build & Auto-Update Dispatch'
+1. **`create-release`** (Ubuntu) reads the version from `package.json`, extracts
+   that version's section from `CHANGELOG.md` as the release notes, and creates a
+   **draft** GitHub release for the tag.
+2. **`build-and-upload`** (matrix: Windows x86_64, macOS Apple Silicon, macOS
+   Intel, Linux `.deb` + `.AppImage`) runs `bun install --frozen-lockfile` and then
+   [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action), which
+   builds the bundles (`beforeBuildCommand` in `tauri.conf.json` runs the Vite
+   build), signs the updater artifacts with `TAURI_SIGNING_PRIVATE_KEY` /
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and uploads them together with
+   `latest.json` to the draft release.
 
-on:
-  push:
-    tags:
-      - 'v*'
+Publishing the draft is the one manual step: review the notes and the artifacts,
+then press **Publish release**. Only then does
+`releases/latest/download/latest.json` — the updater endpoint — resolve to the new
+version, which is what makes a draft a safe place for a broken build to land.
 
-jobs:
-  publish-tauri:
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'windows-latest'
-            args: ''
-          - platform: 'macos-latest'
-            args: ''
-          - platform: 'ubuntu-24.04'
-            args: ''
-
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies (Linux only)
-        if: matrix.platform == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
-
-      - name: Install Node/Bun dependencies
-        run: bun install
-
-      - name: Build and Publish Tauri Application
-        uses: tauri-apps/tauri-action@v0.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'Minimalistic App v__VERSION__'
-          releaseBody: 'See release commit logs for details.'
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
-```
+When you fork this template, the two things to change are the signing secrets
+(steps below) and the release title, which `bun run rename-project` rewrites for
+you.
 
 > [!TIP]
-> `tagName: v__VERSION__` is auto-resolved from `tauri.conf.json` — keep version mirrors in sync (`bun run before-commit --check`) so the tag matches the app version.
+> The tag comes from the push (or the `workflow_dispatch` input) and the version
+> from `package.json`; keep the version mirrors in sync
+> (`bun run before-commit --check`) so the tag matches the app version.
 
 ---
 
@@ -233,13 +200,13 @@ jobs:
 
 ## 🧰 Troubleshooting
 
-| Symptom                                                        | Cause & Fix                                                                                                                                                                                            |
-| :------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **"Update endpoint not found (GitHub release pending)"**       | No release exists yet, or `endpoints` still points at `your-username/minimalistic-app`. Publish a `v*` tag via the release workflow, then retry.                                                       |
-| **"Unable to connect to update server"**                       | Network offline, GitHub unreachable, or the repo is private (releases must be public for anonymous downloads).                                                                                         |
-| **Signature verification fails**                               | `plugins.updater.pubkey` does not match the private key used to sign the artifacts. Regenerate keys and re-publish — keys are one-way matched.                                                         |
-| **`latest.json` 404s after a successful release**              | The workflow produced it but `createUpdaterArtifacts: true` is missing, or the artifact names don't match the URL patterns in the feed. Check the workflow run logs for the `latest.json` upload step. |
-| **Release job fails with missing `TAURI_SIGNING_PRIVATE_KEY`** | The repository secrets were not set (Step 3). Without them `tauri-action` cannot sign artifacts.                                                                                                       |
-| **Update downloads but relaunch does nothing**                 | The `process:default` capability is missing — check `src-tauri/capabilities/default.json`.                                                                                                             |
-| **App updates during dev but not in release build**            | `bun run tauri dev` uses the dev URL; update checks are fully functional in dev, but ensure the installed release build (not the dev binary) is the one checking.                                      |
-| **CSP blocks the update check**                                | The CSP in `tauri.conf.json` must include `https://github.com` and `https://api.github.com` in `connect-src` (the template already does).                                                              |
+| Symptom                                                        | Cause & Fix                                                                                                                                                                                                                                                                                                         |
+| :------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **"Update endpoint not found (GitHub release pending)"**       | No release exists yet, or `endpoints` still points at `your-username/minimalistic-app`. Publish a `v*` tag via the release workflow, then retry.                                                                                                                                                                    |
+| **"Unable to connect to update server"**                       | Network offline, GitHub unreachable, or the repo is private (releases must be public for anonymous downloads).                                                                                                                                                                                                      |
+| **Signature verification fails**                               | `plugins.updater.pubkey` does not match the private key used to sign the artifacts. Regenerate keys and re-publish — keys are one-way matched.                                                                                                                                                                      |
+| **`latest.json` 404s after a successful release**              | The workflow produced it but `createUpdaterArtifacts: true` is missing, or the artifact names don't match the URL patterns in the feed. Check the workflow run logs for the `latest.json` upload step.                                                                                                              |
+| **Release job fails with missing `TAURI_SIGNING_PRIVATE_KEY`** | The repository secrets were not set (Step 3). Without them `tauri-action` cannot sign artifacts.                                                                                                                                                                                                                    |
+| **Update downloads but relaunch does nothing**                 | The `process:default` capability is missing — check `src-tauri/capabilities/default.json`.                                                                                                                                                                                                                          |
+| **App updates during dev but not in release build**            | `bun run tauri dev` uses the dev URL; update checks are fully functional in dev, but ensure the installed release build (not the dev binary) is the one checking.                                                                                                                                                   |
+| **"Does the CSP need a GitHub origin?"**                       | No. The updater's HTTPS traffic runs in the **Rust process**, where the webview CSP does not apply, so `connect-src` lists no GitHub origin and never needs one. A failing check is an endpoint-URL or network problem, not a CSP one. (An earlier revision granted both origins for nothing; 0.22.0 removed them.) |

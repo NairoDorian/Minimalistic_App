@@ -6,7 +6,6 @@ import {
   Terminal,
   FolderOpen,
   RotateCcw,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   Info,
@@ -14,11 +13,19 @@ import {
   Play,
   Download,
   Upload,
+  Bell,
 } from '../lib/icons';
 import { toast } from '../lib/toast';
 import { isTauri } from '../lib/tauri';
 import { devLog } from '../lib/console';
-import { applyThemeAccent, THEME_ACCENT_STORAGE_KEY } from '../lib/theme';
+import { APP_NAME } from '../lib/appMeta';
+import {
+  sendAppNotification,
+  checkNotificationPermission,
+  requestNotificationPermission,
+  type NotificationPermissionState,
+} from '../lib/notification';
+import { applyThemeAccent, resolveThemeAccent, THEME_ACCENT_STORAGE_KEY } from '../lib/theme';
 import { readStored, writeStored } from '../lib/storage';
 import {
   sanitizeSettings,
@@ -33,23 +40,41 @@ interface DeveloperTabProps {
   onSettingsReset?: () => void;
 }
 
-const availableCommands = [
-  { id: 'get_app_info', label: 'get_app_info', desc: 'Fetch product metadata & versions' },
-  { id: 'get_app_settings', label: 'get_app_settings', desc: 'Fetch persisted AppSettings JSON' },
+/** One read-only IPC command the playground can invoke. */
+interface PlaygroundCommand {
+  /** The Rust command name, exactly as registered in `collect_commands!`. */
+  readonly id: string;
+  readonly desc: string;
+  /** The generated Tauri Specta wrapper — type-safe, never a string `invoke`. */
+  readonly run: () => Promise<unknown>;
+}
+
+/**
+ * The commands the playground offers, in menu order.
+ *
+ * One list drives both the `<select>` and the dispatch, so a command cannot be
+ * listed without being runnable, or runnable without being listed — the two
+ * parallel tables this replaces could drift. Only read-only commands belong
+ * here: the point is to inspect what the backend returns, and the destructive
+ * actions have their own guarded buttons further down the tab.
+ */
+const PLAYGROUND_COMMANDS: readonly PlaygroundCommand[] = [
+  {
+    id: 'get_app_info',
+    desc: 'Fetch product metadata & versions',
+    run: () => commands.getAppInfo(),
+  },
+  {
+    id: 'get_app_settings',
+    desc: 'Fetch persisted AppSettings JSON',
+    run: () => commands.getAppSettings(),
+  },
   {
     id: 'get_system_stats',
-    label: 'get_system_stats',
     desc: 'Fetch process and system telemetry',
+    run: () => commands.getSystemStats(),
   },
 ];
-
-/** Type-safe dispatch from the IPC playground's string-based command selector
- * to the generated Tauri Specta command wrappers. */
-const IPC_COMMAND_DISPATCH: Record<string, () => Promise<unknown>> = {
-  get_app_info: () => commands.getAppInfo(),
-  get_app_settings: () => commands.getAppSettings(),
-  get_system_stats: () => commands.getSystemStats(),
-};
 
 export function DeveloperTab(props: DeveloperTabProps) {
   const [selectedCommand, setSelectedCommand] = createSignal<string>('get_app_info');
@@ -60,12 +85,24 @@ export function DeveloperTab(props: DeveloperTabProps) {
     height: typeof window !== 'undefined' ? window.innerHeight : 0,
     pixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : 1,
   });
+  // `APP_NAME`, never a literal: `rename-project` rewrites `appMeta.ts` and
+  // nothing else in the frontend, so a hardcoded name here would survive a
+  // rebrand as the one place still saying the old product name.
+  const [notifTitle, setNotifTitle] = createSignal<string>(APP_NAME);
+  const [notifBody, setNotifBody] = createSignal<string>(
+    'Hello from cross-platform desktop notification service!'
+  );
+  const [notifPermission, setNotifPermission] =
+    createSignal<NotificationPermissionState>('default');
+  const [isSendingNotif, setIsSendingNotif] = createSignal<boolean>(false);
 
   let fileInput: HTMLInputElement | undefined;
   /** Timer that expires the two-step reset confirmation. */
   let resetConfirmTimeout: ReturnType<typeof setTimeout> | null = null;
 
   onSettled(() => {
+    void checkNotificationPermission().then(setNotifPermission);
+
     const handleResize = () => {
       setViewport({
         width: window.innerWidth,
@@ -81,6 +118,42 @@ export function DeveloperTab(props: DeveloperTabProps) {
       if (resetConfirmTimeout) clearTimeout(resetConfirmTimeout);
     };
   });
+
+  const handleSendNotification = async () => {
+    setIsSendingNotif(true);
+    try {
+      devLog.info(`Dispatching OS notification: "${notifTitle()}" - "${notifBody()}"`);
+      const result = await sendAppNotification({
+        title: notifTitle(),
+        body: notifBody(),
+      });
+      setNotifPermission(result.permission);
+      devLog.success(
+        `Notification dispatched (via ${result.deliveredVia}, permission: ${result.permission})`
+      );
+      toast.success(`Notification sent (${result.deliveredVia})`);
+      props.onStatusChange?.(`Notification sent (${result.deliveredVia})`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      devLog.error(`Notification failed: ${msg}`);
+      toast.error(`Notification error: ${msg}`);
+    } finally {
+      setIsSendingNotif(false);
+    }
+  };
+
+  const handleRequestPermission = async () => {
+    try {
+      const perm = await requestNotificationPermission();
+      setNotifPermission(perm);
+      devLog.info(`Notification permission requested -> ${perm}`);
+      toast.info(`Notification permission: ${perm}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      devLog.error(`Permission request failed: ${msg}`);
+      toast.error(`Permission error: ${msg}`);
+    }
+  };
 
   const handleRunCommand = async () => {
     if (!isTauri) {
@@ -99,9 +172,9 @@ export function DeveloperTab(props: DeveloperTabProps) {
     setRunning(true);
     devLog.info(`Invoking IPC ${selectedCommand()}...`);
     try {
-      const dispatch = IPC_COMMAND_DISPATCH[selectedCommand()];
-      if (!dispatch) throw new Error(`Unknown command: ${selectedCommand()}`);
-      const result = await dispatch();
+      const command = PLAYGROUND_COMMANDS.find((entry) => entry.id === selectedCommand());
+      if (!command) throw new Error(`Unknown command: ${selectedCommand()}`);
+      const result = await command.run();
       devLog.success(`IPC ${selectedCommand()} -> ${JSON.stringify(result)}`);
       toast.success(`IPC '${selectedCommand()}' executed successfully`);
       props.onStatusChange?.(`IPC '${selectedCommand()}' executed`);
@@ -186,10 +259,13 @@ export function DeveloperTab(props: DeveloperTabProps) {
         toast.error(`Export failed: ${msg}`);
       }
     } else {
+      // The browser preview keeps only the accent, in localStorage; every other
+      // field is the factory default. `resolveThemeAccent` validates the stored
+      // id the way the desktop loader does, so a stale or hand-edited value can
+      // never be exported as if it named a real preset.
       const current: AppSettings = {
         ...FALLBACK_SETTINGS,
-        theme_accent:
-          (readStored(THEME_ACCENT_STORAGE_KEY) as AppSettings['theme_accent']) ?? 'cyan',
+        theme_accent: resolveThemeAccent(readStored(THEME_ACCENT_STORAGE_KEY)),
       };
       downloadSettingsFile(current, __APP_VERSION__);
       devLog.success('Settings backup exported (Web Preview)');
@@ -259,10 +335,10 @@ export function DeveloperTab(props: DeveloperTabProps) {
             onChange={(e) => setSelectedCommand(e.currentTarget.value)}
             aria-label="Select IPC command to execute"
           >
-            <For each={availableCommands} keyed>
+            <For each={PLAYGROUND_COMMANDS} keyed>
               {(cmd) => (
                 <option value={cmd.id}>
-                  {cmd.label} — {cmd.desc}
+                  {cmd.id} — {cmd.desc}
                 </option>
               )}
             </For>
@@ -313,15 +389,67 @@ export function DeveloperTab(props: DeveloperTabProps) {
         </div>
       </div>
 
-      {/* Interactive Toast Test Bench */}
+      {/* Interactive OS Notification & Toast Benchmark */}
       <div class="dev-section">
         <div class="dev-section-header">
-          <Sparkles size={16} color="var(--accent-cyan)" />
-          <span class="dev-section-title">Notification & Toast Benchmark</span>
+          <Bell size={16} color="var(--accent-cyan)" />
+          <span class="dev-section-title">Cross-Platform OS Notification Service</span>
+          <span class={`notif-perm-badge perm-${notifPermission()}`}>
+            Permission: {notifPermission()}
+          </span>
         </div>
         <p class="dev-section-desc">
-          Test reactive toast notifications with auto-dismiss timers and accessibility live regions.
+          Dispatches native operating system desktop notifications (via Tauri 2 Notification plugin)
+          with browser Web Notification API and in-app toast fallbacks.
         </p>
+
+        <div class="notif-bench-controls">
+          <div class="notif-input-group">
+            <label class="notif-input-label" for="notif-title-input">
+              Title
+            </label>
+            <input
+              id="notif-title-input"
+              type="text"
+              class="notif-text-input"
+              value={notifTitle()}
+              onInput={(e) => setNotifTitle(e.currentTarget.value)}
+              placeholder="Notification Title"
+            />
+          </div>
+          <div class="notif-input-group">
+            <label class="notif-input-label" for="notif-body-input">
+              Message
+            </label>
+            <input
+              id="notif-body-input"
+              type="text"
+              class="notif-text-input"
+              value={notifBody()}
+              onInput={(e) => setNotifBody(e.currentTarget.value)}
+              placeholder="Notification Message Body"
+            />
+          </div>
+        </div>
+
+        <div class="notif-actions-bar">
+          <button
+            type="button"
+            class="btn-update-primary"
+            onClick={handleSendNotification}
+            disabled={isSendingNotif()}
+          >
+            <Bell size={13} />
+            <span>{isSendingNotif() ? 'Sending...' : 'Send OS Notification'}</span>
+          </button>
+          <button type="button" class="btn-update-secondary" onClick={handleRequestPermission}>
+            <span>Request Permission</span>
+          </button>
+        </div>
+
+        <div class="dev-subsection-divider">
+          <span>In-App Toast Benchmark</span>
+        </div>
 
         <div class="toast-bench-grid">
           <button

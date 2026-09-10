@@ -28,12 +28,16 @@ use tauri::{AppHandle, Emitter};
 
 use crate::hotkeys::{Error as HotkeyError, Hotkey, HotkeyManager, HotkeyState};
 
-/// How often the dispatch thread drains the hotkey channel.
+/// How long the dispatch thread blocks waiting for a hotkey event before it
+/// re-checks the stop flag.
 ///
-/// The channel is lock-free and almost always empty, so this is a cheap poll.
-/// Polling rather than blocking on `recv()` lets the thread observe the stop
-/// flag promptly, which is what makes rebinding feel instant.
-const POLL_INTERVAL: Duration = Duration::from_millis(25);
+/// Events are handled the instant they arrive — the wait is a blocking
+/// `recv_timeout`, not a sleep-and-poll — so this only bounds how quickly a
+/// rebind or a shutdown can join the thread. 50 ms is imperceptible there and
+/// keeps an idle dispatch thread at twenty wake-ups a second. (An earlier
+/// revision polled `try_recv` every 25 ms, which cost both more wake-ups and
+/// up to 25 ms of latency on every hotkey press.)
+const STOP_CHECK_INTERVAL: Duration = Duration::from_millis(50);
 
 /// What triggering a global hotkey does.
 ///
@@ -211,7 +215,19 @@ impl GlobalHotkeys {
 
         let registered = routes.len() as u32;
         let stop = Arc::new(AtomicBool::new(false));
-        let thread = spawn_dispatch(app.clone(), manager, routes, Arc::clone(&stop));
+        let thread = match spawn_dispatch(app.clone(), manager, routes, Arc::clone(&stop)) {
+            Ok(thread) => thread,
+            Err(err) => {
+                // The manager was moved into the closure that failed to spawn,
+                // so it is dropped with it and the OS hook is already released.
+                log::warn!("[hotkeys] Could not start the hotkey dispatch thread: {err}");
+                supervisor.status = GlobalHotkeyStatus {
+                    error: Some(format!("Could not start the hotkey dispatch thread: {err}")),
+                    ..GlobalHotkeyStatus::default()
+                };
+                return;
+            }
+        };
 
         log::info!(
             "[hotkeys] Global hotkey listener started ({registered} bound, blocking={blocking})"
@@ -249,28 +265,42 @@ fn parse_bindings(bindings: &[GlobalHotkeyBinding]) -> Vec<(GlobalHotkeyAction, 
 }
 
 /// Spawns the thread that owns the manager and routes presses to actions.
+///
+/// The thread is named, and that is not cosmetic: the panic hook in
+/// `panic_log` records the thread name, so a crash here reaches the log file
+/// as `thread 'hotkey-dispatch' panicked` — the difference between "the global
+/// hotkey path died" and "the UI died" in a user's bug report.
 fn spawn_dispatch(
     app: AppHandle,
     manager: HotkeyManager,
     routes: HashMap<crate::hotkeys::HotkeyId, GlobalHotkeyAction>,
     stop: Arc<AtomicBool>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        while !stop.load(Ordering::SeqCst) {
-            // Drain everything queued before sleeping, so a burst of events is
-            // handled in one pass instead of one per poll interval.
-            while let Some(event) = manager.try_recv() {
-                if event.state != HotkeyState::Pressed {
-                    continue;
-                }
-                if let Some(&action) = routes.get(&event.id) {
-                    dispatch(&app, action);
+) -> std::io::Result<JoinHandle<()>> {
+    thread::Builder::new()
+        .name("hotkey-dispatch".to_string())
+        .spawn(move || {
+            while !stop.load(Ordering::SeqCst) {
+                match manager.recv_timeout(STOP_CHECK_INTERVAL) {
+                    Ok(event) => {
+                        if event.state == HotkeyState::Pressed
+                            && let Some(&action) = routes.get(&event.id)
+                        {
+                            dispatch(&app, action);
+                        }
+                    }
+                    // Nothing arrived: loop around to re-check the stop flag.
+                    Err(HotkeyError::Timeout) => {}
+                    // The manager's own thread is gone (its OS listener died),
+                    // so no event will ever arrive again. Breaking is what
+                    // keeps this from turning into a busy loop on the error.
+                    Err(err) => {
+                        log::warn!("[hotkeys] Global hotkey event stream ended: {err}");
+                        break;
+                    }
                 }
             }
-            thread::sleep(POLL_INTERVAL);
-        }
-        // `manager` drops here, releasing the OS hook.
-    })
+            // `manager` drops here, releasing the OS hook.
+        })
 }
 
 /// Performs a hotkey's action and notifies the frontend.
